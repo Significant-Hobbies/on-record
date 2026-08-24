@@ -4,6 +4,8 @@ import json
 import re
 from typing import Any
 
+from ..seed.people import PEOPLE
+
 CLAIM_TYPES = {
     "belief",
     "prediction",
@@ -132,13 +134,35 @@ def _confidence(row: dict[str, Any], *keys: str) -> float | None:
         return None
 
 
+def speaker_alias_map(people: list[dict[str, Any]] | None = None) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for person in people or PEOPLE:
+        slug = str(person["slug"])
+        mapping[slug.lower()] = slug
+        mapping[str(person.get("name") or "").lower()] = slug
+        for alias in person.get("aliases") or []:
+            mapping[str(alias).lower()] = slug
+    mapping.pop("", None)
+    return mapping
+
+
+def resolve_speaker(raw: str, roster: set[str], aliases: dict[str, str] | None = None) -> str:
+    speaker = raw.strip()
+    if speaker in roster or speaker == "unknown":
+        return speaker
+    mapped = (aliases or speaker_alias_map()).get(speaker.lower())
+    if mapped and mapped in roster:
+        return mapped
+    return speaker
+
+
 def validate_claim(
     row: dict[str, Any],
     segment_text: str,
     roster: set[str],
     topics: set[str],
 ) -> tuple[dict[str, Any] | None, str | None]:
-    speaker = str(row.get("speaker") or row.get("speakerRaw") or "").strip()
+    speaker = resolve_speaker(str(row.get("speaker") or row.get("speakerRaw") or ""), roster)
     if speaker not in roster and speaker != "unknown":
         return None, "speaker_not_in_roster"
     claim_type = str(row.get("claim_type") or row.get("claimType") or "").strip()

@@ -10,10 +10,19 @@ import { isReferenceKind, isReferenceRole } from '../references';
 export const publicRoute = new Hono<{ Bindings: Env }>();
 
 publicRoute.get('/people', async (c) => {
-  const rows = await db(c.env.DB)
+  const database = db(c.env.DB);
+  const published = await database
+    .select({ personId: schema.claims.personId })
+    .from(schema.claims)
+    .where(eq(schema.claims.reviewStatus, 'published'));
+  const ids = [...new Set(published.map((row) => row.personId))];
+  if (!ids.length) {
+    return c.json({ people: [] });
+  }
+  const rows = await database
     .select()
     .from(schema.people)
-    .where(eq(schema.people.status, 'active'))
+    .where(and(eq(schema.people.status, 'active'), inArray(schema.people.id, ids)))
     .orderBy(schema.people.name);
   return c.json({ people: rows });
 });
@@ -258,7 +267,10 @@ publicRoute.get('/recommendations', async (c) => {
 
 publicRoute.get('/stats', async (c) => {
   const database = db(c.env.DB);
-  const [people] = await database.select({ n: sql<number>`count(*)` }).from(schema.people);
+  const [people] = await database
+    .select({ n: sql<number>`count(distinct ${schema.claims.personId})` })
+    .from(schema.claims)
+    .where(eq(schema.claims.reviewStatus, 'published'));
   const [published] = await database
     .select({ n: sql<number>`count(*)` })
     .from(schema.claims)

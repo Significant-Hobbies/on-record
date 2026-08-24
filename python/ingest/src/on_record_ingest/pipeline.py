@@ -219,8 +219,9 @@ def extract_one_segment(
     people_map: dict[str, str],
     segment: dict[str, Any],
     prev_tail: str,
+    guests: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
-    accepted, rejected, run = extract_segment(cfg, segment["text"], prev_tail)
+    accepted, rejected, run = extract_segment(cfg, segment["text"], prev_tail, guests)
     for claim in accepted:
         claim["segmentId"] = segment["id"]
         claim["pipelineVersion"] = cfg.pipeline_version
@@ -266,8 +267,12 @@ def run_extract(
         detail = api.get_episode(episode["id"])
         already = set(detail.get("extractedSegmentIds") or [])
         prev_tail = ""
-        all_claims: list[dict[str, Any]] = []
-        runs: list[dict[str, Any]] = []
+        id_to_slug = {person_id: slug for slug, person_id in people_map.items()}
+        guests = [
+            id_to_slug[str(row["personId"])]
+            for row in detail.get("people") or []
+            if str(row.get("personId") or "") in id_to_slug
+        ]
         segments = _slice_segments(
             list(detail.get("segments") or []), opts.skip_segments, opts.max_segments
         )
@@ -282,11 +287,17 @@ def run_extract(
                 LOGGER.info("segment %s keep=%s dry-run", segment["idx"], action)
                 continue
             llm_calls += 1
-            posted, run, n = extract_one_segment(cfg, people_map, segment, prev_tail)
-            all_claims.extend(posted)
-            runs.append(run)
+            try:
+                posted, run, n = extract_one_segment(
+                    cfg, people_map, segment, prev_tail, guests
+                )
+            except httpx.HTTPError as exc:
+                LOGGER.warning("segment %s extract failed: %s", segment["idx"], exc)
+                continue
             extracted += n
             prev_tail = str(segment["text"])[-300:]
+            if posted or run:
+                api.post_claims(episode["id"], posted, [run])
         LOGGER.info(
             "episode %s llm_calls=%s skipped=%s claims=%s",
             episode["id"],
@@ -294,9 +305,6 @@ def run_extract(
             skipped,
             extracted,
         )
-        if opts.dry_run or not (all_claims or runs):
-            continue
-        api.post_claims(episode["id"], all_claims, runs)
     return extracted
 
 

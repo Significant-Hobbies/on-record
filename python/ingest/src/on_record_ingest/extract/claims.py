@@ -11,7 +11,7 @@ from ..seed.topics import TOPICS
 from .validate import parse_claims_json, validate_claim
 
 SYSTEM_PROMPT = """Extract claims from one transcript segment. JSON only: {"claims":[...]}.
-Each claim: speaker (roster slug or unknown), claim_type (belief|prediction|recommendation|evaluation|observation|preference|commitment|disagreement|uncertainty), assertion (third-person), stance, quote (verbatim substring >=40 chars), topics (from list), extraction_confidence, speaker_confidence, references [{kind,name,role}].
+Each claim: speaker (roster slug, guest name, or unknown), claim_type (belief|prediction|recommendation|evaluation|observation|preference|commitment|disagreement|uncertainty), assertion (third-person), stance, quote (verbatim substring >=40 chars), topics (from list), extraction_confidence, speaker_confidence, references [{kind,name,role}].
 kind=book|app|tool|service|paper|course|hardware|person|other. role=recommends|uses|built|avoids|mentions.
 name must be words from the quote. Prefer I use / I recommend / I built. Empty claims array if none.
 """
@@ -26,10 +26,18 @@ def topic_slugs() -> set[str]:
 
 
 def build_user_prompt(
-    roster: list[str], prev_tail: str, segment_text: str, topics: list[str]
+    roster: list[str],
+    prev_tail: str,
+    segment_text: str,
+    topics: list[str],
+    guests: list[str] | None = None,
 ) -> str:
     tail = f"\nPrev: {prev_tail}" if prev_tail else ""
-    return f"Roster: {', '.join(roster)}\nTopics: {', '.join(topics)}{tail}\nSegment:\n{segment_text}\n"
+    guest_line = f"Guests: {', '.join(guests)}\n" if guests else ""
+    return (
+        f"Roster: {', '.join(roster)}\n{guest_line}"
+        f"Topics: {', '.join(topics)}{tail}\nSegment:\n{segment_text}\n"
+    )
 
 
 def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], int]:
@@ -52,16 +60,16 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
     last_error: Exception | None = None
     payload: dict[str, Any] = {}
     with httpx.Client(timeout=90.0) as client:
-        for _attempt in range(3):
+        for attempt in range(5):
             try:
                 response = client.post(
                     f"{settings.ai_base_url}/chat/completions", headers=headers, json=body
                 )
-                if response.status_code in {429, 502, 503}:
+                if response.status_code in {400, 429, 500, 502, 503}:
                     last_error = httpx.HTTPStatusError(
                         f"{response.status_code}", request=response.request, response=response
                     )
-                    time.sleep(1.5)
+                    time.sleep(2.0 * (attempt + 1))
                     continue
                 response.raise_for_status()
                 payload = response.json()
@@ -69,7 +77,7 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
                 break
             except httpx.HTTPError as exc:
                 last_error = exc
-                time.sleep(1.5)
+                time.sleep(2.0 * (attempt + 1))
     if last_error:
         raise last_error
     latency_ms = int((time.perf_counter() - started) * 1000)
@@ -81,9 +89,14 @@ def extract_segment(
     settings: Settings,
     segment_text: str,
     prev_tail: str,
+    guests: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     user_prompt = build_user_prompt(
-        sorted(roster_slugs()), prev_tail, segment_text, sorted(topic_slugs())
+        sorted(roster_slugs()),
+        prev_tail,
+        segment_text,
+        sorted(topic_slugs()),
+        guests,
     )
     raw, response_json, latency_ms = _chat(settings, user_prompt)
     parsed = parse_claims_json(raw)

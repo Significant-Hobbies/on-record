@@ -1,6 +1,7 @@
 from on_record_ingest.extract.validate import (
     find_verbatim_anchor,
     parse_claims_json,
+    resolve_speaker,
     validate_claim,
     validate_references,
 )
@@ -33,6 +34,24 @@ def test_paraphrase_is_rejected():
     claim, reason = validate_claim(row, SEGMENT, ROSTER, TOPICS)
     assert claim is None
     assert reason == "quote_not_verbatim"
+
+
+def test_alias_and_full_name_resolve_to_roster_slug():
+    assert resolve_speaker("Karpathy", ROSTER) == "andrej-karpathy"
+    assert resolve_speaker("Andrej Karpathy", ROSTER) == "andrej-karpathy"
+    row = {
+        "speaker": "Karpathy",
+        "claim_type": "belief",
+        "assertion": "Karpathy thinks software work is shifting toward agents.",
+        "quote": "software development is shifting toward supervising coding agents",
+        "topics": ["coding-agents"],
+        "extraction_confidence": 0.9,
+        "speaker_confidence": 0.9,
+    }
+    claim, reason = validate_claim(row, SEGMENT, ROSTER, TOPICS)
+    assert reason is None
+    assert claim is not None
+    assert claim["speakerRaw"] == "andrej-karpathy"
 
 
 def test_unknown_speaker_allowed_but_roster_mismatch_rejected():
