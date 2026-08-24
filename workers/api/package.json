@@ -1,0 +1,24 @@
+{
+  "name": "@on-record/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --tag \"$(git rev-parse HEAD)\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@on-record/db": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "hono": "4.12.34"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260425.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.5",
+    "wrangler": "4.85.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@on-record/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate:local": "wrangler d1 migrations apply on-record-db --local --config ../../workers/api/wrangler.jsonc",
+    "migrate:remote": "wrangler d1 migrations apply on-record-db --remote --config ../../workers/api/wrangler.jsonc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.10",
+    "typescript": "6.0.3",
+    "wrangler": "4.85.0"
+  }
+}

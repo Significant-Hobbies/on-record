@@ -1,0 +1,47 @@
+name: cron-ingest
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: pipeline stage
+        type: choice
+        options: [all, discover, transcripts, extract, publish]
+        default: all
+      show:
+        description: show slug (empty = all)
+        type: string
+        default: ""
+      days:
+        description: lookback days
+        type: string
+        default: "14"
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.11" }
+      - run: uv sync --project python/ingest
+      - name: ingest
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          API_BASE: ${{ secrets.API_BASE }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_PROJECT_ID: on-record
+          ON_RECORD_EXTRACT_MODEL: ${{ secrets.ON_RECORD_EXTRACT_MODEL }}
+          PODCAST_INDEX_KEY: ${{ secrets.PODCAST_INDEX_KEY }}
+          PODCAST_INDEX_SECRET: ${{ secrets.PODCAST_INDEX_SECRET }}
+        run: >
+          uv run --project python/ingest python -m on_record_ingest
+          --stage ${{ github.event.inputs.stage || 'all' }}
+          --days ${{ github.event.inputs.days || '14' }}
+          ${{ github.event.inputs.show && format('--show {0}', github.event.inputs.show) || '' }}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.mjs"],
+      "project": ["scripts/**/*.mjs"],
+      "ignoreDependencies": ["jscpd", "ultracite"],
+      "ignoreBinaries": ["uv", "wrangler"]
+    },
+    "packages/db": {
+      "entry": ["src/index.ts", "drizzle.config.ts"],
+      "project": ["src/**/*.ts", "drizzle.config.ts"],
+      "ignoreDependencies": ["drizzle-kit"],
+      "ignoreBinaries": ["wrangler"]
+    },
+    "workers/api": {
+      "entry": ["src/index.ts", "vitest.config.ts"],
+      "project": ["src/**/*.ts", "vitest.config.ts"],
+      "ignoreDependencies": ["wrangler"],
+      "ignoreBinaries": ["wrangler"]
+    }
+  }
+}

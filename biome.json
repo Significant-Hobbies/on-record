@@ -1,0 +1,83 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
+  "root": true,
+  "extends": ["ultracite/biome/core", "ultracite/biome/vitest"],
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "!**/node_modules",
+      "!**/.wrangler",
+      "!**/dist",
+      "!**/coverage",
+      "!**/python",
+      "!**/packages/db/migrations",
+      "!**/pnpm-lock.yaml"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "es5"
+    }
+  },
+  "json": { "formatter": { "enabled": false } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noEvolvingTypes": "off",
+        "noShadow": "off",
+        "noBitwiseOperators": "off",
+        "noSkippedTests": "off",
+        "useAwait": "off",
+        "noUnnecessaryConditions": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "off",
+        "useFilenamingConvention": "off",
+        "useImportType": "off",
+        "useNodejsImportProtocol": "off",
+        "noEnum": "off",
+        "useConsistentTypeDefinitions": "off",
+        "useDestructuring": "off",
+        "noExportedImports": "off"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "noUnusedFunctionParameters": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off",
+        "noForEach": "off",
+        "useOptionalChain": "off"
+      },
+      "performance": {
+        "noBarrelFile": "off",
+        "noNamespaceImport": "off",
+        "noAwaitInLoops": "off",
+        "useTopLevelRegex": "off"
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "off",
+        "useSortedPackageJson": "off"
+      }
+    }
+  }
+}

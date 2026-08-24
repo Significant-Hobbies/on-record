@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.11" }
+      - run: uv sync --project python/ingest --group dev
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm quality
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: python/ingest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.11" }
+      - run: uv sync --group dev
+      - run: uv run ruff check --select E4,E7,E9,F src tests
+      - run: uv run pytest -q

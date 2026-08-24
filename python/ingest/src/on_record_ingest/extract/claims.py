@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+import time
+from typing import Any
+
+import httpx
+
+from ..config import Settings
+from ..seed.people import PEOPLE
+from ..seed.topics import TOPICS
+from .validate import parse_claims_json, validate_claim
+
+SYSTEM_PROMPT = """You extract public claims from a podcast transcript segment.
+Return JSON: {"claims": [ ... ]}.
+Each claim:
+- speaker: roster slug or "unknown"
+- claim_type: belief|prediction|recommendation|evaluation|observation|preference|commitment|disagreement|uncertainty
+- assertion: third-person one-liner
+- stance: short phrase
+- quote: EXACT contiguous substring of the segment, at least 40 characters, never paraphrased
+- topics: slugs from the provided list
+- extraction_confidence: 0-1
+- speaker_confidence: 0-1
+A mention is not a claim. If nothing is a claim, return {"claims": []}.
+"""
+
+
+def roster_slugs() -> set[str]:
+    return {str(person["slug"]) for person in PEOPLE}
+
+
+def topic_slugs() -> set[str]:
+    return {str(topic["slug"]) for topic in TOPICS}
+
+
+def build_user_prompt(
+    roster: list[str], prev_tail: str, segment_text: str, topics: list[str]
+) -> str:
+    return (
+        f"Roster slugs: {', '.join(roster)}\n"
+        f"Approved topics: {', '.join(topics)}\n"
+        f"Previous tail: {prev_tail}\n"
+        f"Segment:\n{segment_text}\n"
+    )
+
+
+def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], int]:
+    started = time.perf_counter()
+    headers = {
+        "Authorization": f"Bearer {settings.ai_api_key}",
+        "Content-Type": "application/json",
+        "X-Project-Id": settings.ai_project_id,
+    }
+    body = {
+        "model": settings.extract_model,
+        "temperature": 0,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+    with httpx.Client(timeout=60.0) as client:
+        response = client.post(
+            f"{settings.ai_base_url}/chat/completions", headers=headers, json=body
+        )
+        response.raise_for_status()
+        payload = response.json()
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    content = payload["choices"][0]["message"]["content"]
+    return str(content), payload, latency_ms
+
+
+def extract_segment(
+    settings: Settings,
+    segment_text: str,
+    prev_tail: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    user_prompt = build_user_prompt(
+        sorted(roster_slugs()), prev_tail, segment_text, sorted(topic_slugs())
+    )
+    raw, response_json, latency_ms = _chat(settings, user_prompt)
+    parsed = parse_claims_json(raw)
+    retry_used = False
+    if parsed is None:
+        retry_used = True
+        raw, response_json, latency_ms = _chat(settings, user_prompt + "\nRespond with JSON only.")
+        parsed = parse_claims_json(raw)
+    accepted: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    for row in parsed or []:
+        claim, reason = validate_claim(row, segment_text, roster_slugs(), topic_slugs())
+        if claim is None:
+            rejected.append({"reason": reason, "row": row})
+            continue
+        accepted.append(claim)
+    run = {
+        "model": settings.extract_model,
+        "promptVersion": settings.prompt_version,
+        "accepted": bool(accepted),
+        "reason": "ok" if parsed is not None else "json_parse_failed",
+        "requestJson": {"prompt": user_prompt, "retry": retry_used},
+        "responseJson": response_json,
+        "latencyMs": latency_ms,
+    }
+    return accepted, rejected, run

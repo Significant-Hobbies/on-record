@@ -1,0 +1,30 @@
+[project]
+name = "on-record-ingest"
+version = "0.1.0"
+description = "Podcast discovery, transcripts, and claim extraction for on-record"
+requires-python = ">=3.11"
+dependencies = [
+  "feedparser>=6.0.12",
+  "httpx>=0.27",
+  "python-dotenv>=1.0",
+  "youtube-transcript-api>=1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+  "lizard==1.23.0",
+  "pytest>=8.2",
+  "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
