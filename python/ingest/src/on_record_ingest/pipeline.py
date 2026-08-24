@@ -198,6 +198,7 @@ def run_extract(
     people_map: dict[str, str],
     episode_id: str | None,
     dry_run: bool,
+    max_segments: int = 0,
 ) -> int:
     if not cfg.ai_api_key and not dry_run:
         raise SystemExit("AI_API_KEY is required for extract")
@@ -213,7 +214,10 @@ def run_extract(
         prev_tail = ""
         all_claims: list[dict[str, Any]] = []
         runs: list[dict[str, Any]] = []
-        for segment in detail.get("segments") or []:
+        segments = list(detail.get("segments") or [])
+        if max_segments > 0:
+            segments = segments[:max_segments]
+        for segment in segments:
             if dry_run and not cfg.ai_api_key:
                 LOGGER.info("extract dry-run skip llm segment %s", segment["idx"])
                 continue
@@ -250,6 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--episode", default="")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--max-segments", type=int, default=0)
     args = parser.parse_args(argv)
     cfg = load_settings()
     api = ApiClient(cfg)
@@ -277,7 +282,14 @@ def main(argv: list[str] | None = None) -> int:
             transcribed = run_transcripts(api, args.episode or None, args.force, args.dry_run)
         extracted = 0
         if args.stage in {"all", "extract", "publish"}:
-            extracted = run_extract(api, cfg, people_map, args.episode or None, args.dry_run)
+            extracted = run_extract(
+                api,
+                cfg,
+                people_map,
+                args.episode or None,
+                args.dry_run,
+                args.max_segments,
+            )
         if not args.dry_run:
             api.ingest_run(
                 {

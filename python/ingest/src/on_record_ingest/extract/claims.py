@@ -49,11 +49,12 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
     headers = {
         "Authorization": f"Bearer {settings.ai_api_key}",
         "Content-Type": "application/json",
-        "X-Project-Id": settings.ai_project_id,
+        "X-Gateway-Project-Id": settings.ai_project_id,
     }
     body = {
         "model": settings.extract_model,
         "temperature": 0,
+        "project_id": settings.ai_project_id,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},

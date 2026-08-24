@@ -35,6 +35,7 @@ review-report.
 ## Timeline
 
 - 2026-08-24 — Session 1 scaffold: schema, API worker, ingest pipeline, CI
+- 2026-08-24 — GitHub repo Significant-Hobbies/on-record; local D1 migrate; Karpathy episode captions segmented
 
 ## Products
 
