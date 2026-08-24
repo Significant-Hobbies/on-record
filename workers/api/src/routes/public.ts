@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { isClaimType } from '../claim-types';
@@ -59,9 +59,23 @@ publicRoute.get('/claims/:id', async (c) => {
 });
 
 publicRoute.get('/sources', async (c) => {
-  const rows = await db(c.env.DB)
+  const database = db(c.env.DB);
+  const published = await database
+    .select({ episodeId: schema.claims.episodeId })
+    .from(schema.claims)
+    .where(eq(schema.claims.reviewStatus, 'published'));
+  const ids = [
+    ...new Set(
+      published.map((row) => row.episodeId).filter((value): value is string => Boolean(value))
+    ),
+  ];
+  if (!ids.length) {
+    return c.json({ sources: [] });
+  }
+  const rows = await database
     .select()
     .from(schema.episodes)
+    .where(inArray(schema.episodes.id, ids))
     .orderBy(desc(schema.episodes.publishedAt))
     .limit(100);
   return c.json({ sources: rows });
@@ -249,7 +263,10 @@ publicRoute.get('/stats', async (c) => {
     .select({ n: sql<number>`count(*)` })
     .from(schema.claims)
     .where(eq(schema.claims.reviewStatus, 'published'));
-  const [episodes] = await database.select({ n: sql<number>`count(*)` }).from(schema.episodes);
+  const [episodes] = await database
+    .select({ n: sql<number>`count(distinct ${schema.claims.episodeId})` })
+    .from(schema.claims)
+    .where(eq(schema.claims.reviewStatus, 'published'));
   const [references] = await database
     .select({ n: sql<number>`count(*)` })
     .from(schema.claimReferences)

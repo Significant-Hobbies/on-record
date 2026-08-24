@@ -2,12 +2,25 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "high-signal-podcasts",
   "compatibility_date": "2026-05-01",
-  "main": "./dist/_worker.js",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./dist/_worker.js/index.js",
   "assets": {
+    "binding": "ASSETS",
     "directory": "./dist"
   },
   "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "routes": [
+    {
+      "pattern": "podcasts.highsignal.app",
+      "custom_domain": true
+    }
+  ],
   "vars": {
-    "PUBLIC_API_BASE": "http://127.0.0.1:8787"
+    "PUBLIC_API_BASE": "https://api.podcasts.highsignal.app"
   }
 }

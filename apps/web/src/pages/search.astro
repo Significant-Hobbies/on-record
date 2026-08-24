@@ -1,6 +1,6 @@
 ---
 import Layout from '../layouts/Base.astro';
-import { apiGet, type Claim } from '../lib/api';
+import { apiGet, runtimeEnvFromLocals, type Claim } from '../lib/api';
 
 const q = Astro.url.searchParams.get('q') ?? '';
 let claims: Claim[] = [];
@@ -8,7 +8,8 @@ let insufficient = !q;
 if (q) {
   try {
     const payload = await apiGet<{ claims: Claim[]; evidence?: string }>(
-      `/api/search?q=${encodeURIComponent(q)}`
+      `/api/search?q=${encodeURIComponent(q)}`,
+      runtimeEnvFromLocals(Astro.locals)
     );
     claims = payload.claims ?? [];
     insufficient = claims.length === 0;

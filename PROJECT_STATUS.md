@@ -4,8 +4,11 @@ Last updated: 2026-08-25
 
 ## Why / What
 
-A source-backed knowledge graph of public statements by notable people. The
-unit is the claim: Person → Claim → Topic → Stance → Date → Evidence.
+A source-backed knowledge graph of public statements by notable people. It
+helps readers choose what is worth listening to, recover relevant content
+without playing every episode, and track repeated books, apps, tools, and
+technology signals across top guests. The unit is the claim: Person → Claim →
+Topic → Stance → Date → Evidence.
 
 **Users:** founders, investors, journalists, operators researching people or
 markets.
@@ -25,7 +28,8 @@ review-report.
 - YouTube captions via `youtube-transcript-api`
 - Publisher RSS transcript tags
 - free-ai gateway (`AI_PROJECT_ID=on-record`)
-- Cloudflare D1 + R2 + Workers (production resources not created yet)
+- Cloudflare D1 `on-record-db` + R2 `on-record-raw` + Workers `on-record-api`,
+  `high-signal-podcasts`
 
 ### Internal
 
@@ -38,21 +42,23 @@ review-report.
 - 2026-08-24 — GitHub repo Significant-Hobbies/on-record; local D1 migrate; Karpathy episode captions segmented
 - 2026-08-24 — First published claims from Karpathy/Dwarkesh via Infisical Free_ai → free-ai gateway
 - 2026-08-24 — extract-v2 stores evidenced book/app/tool references (`/api/recommendations`)
-- 2026-08-25 — High Signal Podcasts SSR site + daily cron `--focus recs`; production CF/DNS still operator-gated
+- 2026-08-25 — High Signal Podcasts SSR site + daily cron `--focus recs`
+- 2026-08-25 — Production: `podcasts.highsignal.app` + `api.podcasts.highsignal.app`,
+  GitHub Actions secrets, first published Karpathy/Dwarkesh claims
 
 ## Products
 
-- `on-record-api` Worker (local)
-- Python ingest CLI (local)
-- Public Astro SSR site (`pnpm dev:web`) as High Signal Podcasts
-- Intended live domain: `podcasts.highsignal.app` (Cloudflare resources not created yet)
+- `on-record-api` Worker — `https://api.podcasts.highsignal.app`
+- Public Astro SSR site — `https://podcasts.highsignal.app`
+- Python ingest CLI + GitHub Actions daily cron (`--focus recs`)
 
 ## Features (shipped)
 
-- (none in production)
+- Production claim index (thin V1): 10-person roster, 4 shows, published
+  Karpathy/Dwarkesh claims with verbatim excerpts
+- SSR site reads live D1 via the API; ingest does not rebuild the web Worker
 
 ## Todo / Planned / Deferred / Blocked
 
-Tracked in GitHub Issues once the repository is published. Session 1 still
-needs a real-episode extract milestone and production resource creation
-(blocked on operator approval).
+Tracked in GitHub Issues. Grow the published recs/stack corpus; keep listing
+hidden until the index is worth sharing.

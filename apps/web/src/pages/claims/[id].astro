@@ -1,6 +1,6 @@
 ---
 import Layout from '../../layouts/Base.astro';
-import { apiGet, type Claim } from '../../lib/api';
+import { apiGet, runtimeEnvFromLocals, type Claim } from '../../lib/api';
 
 const { id } = Astro.params;
 let claim: Claim | null = null;
@@ -12,7 +12,7 @@ try {
     claim: Claim;
     evidence: Array<{ deepLinkUrl?: string | null; quote: string }>;
     references: Array<{ kind: string; role: string; name: string }>;
-  }>(`/api/claims/${id}`);
+  }>(`/api/claims/${id}`, runtimeEnvFromLocals(Astro.locals));
   claim = payload.claim;
   evidence = payload.evidence ?? [];
   references = payload.references ?? [];

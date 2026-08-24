@@ -4,18 +4,25 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-05-01",
   "workers_dev": true,
+  "preview_urls": false,
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
   },
   "vars": {
-    "ENVIRONMENT": "development"
+    "ENVIRONMENT": "production"
   },
+  "routes": [
+    {
+      "pattern": "api.podcasts.highsignal.app",
+      "custom_domain": true
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "on-record-db",
-      "database_id": "00000000-0000-0000-0000-000000000001",
+      "database_id": "44216513-f7d9-4ba5-9243-939888c0daef",
       "migrations_dir": "../../packages/db/migrations"
     }
   ],

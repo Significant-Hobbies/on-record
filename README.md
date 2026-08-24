@@ -1,7 +1,7 @@
 # High Signal Podcasts (on-record)
 
 Source-backed index of public statements by notable people. High Signal
-sub-product, own layout, intended live domain
+sub-product, own layout, live at
 [`podcasts.highsignal.app`](https://podcasts.highsignal.app). The unit is the
 **claim**, not the episode.
 
@@ -14,7 +14,7 @@ source link. Missing evidence is preferred over a confident guess.
 - DB: Cloudflare D1 + Drizzle (`packages/db`)
 - Raw storage: R2 bucket `on-record-raw`
 - Ingest: Python / uv (`python/ingest`), GitHub Actions cron
-- Web: Astro SSR (Session 2)
+- Web: Astro SSR at `podcasts.highsignal.app`
 
 ## Quickstart
 
@@ -31,8 +31,9 @@ pnpm quality
 Copy `.env.example` to `.dev.vars` (worker) and `.env` (ingest). Do not commit
 secrets.
 
-Production D1/R2, remote migrate, and deploy are dispatch-only and require
-explicit operator approval.
+Production D1 `on-record-db` and R2 `on-record-raw` already exist. Deploys
+are dispatch-only (`.github/workflows/deploy.yml`). New remote migrations
+still need operator approval.
 
 ## Seed corpus (V1)
 

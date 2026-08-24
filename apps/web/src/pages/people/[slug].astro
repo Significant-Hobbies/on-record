@@ -1,8 +1,15 @@
 ---
 import Layout from '../../layouts/Base.astro';
-import { apiGet, type Claim, type Person, type Recommendation } from '../../lib/api';
+import {
+  apiGet,
+  runtimeEnvFromLocals,
+  type Claim,
+  type Person,
+  type Recommendation,
+} from '../../lib/api';
 
 const { slug } = Astro.params;
+const env = runtimeEnvFromLocals(Astro.locals);
 let person: Person | null = null;
 let claims: Claim[] = [];
 let recommendations: Recommendation[] = [];
@@ -12,7 +19,7 @@ try {
     person: Person;
     claims: Claim[];
     recommendations: Recommendation[];
-  }>(`/api/people/${slug}`);
+  }>(`/api/people/${slug}`, env);
   person = payload.person;
   claims = payload.claims ?? [];
   recommendations = payload.recommendations ?? [];

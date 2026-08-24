@@ -1,6 +1,6 @@
 ---
 import Layout from '../layouts/Base.astro';
-import { apiGet, type Recommendation } from '../lib/api';
+import { apiGet, runtimeEnvFromLocals, type Recommendation } from '../lib/api';
 
 const kind = Astro.url.searchParams.get('kind') ?? '';
 const role = Astro.url.searchParams.get('role') ?? '';
@@ -12,7 +12,8 @@ let items: Recommendation[] = [];
 let empty = false;
 try {
   const payload = await apiGet<{ recommendations: Recommendation[]; evidence?: string }>(
-    `/api/recommendations${suffix}`
+    `/api/recommendations${suffix}`,
+    runtimeEnvFromLocals(Astro.locals)
   );
   items = payload.recommendations ?? [];
   empty = items.length === 0;

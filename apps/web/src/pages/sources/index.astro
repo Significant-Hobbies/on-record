@@ -1,11 +1,14 @@
 ---
 import Layout from '../../layouts/Base.astro';
-import { apiGet } from '../../lib/api';
+import { apiGet, runtimeEnvFromLocals } from '../../lib/api';
 
 type Source = { id: string; title: string; status: string };
 let sources: Source[] = [];
 try {
-  const payload = await apiGet<{ sources: Source[] }>('/api/sources');
+  const payload = await apiGet<{ sources: Source[] }>(
+    '/api/sources',
+    runtimeEnvFromLocals(Astro.locals)
+  );
   sources = payload.sources ?? [];
 } catch {
   sources = [];

@@ -1,11 +1,12 @@
 ---
 import Layout from '../layouts/Base.astro';
-import { apiGet, type Stats } from '../lib/api';
+import { apiGet, runtimeEnvFromLocals, type Stats } from '../lib/api';
 
+const env = runtimeEnvFromLocals(Astro.locals);
 let stats: Stats = { people: 0, episodes: 0, publishedClaims: 0, publishedReferences: 0 };
 let error = '';
 try {
-  stats = await apiGet<Stats>('/api/stats');
+  stats = await apiGet<Stats>('/api/stats', env);
 } catch {
   error = 'API offline. Start the on-record worker on :8787.';
 }

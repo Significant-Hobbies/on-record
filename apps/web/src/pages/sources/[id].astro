@@ -1,13 +1,16 @@
 ---
 import Layout from '../../layouts/Base.astro';
-import { apiGet, type Claim } from '../../lib/api';
+import { apiGet, runtimeEnvFromLocals, type Claim } from '../../lib/api';
 
 const { id } = Astro.params;
 let title = 'Source';
 let claims: Claim[] = [];
 let missing = false;
 try {
-  const payload = await apiGet<{ source: { title: string }; claims: Claim[] }>(`/api/sources/${id}`);
+  const payload = await apiGet<{ source: { title: string }; claims: Claim[] }>(
+    `/api/sources/${id}`,
+    runtimeEnvFromLocals(Astro.locals)
+  );
   title = payload.source?.title ?? title;
   claims = payload.claims ?? [];
 } catch {

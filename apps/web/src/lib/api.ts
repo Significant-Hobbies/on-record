@@ -1,7 +1,18 @@
 const fallback = 'http://127.0.0.1:8787';
 
-export function apiBase(runtimeEnv?: { PUBLIC_API_BASE?: string }): string {
-  return runtimeEnv?.PUBLIC_API_BASE || import.meta.env.PUBLIC_API_BASE || fallback;
+export type RuntimeEnv = { PUBLIC_API_BASE?: string };
+
+export function runtimeEnvFromLocals(locals: {
+  runtime?: { env?: RuntimeEnv };
+}): RuntimeEnv | undefined {
+  return locals.runtime?.env;
+}
+
+export function apiBase(runtimeEnv?: RuntimeEnv): string {
+  return (runtimeEnv?.PUBLIC_API_BASE || import.meta.env.PUBLIC_API_BASE || fallback).replace(
+    /\/$/,
+    ''
+  );
 }
 
 export async function apiGet<T>(

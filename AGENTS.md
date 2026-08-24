@@ -17,7 +17,8 @@ and record durable follow-up in this repository's GitHub Issues.
   Ingest: `pnpm ingest -- --stage extract --focus recs`.
 - **Build/check**: `pnpm quality`
 - **Deploy**: dispatch-only (`.github/workflows/deploy.yml`). Never auto-deploy.
-  Create production D1/R2 and set secrets only with explicit operator approval.
+  Production D1 `on-record-db`, R2 `on-record-raw`, and GitHub Actions secrets
+  already exist; do not recreate them.
 
 ## Work tracking
 
