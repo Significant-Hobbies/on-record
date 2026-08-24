@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: worker to deploy
+        description: surface to deploy
         type: choice
-        options: [api]
-        default: api
+        options: [api, web, both]
+        default: both
 
 jobs:
-  deploy:
+  api:
+    if: github.event.inputs.target == 'api' || github.event.inputs.target == 'both'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -22,9 +23,27 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @on-record/api typecheck
-      - name: deploy api
-        if: github.event.inputs.target == 'api'
-        env:
+      - env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm --filter @on-record/api deploy
+
+  web:
+    if: github.event.inputs.target == 'web' || github.event.inputs.target == 'both'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @on-record/web build
+        env:
+          PUBLIC_API_BASE: ${{ secrets.PUBLIC_API_BASE }}
+      - env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm --filter @on-record/web deploy

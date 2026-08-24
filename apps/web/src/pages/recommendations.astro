@@ -1,0 +1,45 @@
+---
+import Layout from '../layouts/Base.astro';
+import { apiGet, type Recommendation } from '../lib/api';
+
+const kind = Astro.url.searchParams.get('kind') ?? '';
+const role = Astro.url.searchParams.get('role') ?? '';
+const query = new URLSearchParams();
+if (kind) query.set('kind', kind);
+if (role) query.set('role', role);
+const suffix = query.toString() ? `?${query}` : '';
+let items: Recommendation[] = [];
+let empty = false;
+try {
+  const payload = await apiGet<{ recommendations: Recommendation[]; evidence?: string }>(
+    `/api/recommendations${suffix}`
+  );
+  items = payload.recommendations ?? [];
+  empty = items.length === 0;
+} catch {
+  empty = true;
+}
+---
+<Layout title="Recommendations — High Signal Podcasts">
+  <h1>Books, apps, and personal stack</h1>
+  <p class="lede">Only names that appear in a published excerpt.</p>
+  <p class="meta">
+    <a href="/recommendations">all</a> ·
+    <a href="/recommendations?kind=book">books</a> ·
+    <a href="/recommendations?kind=app">apps</a> ·
+    <a href="/recommendations?role=uses">uses</a> ·
+    <a href="/recommendations?role=recommends">recommends</a>
+  </p>
+  {empty ? (
+    <p class="empty">Insufficient evidence for this filter.</p>
+  ) : (
+    items.map((item) => (
+      <article class="card">
+        <b>{item.name}</b>
+        <div class="meta">{item.kind} · {item.role}</div>
+        <p class="quote">{item.quote}</p>
+        <a href={`/claims/${item.claimId}`}>Claim</a>
+      </article>
+    ))
+  )}
+</Layout>

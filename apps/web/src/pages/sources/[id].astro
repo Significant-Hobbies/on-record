@@ -1,0 +1,35 @@
+---
+import Layout from '../../layouts/Base.astro';
+import { apiGet, type Claim } from '../../lib/api';
+
+const { id } = Astro.params;
+let title = 'Source';
+let claims: Claim[] = [];
+let missing = false;
+try {
+  const payload = await apiGet<{ source: { title: string }; claims: Claim[] }>(`/api/sources/${id}`);
+  title = payload.source?.title ?? title;
+  claims = payload.claims ?? [];
+} catch {
+  missing = true;
+}
+---
+<Layout title={`${title} — High Signal Podcasts`}>
+  {missing ? (
+    <p class="empty">Insufficient evidence.</p>
+  ) : (
+    <>
+      <h1>{title}</h1>
+      {claims.length === 0 ? (
+        <p class="empty">No published claims from this source yet.</p>
+      ) : (
+        claims.map((claim) => (
+          <article class="card">
+            <a href={`/claims/${claim.id}`}>{claim.assertion}</a>
+            <p class="quote">{claim.quote}</p>
+          </article>
+        ))
+      )}
+    </>
+  )}
+</Layout>

@@ -1,0 +1,55 @@
+---
+import Layout from '../../layouts/Base.astro';
+import { apiGet, type Claim, type Person, type Recommendation } from '../../lib/api';
+
+const { slug } = Astro.params;
+let person: Person | null = null;
+let claims: Claim[] = [];
+let recommendations: Recommendation[] = [];
+let missing = false;
+try {
+  const payload = await apiGet<{
+    person: Person;
+    claims: Claim[];
+    recommendations: Recommendation[];
+  }>(`/api/people/${slug}`);
+  person = payload.person;
+  claims = payload.claims ?? [];
+  recommendations = payload.recommendations ?? [];
+} catch {
+  missing = true;
+}
+---
+<Layout title={`${person?.name ?? slug} — High Signal Podcasts`}>
+  {missing || !person ? (
+    <p class="empty">Insufficient evidence for this person.</p>
+  ) : (
+    <>
+      <h1>{person.name}</h1>
+      <p class="meta">{[person.title, person.org].filter(Boolean).join(' · ')}</p>
+      <h2>Recommendations and personal stack</h2>
+      {recommendations.length === 0 ? (
+        <p class="empty">Insufficient evidence — no named books, apps, or tools yet.</p>
+      ) : (
+        recommendations.map((item) => (
+          <article class="card">
+            <b>{item.name}</b>
+            <div class="meta">{item.kind} · {item.role}</div>
+            <p class="quote">{item.quote}</p>
+          </article>
+        ))
+      )}
+      <h2>Published claims</h2>
+      {claims.length === 0 ? (
+        <p class="empty">Insufficient evidence.</p>
+      ) : (
+        claims.map((claim) => (
+          <article class="card">
+            <a href={`/claims/${claim.id}`}>{claim.assertion}</a>
+            <p class="quote">{claim.quote}</p>
+          </article>
+        ))
+      )}
+    </>
+  )}
+</Layout>

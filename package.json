@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.33.2",
   "scripts": {
     "dev": "pnpm --filter @on-record/api dev",
+    "dev:web": "pnpm --filter @on-record/web dev",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @on-record/api test && pnpm test:python",

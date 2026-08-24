@@ -1,0 +1,18 @@
+---
+import Layout from '../layouts/Base.astro';
+---
+<Layout title="Methodology — High Signal Podcasts">
+  <h1>Methodology</h1>
+  <p>
+    High Signal Podcasts indexes public statements as claims. A published row always has a
+    speaker, a verbatim excerpt that exists in the stored transcript segment, a date, and a
+    source timestamp when YouTube captions exist.
+  </p>
+  <p>
+    Daily GitHub Actions discover new episodes, take publisher or YouTube captions, skip
+    filler with a cheap filter, and send only rec/stack (or claim) segments to the free-ai
+    gateway. The website is server-rendered from the API, so new published claims appear
+    without a rebuild.
+  </p>
+  <p>Missing evidence is shown as missing. We do not invent an answer.</p>
+</Layout>

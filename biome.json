@@ -12,7 +12,10 @@
       "!**/coverage",
       "!**/python",
       "!**/packages/db/migrations",
-      "!**/pnpm-lock.yaml"
+      "!**/pnpm-lock.yaml",
+      "!**/*.astro",
+      "!**/*.svg",
+      "!**/*.css"
     ]
   },
   "formatter": {
@@ -61,7 +64,8 @@
       "complexity": {
         "noExcessiveCognitiveComplexity": "off",
         "noForEach": "off",
-        "useOptionalChain": "off"
+        "useOptionalChain": "off",
+        "useLiteralKeys": "off"
       },
       "performance": {
         "noBarrelFile": "off",
@@ -76,7 +80,10 @@
     "actions": {
       "source": {
         "organizeImports": "off",
-        "useSortedPackageJson": "off"
+        "useSortedPackageJson": "off",
+        "useSortedKeys": "off",
+        "useSortedProperties": "off",
+        "useSortedAttributes": "off"
       }
     }
   }

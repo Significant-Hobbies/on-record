@@ -1,0 +1,43 @@
+---
+import Layout from '../../layouts/Base.astro';
+import { apiGet, type Claim } from '../../lib/api';
+
+const { id } = Astro.params;
+let claim: Claim | null = null;
+let evidence: Array<{ deepLinkUrl?: string | null; quote: string }> = [];
+let references: Array<{ kind: string; role: string; name: string }> = [];
+let missing = false;
+try {
+  const payload = await apiGet<{
+    claim: Claim;
+    evidence: Array<{ deepLinkUrl?: string | null; quote: string }>;
+    references: Array<{ kind: string; role: string; name: string }>;
+  }>(`/api/claims/${id}`);
+  claim = payload.claim;
+  evidence = payload.evidence ?? [];
+  references = payload.references ?? [];
+} catch {
+  missing = true;
+}
+const link = evidence[0]?.deepLinkUrl;
+---
+<Layout title={claim?.assertion ?? 'Claim'}>
+  {missing || !claim ? (
+    <p class="empty">Insufficient evidence. This claim is unpublished or missing.</p>
+  ) : (
+    <>
+      <p class="meta">{claim.claimType}</p>
+      <h1>{claim.assertion}</h1>
+      <p class="quote">{claim.quote}</p>
+      {link && <p><a href={link}>Open source at timestamp</a></p>}
+      {references.length > 0 && (
+        <section>
+          <h2>Named things</h2>
+          {references.map((item) => (
+            <div class="card">{item.name} · {item.kind} · {item.role}</div>
+          ))}
+        </section>
+      )}
+    </>
+  )}
+</Layout>

@@ -1,0 +1,102 @@
+:root {
+  --ink: #1b1a17;
+  --muted: #5c5850;
+  --paper: #f4efe4;
+  --rule: #d9d0c0;
+  --accent: #8f2d14;
+  --mark: #2f4d3a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+}
+
+.wrap {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 4rem;
+}
+
+.banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.75rem;
+}
+
+.family {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mark);
+  text-decoration: none;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin: 0.85rem 0 1.5rem;
+  font-size: 0.95rem;
+}
+
+h1 {
+  font-size: 1.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.lede {
+  color: var(--muted);
+}
+
+.card {
+  border-top: 1px solid var(--rule);
+  padding: 0.9rem 0;
+}
+
+.quote {
+  font-style: italic;
+}
+
+.meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.empty {
+  border: 1px dashed var(--rule);
+  padding: 1rem;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.stat {
+  border: 1px solid var(--rule);
+  padding: 0.65rem 0.75rem;
+}
+
+.stat b {
+  display: block;
+  font-size: 1.3rem;
+}

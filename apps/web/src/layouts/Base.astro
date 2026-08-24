@@ -1,0 +1,42 @@
+---
+import '../styles/global.css';
+
+const {
+  title = 'High Signal Podcasts',
+  description = 'What notable people said, on the record — claims with verbatim evidence.',
+} = Astro.props;
+const nav = [
+  { href: '/', label: 'Home' },
+  { href: '/people', label: 'People' },
+  { href: '/recommendations', label: 'Recs' },
+  { href: '/sources', label: 'Sources' },
+  { href: '/search', label: 'Search' },
+  { href: '/methodology', label: 'Method' },
+];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="banner">
+        <a class="family" href="https://highsignal.app">High Signal</a>
+        <strong>Podcasts</strong>
+      </header>
+      <nav>
+        {nav.map((item) => (
+          <a href={item.href}>{item.label}</a>
+        ))}
+      </nav>
+      <main>
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

@@ -8,7 +8,13 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const productionPaths = ['packages/db/src', 'workers/api/src', 'python/ingest/src', 'scripts'];
+const productionPaths = [
+  'apps/web/src/lib',
+  'packages/db/src',
+  'workers/api/src',
+  'python/ingest/src',
+  'scripts',
+];
 const baselines = {
   complexity: { maxCcn: 20, maxLength: 120, maxParams: 8, violations: 0 },
   duplication: { clones: 0, duplicatedLines: 0, percentage: 0 },

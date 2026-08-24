@@ -7,13 +7,14 @@ and record durable follow-up in this repository's GitHub Issues.
 
 ## Project
 
-- **Product**: on-record — a source-backed index of public statements. The
-  unit is the **claim**, not the episode: Person → Claim → Topic → Stance →
-  Date → Evidence (verbatim quote + timestamp + source link).
+- **Product**: High Signal Podcasts (repo `on-record`) — a source-backed
+  index of public statements. High Signal sub-product, own layout, intended
+  domain `podcasts.highsignal.app`. The unit is the **claim**, not the episode.
 - **Stack**: Hono on Cloudflare Workers, D1 + Drizzle, R2 for raw feeds and
   transcripts, Astro SSR (Session 2), Python ingest on GitHub Actions via uv.
 - **Local dev**: `pnpm install` then `uv sync --project python/ingest --dev`.
-  API: `pnpm --filter @on-record/api dev`. Ingest: `pnpm ingest -- --stage discover --days 14`.
+  API: `pnpm --filter @on-record/api dev`. Web: `pnpm dev:web` (reads the API).
+  Ingest: `pnpm ingest -- --stage extract --focus recs`.
 - **Build/check**: `pnpm quality`
 - **Deploy**: dispatch-only (`.github/workflows/deploy.yml`). Never auto-deploy.
   Create production D1/R2 and set secrets only with explicit operator approval.

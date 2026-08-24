@@ -15,4 +15,8 @@ claims.
 Cron: daily 06:00 UTC plus workflow_dispatch. Production secrets live in
 GitHub Actions, not this repo.
 
+GitHub Actions `cron-ingest.yml` runs daily 06:00 UTC with `--focus recs`
+against production `API_BASE` once secrets exist. The Astro site is SSR, so
+published claims show up without a web rebuild.
+
 Do not create D1/R2 or run `db:migrate:remote` without operator approval.

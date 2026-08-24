@@ -1,0 +1,36 @@
+---
+import Layout from '../layouts/Base.astro';
+import { apiGet, type Claim } from '../lib/api';
+
+const q = Astro.url.searchParams.get('q') ?? '';
+let claims: Claim[] = [];
+let insufficient = !q;
+if (q) {
+  try {
+    const payload = await apiGet<{ claims: Claim[]; evidence?: string }>(
+      `/api/search?q=${encodeURIComponent(q)}`
+    );
+    claims = payload.claims ?? [];
+    insufficient = claims.length === 0;
+  } catch {
+    insufficient = true;
+  }
+}
+---
+<Layout title="Search — High Signal Podcasts">
+  <h1>Search published claims</h1>
+  <form method="get">
+    <input type="search" name="q" value={q} placeholder="agents, decade, Claude" />
+    <button type="submit">Search</button>
+  </form>
+  {insufficient ? (
+    <p class="empty">Insufficient evidence.</p>
+  ) : (
+    claims.map((claim) => (
+      <article class="card">
+        <a href={`/claims/${claim.id}`}>{claim.assertion}</a>
+        <p class="quote">{claim.quote}</p>
+      </article>
+    ))
+  )}
+</Layout>

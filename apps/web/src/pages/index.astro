@@ -1,0 +1,28 @@
+---
+import Layout from '../layouts/Base.astro';
+import { apiGet, type Stats } from '../lib/api';
+
+let stats: Stats = { people: 0, episodes: 0, publishedClaims: 0, publishedReferences: 0 };
+let error = '';
+try {
+  stats = await apiGet<Stats>('/api/stats');
+} catch {
+  error = 'API offline. Start the on-record worker on :8787.';
+}
+---
+<Layout>
+  <h1>On the record</h1>
+  <p class="lede">
+    A High Signal sub-product. Claims from public podcasts, with the excerpt and timestamp
+    attached. Not a transcript search box.
+  </p>
+  {error ? <p class="empty">{error}</p> : (
+    <div class="stats">
+      <div class="stat"><b>{stats.people}</b> people</div>
+      <div class="stat"><b>{stats.publishedClaims}</b> claims</div>
+      <div class="stat"><b>{stats.publishedReferences ?? 0}</b> recs</div>
+      <div class="stat"><b>{stats.episodes}</b> sources</div>
+    </div>
+  )}
+  <p><a href="/people">Browse people</a> · <a href="/recommendations">Books, apps, stack</a></p>
+</Layout>

@@ -1,0 +1,26 @@
+---
+import Layout from '../../layouts/Base.astro';
+import { apiGet } from '../../lib/api';
+
+type Source = { id: string; title: string; status: string };
+let sources: Source[] = [];
+try {
+  const payload = await apiGet<{ sources: Source[] }>('/api/sources');
+  sources = payload.sources ?? [];
+} catch {
+  sources = [];
+}
+---
+<Layout title="Sources — High Signal Podcasts">
+  <h1>Sources</h1>
+  {sources.length === 0 ? (
+    <p class="empty">Insufficient evidence.</p>
+  ) : (
+    sources.map((source) => (
+      <article class="card">
+        <a href={`/sources/${source.id}`}>{source.title}</a>
+        <div class="meta">{source.status}</div>
+      </article>
+    ))
+  )}
+</Layout>

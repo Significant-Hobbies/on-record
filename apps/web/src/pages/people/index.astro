@@ -1,0 +1,25 @@
+---
+import Layout from '../../layouts/Base.astro';
+import { apiGet, type Person } from '../../lib/api';
+
+let people: Person[] = [];
+try {
+  const payload = await apiGet<{ people: Person[] }>('/api/people');
+  people = payload.people ?? [];
+} catch {
+  people = [];
+}
+---
+<Layout title="People — High Signal Podcasts">
+  <h1>People</h1>
+  {people.length === 0 ? (
+    <p class="empty">Insufficient evidence. No people in the published index yet.</p>
+  ) : (
+    people.map((person) => (
+      <article class="card">
+        <a href={`/people/${person.slug}`}>{person.name}</a>
+        <div class="meta">{[person.title, person.org].filter(Boolean).join(' · ')}</div>
+      </article>
+    ))
+  )}
+</Layout>

@@ -1,6 +1,8 @@
-# on-record
+# High Signal Podcasts (on-record)
 
-Source-backed index of public statements by notable people. The unit is the
+Source-backed index of public statements by notable people. High Signal
+sub-product, own layout, intended live domain
+[`podcasts.highsignal.app`](https://podcasts.highsignal.app). The unit is the
 **claim**, not the episode.
 
 Every published claim has a verbatim quote, speaker, date, timestamp, and
@@ -21,7 +23,8 @@ pnpm install
 uv sync --project python/ingest --dev
 pnpm db:migrate:local
 pnpm --filter @on-record/api dev   # wrangler on :8787
-pnpm ingest -- --stage discover --days 14 --dry-run
+pnpm dev:web                       # Astro SSR on :4321
+pnpm ingest -- --stage extract --focus recs
 pnpm quality
 ```
 

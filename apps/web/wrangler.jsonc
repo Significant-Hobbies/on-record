@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "high-signal-podcasts",
+  "compatibility_date": "2026-05-01",
+  "main": "./dist/_worker.js",
+  "assets": {
+    "directory": "./dist"
+  },
+  "workers_dev": true,
+  "vars": {
+    "PUBLIC_API_BASE": "http://127.0.0.1:8787"
+  }
+}

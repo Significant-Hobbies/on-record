@@ -1,6 +1,6 @@
 # on-record — PROJECT STATUS
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 ## Why / What
 
@@ -38,12 +38,14 @@ review-report.
 - 2026-08-24 — GitHub repo Significant-Hobbies/on-record; local D1 migrate; Karpathy episode captions segmented
 - 2026-08-24 — First published claims from Karpathy/Dwarkesh via Infisical Free_ai → free-ai gateway
 - 2026-08-24 — extract-v2 stores evidenced book/app/tool references (`/api/recommendations`)
+- 2026-08-25 — High Signal Podcasts SSR site + daily cron `--focus recs`; production CF/DNS still operator-gated
 
 ## Products
 
 - `on-record-api` Worker (local)
 - Python ingest CLI (local)
-- Public site (Session 2, not started)
+- Public Astro SSR site (`pnpm dev:web`) as High Signal Podcasts
+- Intended live domain: `podcasts.highsignal.app` (Cloudflare resources not created yet)
 
 ## Features (shipped)
 

@@ -17,7 +17,12 @@ on:
       days:
         description: lookback days
         type: string
-        default: "14"
+        default: "2"
+      focus:
+        description: extract focus (recs keeps LLM cost down)
+        type: choice
+        options: [recs, all]
+        default: recs
 
 jobs:
   ingest:
@@ -33,15 +38,18 @@ jobs:
         env:
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
           API_BASE: ${{ secrets.API_BASE }}
-          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL || 'https://ai-gateway.sassmaker.com/v1' }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
           AI_PROJECT_ID: on-record
-          ON_RECORD_EXTRACT_MODEL: ${{ secrets.ON_RECORD_EXTRACT_MODEL }}
+          ON_RECORD_EXTRACT_MODEL: ${{ secrets.ON_RECORD_EXTRACT_MODEL || 'gemini-2.5-flash' }}
           PODCAST_INDEX_KEY: ${{ secrets.PODCAST_INDEX_KEY }}
           PODCAST_INDEX_SECRET: ${{ secrets.PODCAST_INDEX_SECRET }}
         run: >
           uv run --project python/ingest python -m on_record_ingest
           --stage ${{ github.event.inputs.stage || 'all' }}
-          --days ${{ github.event.inputs.days || '14' }}
+          --days ${{ github.event.inputs.days || '2' }}
+          --focus ${{ github.event.inputs.focus || 'recs' }}
           ${{ github.event.inputs.show && format('--show {0}', github.event.inputs.show) || '' }}
+      - name: site stays current
+        run: echo "SSR at podcasts.highsignal.app reads the API; no web rebuild after ingest."
