@@ -46,8 +46,18 @@ adminEpisodesRoute.get('/episodes/:id', async (c) => {
     .select()
     .from(schema.episodePeople)
     .where(eq(schema.episodePeople.episodeId, id));
+  const claimed = await database
+    .select({ segmentId: schema.claims.segmentId })
+    .from(schema.claims)
+    .where(eq(schema.claims.episodeId, id));
+  const extractedSegmentIds = [
+    ...new Set(
+      claimed.map((row) => row.segmentId).filter((value): value is string => Boolean(value))
+    ),
+  ];
   return c.json({
     episode,
+    extractedSegmentIds,
     people,
     segments: segments.sort((a, b) => a.idx - b.idx),
   });

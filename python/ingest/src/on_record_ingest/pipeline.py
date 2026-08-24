@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -11,6 +12,7 @@ import httpx
 from .api_client import ApiClient
 from .config import Settings, settings as load_settings
 from .extract.claims import extract_segment
+from .extract.triage import triage_segment
 from .match import guests_from_text, merge_video
 from .seed.people import PEOPLE
 from .seed.shows import SHOWS
@@ -192,59 +194,109 @@ def attach_person_ids(
     return out
 
 
+def _slice_segments(
+    segments: list[dict[str, Any]], skip_segments: int, max_segments: int
+) -> list[dict[str, Any]]:
+    out = segments
+    if skip_segments > 0:
+        out = out[skip_segments:]
+    if max_segments > 0:
+        out = out[:max_segments]
+    return out
+
+
+def segment_action(segment: dict[str, Any], already: set[str], force: bool, focus: str) -> str:
+    if not force and segment.get("id") in already:
+        return "extracted"
+    reason = triage_segment(str(segment.get("text") or ""))
+    if focus == "recs" and reason != "rec":
+        return "skip"
+    return reason
+
+
+def extract_one_segment(
+    cfg: Settings,
+    people_map: dict[str, str],
+    segment: dict[str, Any],
+    prev_tail: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
+    accepted, rejected, run = extract_segment(cfg, segment["text"], prev_tail)
+    for claim in accepted:
+        claim["segmentId"] = segment["id"]
+        claim["pipelineVersion"] = cfg.pipeline_version
+        claim["model"] = cfg.extract_model
+        claim["promptVersion"] = cfg.prompt_version
+    LOGGER.info(
+        "segment %s accepted=%s rejected=%s",
+        segment["idx"],
+        len(accepted),
+        len(rejected),
+    )
+    return attach_person_ids(accepted, people_map), run, len(accepted)
+
+
+@dataclass
+class ExtractOpts:
+    episode_id: str | None
+    dry_run: bool
+    max_segments: int = 0
+    skip_segments: int = 0
+    force: bool = False
+    focus: str = "all"
+
+
 def run_extract(
     api: ApiClient,
     cfg: Settings,
     people_map: dict[str, str],
-    episode_id: str | None,
-    dry_run: bool,
-    max_segments: int = 0,
-    skip_segments: int = 0,
+    opts: ExtractOpts,
 ) -> int:
-    if not cfg.ai_api_key and not dry_run:
+    if not cfg.ai_api_key and not opts.dry_run:
         raise SystemExit("AI_API_KEY is required for extract")
     episodes = api.list_episodes(status="segmented")
-    if episode_id:
-        episodes = [row for row in episodes if row["id"] == episode_id]
+    if opts.episode_id:
+        episodes = [row for row in episodes if row["id"] == opts.episode_id]
         if not episodes:
-            detail = api.get_episode(episode_id)
+            detail = api.get_episode(opts.episode_id)
             episodes = [detail["episode"]]
     extracted = 0
+    llm_calls = 0
+    skipped = 0
     for episode in episodes:
         detail = api.get_episode(episode["id"])
+        already = set(detail.get("extractedSegmentIds") or [])
         prev_tail = ""
         all_claims: list[dict[str, Any]] = []
         runs: list[dict[str, Any]] = []
-        segments = list(detail.get("segments") or [])
-        if skip_segments > 0:
-            segments = segments[skip_segments:]
-        if max_segments > 0:
-            segments = segments[:max_segments]
+        segments = _slice_segments(
+            list(detail.get("segments") or []), opts.skip_segments, opts.max_segments
+        )
         for segment in segments:
-            if dry_run and not cfg.ai_api_key:
-                LOGGER.info("extract dry-run skip llm segment %s", segment["idx"])
+            action = segment_action(segment, already, opts.force, opts.focus)
+            if action in {"extracted", "skip"}:
+                skipped += 1
+                LOGGER.info("segment %s skip %s", segment["idx"], action)
                 continue
-            accepted, rejected, run = extract_segment(cfg, segment["text"], prev_tail)
-            for claim in accepted:
-                claim["segmentId"] = segment["id"]
-                claim["pipelineVersion"] = cfg.pipeline_version
-                claim["model"] = cfg.extract_model
-                claim["promptVersion"] = cfg.prompt_version
-            all_claims.extend(attach_person_ids(accepted, people_map))
+            if opts.dry_run:
+                llm_calls += 1
+                LOGGER.info("segment %s keep=%s dry-run", segment["idx"], action)
+                continue
+            llm_calls += 1
+            posted, run, n = extract_one_segment(cfg, people_map, segment, prev_tail)
+            all_claims.extend(posted)
             runs.append(run)
-            extracted += len(accepted)
-            LOGGER.info(
-                "segment %s accepted=%s rejected=%s",
-                segment["idx"],
-                len(accepted),
-                len(rejected),
-            )
+            extracted += n
             prev_tail = str(segment["text"])[-300:]
-        if dry_run:
-            LOGGER.info("extract dry-run episode=%s claims=%s", episode["id"], len(all_claims))
+        LOGGER.info(
+            "episode %s llm_calls=%s skipped=%s claims=%s",
+            episode["id"],
+            llm_calls,
+            skipped,
+            extracted,
+        )
+        if opts.dry_run or not (all_claims or runs):
             continue
-        if all_claims or runs:
-            api.post_claims(episode["id"], all_claims, runs)
+        api.post_claims(episode["id"], all_claims, runs)
     return extracted
 
 
@@ -259,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-segments", type=int, default=0)
     parser.add_argument("--skip-segments", type=int, default=0)
+    parser.add_argument("--focus", choices=["all", "recs"], default="all")
     args = parser.parse_args(argv)
     cfg = load_settings()
     api = ApiClient(cfg)
@@ -290,10 +343,14 @@ def main(argv: list[str] | None = None) -> int:
                 api,
                 cfg,
                 people_map,
-                args.episode or None,
-                args.dry_run,
-                args.max_segments,
-                args.skip_segments,
+                ExtractOpts(
+                    dry_run=args.dry_run,
+                    episode_id=args.episode or None,
+                    focus=args.focus,
+                    force=args.force,
+                    max_segments=args.max_segments,
+                    skip_segments=args.skip_segments,
+                ),
             )
         if not args.dry_run:
             api.ingest_run(

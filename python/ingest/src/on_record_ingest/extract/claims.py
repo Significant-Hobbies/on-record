@@ -10,23 +10,10 @@ from ..seed.people import PEOPLE
 from ..seed.topics import TOPICS
 from .validate import parse_claims_json, validate_claim
 
-SYSTEM_PROMPT = """You extract public claims from a podcast transcript segment.
-Return JSON: {"claims": [ ... ]}.
-Each claim:
-- speaker: roster slug or "unknown"
-- claim_type: belief|prediction|recommendation|evaluation|observation|preference|commitment|disagreement|uncertainty
-- assertion: third-person one-liner
-- stance: short phrase
-- quote: EXACT contiguous substring of the segment, at least 40 characters, never paraphrased
-- topics: slugs from the provided list
-- extraction_confidence: 0-1
-- speaker_confidence: 0-1
-- references: named things in the quote. Prefer extracting these whenever someone recommends, uses, built, or avoids something concrete:
-  kind: book|app|tool|service|paper|course|hardware|person|other
-  role: recommends|uses|built|avoids|mentions
-  name: the exact words from the quote (book title, app, tool, service, paper, course, hardware)
-A mention is not a claim. Do extract recommendations and personal stack ("I use X", "I recommend Y", "I built Z").
-If nothing is a claim, return {"claims": []}.
+SYSTEM_PROMPT = """Extract claims from one transcript segment. JSON only: {"claims":[...]}.
+Each claim: speaker (roster slug or unknown), claim_type (belief|prediction|recommendation|evaluation|observation|preference|commitment|disagreement|uncertainty), assertion (third-person), stance, quote (verbatim substring >=40 chars), topics (from list), extraction_confidence, speaker_confidence, references [{kind,name,role}].
+kind=book|app|tool|service|paper|course|hardware|person|other. role=recommends|uses|built|avoids|mentions.
+name must be words from the quote. Prefer I use / I recommend / I built. Empty claims array if none.
 """
 
 
@@ -41,12 +28,8 @@ def topic_slugs() -> set[str]:
 def build_user_prompt(
     roster: list[str], prev_tail: str, segment_text: str, topics: list[str]
 ) -> str:
-    return (
-        f"Roster slugs: {', '.join(roster)}\n"
-        f"Approved topics: {', '.join(topics)}\n"
-        f"Previous tail: {prev_tail}\n"
-        f"Segment:\n{segment_text}\n"
-    )
+    tail = f"\nPrev: {prev_tail}" if prev_tail else ""
+    return f"Roster: {', '.join(roster)}\nTopics: {', '.join(topics)}{tail}\nSegment:\n{segment_text}\n"
 
 
 def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], int]:

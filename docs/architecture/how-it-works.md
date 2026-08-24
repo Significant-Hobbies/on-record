@@ -11,8 +11,9 @@ discover → transcripts → segment → extract → publish-rules (worker)
    YouTube captions. No transcript → `no_transcript`, skipped forever.
 3. **segment** — cues into ~3000-character windows at cue boundaries, 200
    character overlap, carrying `startS`/`endS`.
-4. **extract** — per segment, roster + previous-segment tail + text →
-   free-ai gateway (`extract-v1`, temperature 0). Quote must be a verbatim
-   substring. Reject, never repair.
+4. **extract** — cheap triage first (recs / claim speech / skip filler).
+   Only then free-ai (`extract-v2`). Segments that already have claims are
+   skipped unless `--force`. Quote must be a verbatim substring. Reject,
+   never repair.
 5. **publish** — worker re-validates the quote against stored segment text
    and applies deterministic banding.
