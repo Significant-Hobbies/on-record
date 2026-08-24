@@ -35,7 +35,7 @@ def settings() -> Settings:
         ai_model=os.environ.get("AI_MODEL", "auto"),
         ai_project_id=os.environ.get("AI_PROJECT_ID", "on-record"),
         extract_model=os.environ.get("ON_RECORD_EXTRACT_MODEL", "")
-        or os.environ.get("AI_MODEL", "auto"),
+        or os.environ.get("AI_MODEL", "gemini-2.5-flash"),
         podcast_index_key=os.environ.get("PODCAST_INDEX_KEY", ""),
         podcast_index_secret=os.environ.get("PODCAST_INDEX_SECRET", ""),
     )

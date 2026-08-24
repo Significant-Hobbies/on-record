@@ -54,18 +54,36 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
     body = {
         "model": settings.extract_model,
         "temperature": 0,
+        "max_tokens": 1200,
         "project_id": settings.ai_project_id,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
     }
-    with httpx.Client(timeout=60.0) as client:
-        response = client.post(
-            f"{settings.ai_base_url}/chat/completions", headers=headers, json=body
-        )
-        response.raise_for_status()
-        payload = response.json()
+    last_error: Exception | None = None
+    payload: dict[str, Any] = {}
+    with httpx.Client(timeout=90.0) as client:
+        for _attempt in range(3):
+            try:
+                response = client.post(
+                    f"{settings.ai_base_url}/chat/completions", headers=headers, json=body
+                )
+                if response.status_code in {429, 502, 503}:
+                    last_error = httpx.HTTPStatusError(
+                        f"{response.status_code}", request=response.request, response=response
+                    )
+                    time.sleep(1.5)
+                    continue
+                response.raise_for_status()
+                payload = response.json()
+                last_error = None
+                break
+            except httpx.HTTPError as exc:
+                last_error = exc
+                time.sleep(1.5)
+    if last_error:
+        raise last_error
     latency_ms = int((time.perf_counter() - started) * 1000)
     content = payload["choices"][0]["message"]["content"]
     return str(content), payload, latency_ms
