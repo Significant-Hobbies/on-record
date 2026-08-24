@@ -7,6 +7,7 @@ import type { Env } from '../env';
 import { dedupeHash, newId } from '../ids';
 import { judgeClaim } from '../publish-rules';
 import { findVerbatimAnchor, normalizeWs } from '../quote';
+import { sanitizeReferences, type ClaimReference } from '../references';
 
 export const adminClaimsRoute = new Hono<{ Bindings: Env }>();
 
@@ -24,6 +25,7 @@ type IncomingClaim = {
   model?: string;
   promptVersion?: string;
   pipelineVersion?: string;
+  references?: ClaimReference[];
 };
 
 type LlmRunInput = {
@@ -61,6 +63,27 @@ async function topicIdForSlug(database: Database, slug: string): Promise<string 
   return topic?.id ?? null;
 }
 
+async function persistReferences(
+  database: Database,
+  claimId: string,
+  incoming: IncomingClaim,
+  segmentText: string
+): Promise<void> {
+  const refs = sanitizeReferences(incoming.references ?? [], segmentText);
+  for (const ref of refs) {
+    await database
+      .insert(schema.claimReferences)
+      .values({
+        claimId,
+        id: newId(),
+        kind: ref.kind,
+        name: ref.name,
+        role: ref.role,
+      })
+      .onConflictDoNothing();
+  }
+}
+
 async function persistOneClaim(
   database: Database,
   d1: D1Database,
@@ -82,6 +105,7 @@ async function persistOneClaim(
     .where(eq(schema.claims.dedupeHash, hash))
     .limit(1);
   if (existing) {
+    await persistReferences(database, existing.id, incoming, segment.text);
     return { id: existing.id, reason: 'duplicate', reviewStatus: existing.reviewStatus };
   }
   const id = newId();
@@ -136,6 +160,7 @@ async function persistOneClaim(
   if (decision.reviewStatus === 'published') {
     await indexPublishedClaim(d1, id, incoming.assertion, incoming.quote);
   }
+  await persistReferences(database, id, incoming, segment.text);
   return { id, reason: decision.publishReason, reviewStatus: decision.reviewStatus };
 }
 

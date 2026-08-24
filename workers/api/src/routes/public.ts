@@ -5,6 +5,7 @@ import { isClaimType } from '../claim-types';
 import { db, schema } from '../db';
 import type { Env } from '../env';
 import { sanitizeFtsQuery } from '../fts';
+import { isReferenceKind, isReferenceRole } from '../references';
 
 export const publicRoute = new Hono<{ Bindings: Env }>();
 
@@ -32,7 +33,8 @@ publicRoute.get('/people/:slug', async (c) => {
     .from(schema.claims)
     .where(and(eq(schema.claims.personId, person.id), eq(schema.claims.reviewStatus, 'published')))
     .orderBy(desc(schema.claims.saidOn));
-  return c.json({ claims, person });
+  const recommendations = await publishedReferences(c.env.DB, { personId: person.id });
+  return c.json({ claims, person, recommendations });
 });
 
 publicRoute.get('/claims/:id', async (c) => {
@@ -49,7 +51,11 @@ publicRoute.get('/claims/:id', async (c) => {
     .select()
     .from(schema.claimEvidence)
     .where(eq(schema.claimEvidence.claimId, claim.id));
-  return c.json({ claim, evidence });
+  const references = await db(c.env.DB)
+    .select()
+    .from(schema.claimReferences)
+    .where(eq(schema.claimReferences.claimId, claim.id));
+  return c.json({ claim, evidence, references });
 });
 
 publicRoute.get('/sources', async (c) => {
@@ -177,6 +183,65 @@ publicRoute.get('/search', async (c) => {
   return c.json({ claims: rows });
 });
 
+async function publishedReferences(
+  d1: D1Database,
+  filters: { personId?: string; kind?: string; role?: string }
+) {
+  const database = db(d1);
+  const clauses: SQL[] = [eq(schema.claims.reviewStatus, 'published')];
+  if (filters.personId) {
+    clauses.push(eq(schema.claims.personId, filters.personId));
+  }
+  if (filters.kind && isReferenceKind(filters.kind)) {
+    clauses.push(eq(schema.claimReferences.kind, filters.kind));
+  }
+  if (filters.role && isReferenceRole(filters.role)) {
+    clauses.push(eq(schema.claimReferences.role, filters.role));
+  }
+  return database
+    .select({
+      assertion: schema.claims.assertion,
+      claimId: schema.claims.id,
+      kind: schema.claimReferences.kind,
+      name: schema.claimReferences.name,
+      personId: schema.claims.personId,
+      quote: schema.claims.quote,
+      role: schema.claimReferences.role,
+      saidOn: schema.claims.saidOn,
+      timestampS: schema.claims.timestampS,
+    })
+    .from(schema.claimReferences)
+    .innerJoin(schema.claims, eq(schema.claimReferences.claimId, schema.claims.id))
+    .where(and(...clauses))
+    .orderBy(desc(schema.claims.saidOn))
+    .limit(200);
+}
+
+publicRoute.get('/recommendations', async (c) => {
+  const personSlug = c.req.query('person');
+  let personId: string | undefined;
+  if (personSlug) {
+    const [person] = await db(c.env.DB)
+      .select()
+      .from(schema.people)
+      .where(eq(schema.people.slug, personSlug))
+      .limit(1);
+    if (!person) {
+      return c.json({ evidence: 'insufficient', recommendations: [] });
+    }
+    personId = person.id;
+  }
+  const recommendations = await publishedReferences(c.env.DB, {
+    kind: c.req.query('kind'),
+    personId,
+    role: c.req.query('role'),
+  });
+  if (!recommendations.length) {
+    return c.json({ evidence: 'insufficient', recommendations: [] });
+  }
+  return c.json({ recommendations });
+});
+
 publicRoute.get('/stats', async (c) => {
   const database = db(c.env.DB);
   const [people] = await database.select({ n: sql<number>`count(*)` }).from(schema.people);
@@ -185,9 +250,15 @@ publicRoute.get('/stats', async (c) => {
     .from(schema.claims)
     .where(eq(schema.claims.reviewStatus, 'published'));
   const [episodes] = await database.select({ n: sql<number>`count(*)` }).from(schema.episodes);
+  const [references] = await database
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.claimReferences)
+    .innerJoin(schema.claims, eq(schema.claimReferences.claimId, schema.claims.id))
+    .where(eq(schema.claims.reviewStatus, 'published'));
   return c.json({
     episodes: episodes?.n ?? 0,
     people: people?.n ?? 0,
     publishedClaims: published?.n ?? 0,
+    publishedReferences: references?.n ?? 0,
   });
 });

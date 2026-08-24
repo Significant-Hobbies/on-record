@@ -21,7 +21,12 @@ Each claim:
 - topics: slugs from the provided list
 - extraction_confidence: 0-1
 - speaker_confidence: 0-1
-A mention is not a claim. If nothing is a claim, return {"claims": []}.
+- references: named things in the quote. Prefer extracting these whenever someone recommends, uses, built, or avoids something concrete:
+  kind: book|app|tool|service|paper|course|hardware|person|other
+  role: recommends|uses|built|avoids|mentions
+  name: the exact words from the quote (book title, app, tool, service, paper, course, hardware)
+A mention is not a claim. Do extract recommendations and personal stack ("I use X", "I recommend Y", "I built Z").
+If nothing is a claim, return {"claims": []}.
 """
 
 

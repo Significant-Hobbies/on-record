@@ -24,4 +24,8 @@ TOPICS: list[dict] = [
     {"slug": "multimodality", "name": "Multimodality"},
     {"slug": "agi", "name": "AGI"},
     {"slug": "labor", "name": "Labor"},
+    {"slug": "books", "name": "Books"},
+    {"slug": "apps", "name": "Apps"},
+    {"slug": "tools", "name": "Tools"},
+    {"slug": "personal-stack", "name": "Personal stack"},
 ]

@@ -37,6 +37,7 @@ review-report.
 - 2026-08-24 — Session 1 scaffold: schema, API worker, ingest pipeline, CI
 - 2026-08-24 — GitHub repo Significant-Hobbies/on-record; local D1 migrate; Karpathy episode captions segmented
 - 2026-08-24 — First published claims from Karpathy/Dwarkesh via Infisical Free_ai → free-ai gateway
+- 2026-08-24 — extract-v2 stores evidenced book/app/tool references (`/api/recommendations`)
 
 ## Products
 

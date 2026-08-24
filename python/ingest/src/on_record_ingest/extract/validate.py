@@ -16,6 +16,18 @@ CLAIM_TYPES = {
     "uncertainty",
 }
 MIN_QUOTE_CHARS = 40
+REFERENCE_KINDS = {
+    "book",
+    "app",
+    "tool",
+    "service",
+    "paper",
+    "course",
+    "hardware",
+    "person",
+    "other",
+}
+REFERENCE_ROLES = {"recommends", "uses", "built", "avoids", "mentions"}
 
 
 def normalize_ws(text: str) -> str:
@@ -88,6 +100,31 @@ def parse_claims_json(raw: str) -> list[dict[str, Any]] | None:
     return [row for row in payload if isinstance(row, dict)]
 
 
+def validate_references(row: dict[str, Any], segment_text: str) -> list[dict[str, str]]:
+    raw = row.get("references") or []
+    if not isinstance(raw, list):
+        return []
+    haystack = normalize_ws(segment_text).lower()
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("kind") or "").strip().lower()
+        role = str(item.get("role") or "").strip().lower()
+        name = str(item.get("name") or "").strip()
+        if kind not in REFERENCE_KINDS or role not in REFERENCE_ROLES or len(name) < 2:
+            continue
+        if normalize_ws(name).lower() not in haystack:
+            continue
+        key = (kind, role, name.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"kind": kind, "name": name, "role": role})
+    return out
+
+
 def _confidence(row: dict[str, Any], *keys: str) -> float | None:
     try:
         return float(next((row[key] for key in keys if row.get(key) is not None), 0))
@@ -144,4 +181,5 @@ def _validated_body(
         "extractionConfidence": extraction,
         "speakerConfidence": speaker_conf,
         "topics": [str(slug) for slug in topic_list if str(slug) in topics],
+        "references": validate_references(row, segment_text),
     }, None

@@ -199,6 +199,7 @@ def run_extract(
     episode_id: str | None,
     dry_run: bool,
     max_segments: int = 0,
+    skip_segments: int = 0,
 ) -> int:
     if not cfg.ai_api_key and not dry_run:
         raise SystemExit("AI_API_KEY is required for extract")
@@ -215,6 +216,8 @@ def run_extract(
         all_claims: list[dict[str, Any]] = []
         runs: list[dict[str, Any]] = []
         segments = list(detail.get("segments") or [])
+        if skip_segments > 0:
+            segments = segments[skip_segments:]
         if max_segments > 0:
             segments = segments[:max_segments]
         for segment in segments:
@@ -255,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-segments", type=int, default=0)
+    parser.add_argument("--skip-segments", type=int, default=0)
     args = parser.parse_args(argv)
     cfg = load_settings()
     api = ApiClient(cfg)
@@ -289,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.episode or None,
                 args.dry_run,
                 args.max_segments,
+                args.skip_segments,
             )
         if not args.dry_run:
             api.ingest_run(

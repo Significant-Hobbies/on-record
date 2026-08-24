@@ -242,6 +242,28 @@ export const claimTopics = sqliteTable(
   (t) => [primaryKey({ columns: [t.claimId, t.topicId] })]
 );
 
+export const claimReferences = sqliteTable(
+  'claim_references',
+  {
+    claimId: text('claim_id')
+      .notNull()
+      .references(() => claims.id),
+    id: text('id').primaryKey(),
+    kind: text('kind', {
+      enum: ['book', 'app', 'tool', 'service', 'paper', 'course', 'hardware', 'person', 'other'],
+    }).notNull(),
+    name: text('name').notNull(),
+    role: text('role', {
+      enum: ['recommends', 'uses', 'built', 'avoids', 'mentions'],
+    }).notNull(),
+  },
+  (t) => [
+    index('claim_references_claim_idx').on(t.claimId),
+    index('claim_references_kind_role_idx').on(t.kind, t.role),
+    uniqueIndex('claim_references_unique').on(t.claimId, t.kind, t.role, t.name),
+  ]
+);
+
 export const llmRuns = sqliteTable(
   'llm_runs',
   {

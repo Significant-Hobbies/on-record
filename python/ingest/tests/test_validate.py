@@ -2,6 +2,7 @@ from on_record_ingest.extract.validate import (
     find_verbatim_anchor,
     parse_claims_json,
     validate_claim,
+    validate_references,
 )
 
 SEGMENT = (
@@ -57,3 +58,43 @@ def test_parse_claims_json_unwraps_fences():
 
 def test_short_quote_rejected():
     assert find_verbatim_anchor(SEGMENT, "I think software development") is None
+
+
+STACK = (
+    "I still recommend The Sovereign Individual, and personally I use Cursor "
+    "every day instead of writing every line by hand anymore."
+)
+
+
+def test_keeps_book_and_app_named_in_segment():
+    refs = validate_references(
+        {
+            "references": [
+                {"kind": "book", "name": "The Sovereign Individual", "role": "recommends"},
+                {"kind": "app", "name": "Cursor", "role": "uses"},
+                {"kind": "book", "name": "Invented Title", "role": "recommends"},
+            ]
+        },
+        STACK,
+    )
+    assert {(r["kind"], r["name"], r["role"]) for r in refs} == {
+        ("book", "The Sovereign Individual", "recommends"),
+        ("app", "Cursor", "uses"),
+    }
+
+
+def test_claim_includes_validated_references():
+    row = {
+        "speaker": "andrej-karpathy",
+        "claim_type": "recommendation",
+        "assertion": "Karpathy recommends The Sovereign Individual.",
+        "quote": "I still recommend The Sovereign Individual, and personally I use Cursor",
+        "topics": ["books"],
+        "extraction_confidence": 0.9,
+        "speaker_confidence": 0.9,
+        "references": [{"kind": "book", "name": "The Sovereign Individual", "role": "recommends"}],
+    }
+    claim, reason = validate_claim(row, STACK, ROSTER, {"books"})
+    assert reason is None
+    assert claim is not None
+    assert claim["references"][0]["name"] == "The Sovereign Individual"
