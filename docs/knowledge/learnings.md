@@ -33,4 +33,14 @@
   of 2026-08-25. Force by config id (`openrouter-stealth-ox-alpha`) when it
   comes back; `/v1/models` lists config ids, not model strings.
 - The gateway caps `max_tokens` at 8192 regardless of what the model supports.
+- Forcing one model fixes quality and breaks availability: pinned to
+  gemini-2.5-flash the run exhausted its 500/day quota and then every call was
+  503 or 429, five retries deep, for nothing. The right lever is
+  `response_format: {"type":"json_object"}` plus
+  `min_reasoning_level: "high"`. The first filters the pool to models that can
+  emit JSON, the second drops the low-reasoning tier where ministral-3b lives.
+  38 enabled candidates across nine providers survive both, so the gateway
+  still fails over — observed falling back to codestral-latest and
+  mistral-medium-latest once gemini was spent. Keep `X-Gateway-Force-Model`
+  for deliberate pinning only (`ON_RECORD_FORCE_MODEL`).
 

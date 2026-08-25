@@ -17,6 +17,7 @@ class Settings:
     ai_model: str
     ai_project_id: str
     extract_model: str
+    force_model: str
     podcast_index_key: str
     podcast_index_secret: str
     pipeline_version: str = "claims-v1"
@@ -36,6 +37,10 @@ def settings() -> Settings:
         ai_project_id=os.environ.get("AI_PROJECT_ID", "on-record"),
         extract_model=os.environ.get("ON_RECORD_EXTRACT_MODEL", "")
         or os.environ.get("AI_MODEL", "gemini-2.5-flash"),
+        # Empty means "any model above the reasoning floor", which is what we
+        # want day to day. Set it to pin one deliberately, e.g. when a specific
+        # model is being evaluated.
+        force_model=os.environ.get("ON_RECORD_FORCE_MODEL", ""),
         podcast_index_key=os.environ.get("PODCAST_INDEX_KEY", ""),
         podcast_index_secret=os.environ.get("PODCAST_INDEX_SECRET", ""),
     )

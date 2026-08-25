@@ -46,13 +46,13 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
         "Authorization": f"Bearer {settings.ai_api_key}",
         "Content-Type": "application/json",
         "X-Gateway-Project-Id": settings.ai_project_id,
-        # Without this the gateway treats `model` as a hint and is free to
-        # answer from whatever is cheapest and healthy — which is how every
-        # extraction up to 2026-08-25 was quietly served by a 3B model.
-        "X-Gateway-Force-Model": settings.extract_model,
     }
+    if settings.force_model:
+        # Pinning wins the model but loses the fallback: when that one model
+        # is rate limited every call 503s. Only pin deliberately.
+        headers["X-Gateway-Force-Model"] = settings.force_model
     body = {
-        "model": settings.extract_model,
+        "model": settings.force_model or "auto",
         "temperature": 0,
         # The gateway caps max_tokens at 8192 whatever the model allows.
         "max_tokens": 8000,
@@ -60,6 +60,11 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
         # Supported by every model we pin, and it is what stops the answer
         # arriving wrapped in prose that then fails to parse.
         "response_format": {"type": "json_object"},
+        # These two do the work a pinned model was doing, without giving up
+        # the fallback. response_format filters the pool to models that can
+        # emit JSON; the floor drops the low-reasoning tier, which is where
+        # ministral-3b lives. 38 candidates across nine providers survive.
+        "min_reasoning_level": "high",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -68,7 +73,7 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
     last_error: Exception | None = None
     payload: dict[str, Any] = {}
     with httpx.Client(timeout=90.0) as client:
-        for attempt in range(5):
+        for attempt in range(3):
             try:
                 response = client.post(
                     f"{settings.ai_base_url}/chat/completions", headers=headers, json=body
@@ -130,7 +135,7 @@ def extract_segment(
             continue
         accepted.append(claim)
     run = {
-        "model": served_model(response_json, settings.extract_model),
+        "model": served_model(response_json, settings.force_model or "auto"),
         "promptVersion": settings.prompt_version,
         "accepted": bool(accepted),
         "reason": "ok" if parsed is not None else "json_parse_failed",

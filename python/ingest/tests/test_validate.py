@@ -156,5 +156,5 @@ def test_served_model_prefers_what_the_gateway_actually_used():
     assert served_model({"x_gateway": {"model": "ministral-3b-latest"}}, "gemini-2.5-flash") == (
         "ministral-3b-latest"
     )
-    assert served_model({"model": "gemini-2.5-flash"}, "gemini-2.5-flash") == "gemini-2.5-flash"
-    assert served_model({}, "gemini-2.5-flash") == "gemini-2.5-flash"
+    assert served_model({"model": "gemini-2.5-flash"}, "auto") == "gemini-2.5-flash"
+    assert served_model({}, "auto") == "auto"
