@@ -172,7 +172,14 @@ adminRoute.get('/episodes', async (c) => {
   }
   const database = db(c.env.DB).select().from(schema.episodes);
   const filtered = filters.length ? database.where(and(...filters)) : database;
-  const rows = await filtered.orderBy(desc(schema.episodes.publishedAt)).limit(200);
+  // The pipeline pages through the whole archive; 200 silently truncated
+  // every caller that wanted more than the most recent page.
+  const limit = Math.min(Number(c.req.query('limit') ?? 200) || 200, 2000);
+  const offset = Math.max(Number(c.req.query('offset') ?? 0) || 0, 0);
+  const rows = await filtered
+    .orderBy(desc(schema.episodes.publishedAt))
+    .limit(limit)
+    .offset(offset);
   return c.json({ episodes: rows });
 });
 

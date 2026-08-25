@@ -40,7 +40,9 @@ def build_user_prompt(
     )
 
 
-def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], int]:
+def _chat(
+    settings: Settings, user_prompt: str, system_prompt: str = SYSTEM_PROMPT
+) -> tuple[str, dict[str, Any], int]:
     started = time.perf_counter()
     headers = {
         "Authorization": f"Bearer {settings.ai_api_key}",
@@ -66,7 +68,7 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
         # ministral-3b lives. 38 candidates across nine providers survive.
         "min_reasoning_level": "high",
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
     }

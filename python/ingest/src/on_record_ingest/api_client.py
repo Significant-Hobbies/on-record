@@ -70,15 +70,25 @@ class ApiClient:
         return self._json(self._client.post(f"/admin/episodes/{episode_id}/retime", json={}))
 
     def list_episodes(
-        self, status: str | None = None, show_id: str | None = None
+        self, status: str | None = None, show_id: str | None = None, page_size: int = 1000
     ) -> list[dict[str, Any]]:
+        """Every matching episode, paged. The endpoint caps a single response."""
         params: dict[str, str] = {}
         if status:
             params["status"] = status
         if show_id:
             params["showId"] = show_id
-        payload = self._json(self._client.get("/admin/episodes", params=params))
-        return list(payload.get("episodes") or [])
+        out: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            params["limit"] = str(page_size)
+            params["offset"] = str(offset)
+            payload = self._json(self._client.get("/admin/episodes", params=params))
+            rows = list(payload.get("episodes") or [])
+            out.extend(rows)
+            if len(rows) < page_size:
+                return out
+            offset += page_size
 
     def set_episode_status(self, episode_id: str, **fields: Any) -> None:
         self._json(self._client.post(f"/admin/episodes/{episode_id}/status", json=fields))
