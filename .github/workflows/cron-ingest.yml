@@ -31,6 +31,10 @@ on:
         description: cap segments per episode (0 = no cap)
         type: string
         default: "0"
+      dry_run:
+        description: log what would happen, write nothing
+        type: boolean
+        default: false
 
 concurrency:
   group: cron-ingest
@@ -77,6 +81,7 @@ jobs:
           --days ${{ inputs.days }}
           --focus ${{ inputs.focus }}
           --max-segments ${{ inputs.max_segments }}
+          ${{ inputs.dry_run && '--dry-run' || '' }}
           ${{ inputs.show && format('--show {0}', inputs.show) || '' }}
 
       - name: report
