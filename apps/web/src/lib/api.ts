@@ -50,6 +50,7 @@ export type Recommendation = {
   name: string;
   assertion: string;
   claimId: string;
+  deepLinkUrl?: string | null;
   quote: string;
   timestampS?: number | null;
   saidOn?: string | null;

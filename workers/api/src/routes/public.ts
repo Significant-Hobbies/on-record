@@ -206,6 +206,19 @@ publicRoute.get('/search', async (c) => {
   return c.json({ claims: rows });
 });
 
+export const recommendationFields = {
+  assertion: schema.claims.assertion,
+  claimId: schema.claims.id,
+  deepLinkUrl: schema.claimEvidence.deepLinkUrl,
+  kind: schema.claimReferences.kind,
+  name: schema.claimReferences.name,
+  personId: schema.claims.personId,
+  quote: schema.claims.quote,
+  role: schema.claimReferences.role,
+  saidOn: schema.claims.saidOn,
+  timestampS: schema.claims.timestampS,
+};
+
 async function publishedReferences(
   d1: D1Database,
   filters: { personId?: string; kind?: string; role?: string }
@@ -222,19 +235,16 @@ async function publishedReferences(
     clauses.push(eq(schema.claimReferences.role, filters.role));
   }
   return database
-    .select({
-      assertion: schema.claims.assertion,
-      claimId: schema.claims.id,
-      kind: schema.claimReferences.kind,
-      name: schema.claimReferences.name,
-      personId: schema.claims.personId,
-      quote: schema.claims.quote,
-      role: schema.claimReferences.role,
-      saidOn: schema.claims.saidOn,
-      timestampS: schema.claims.timestampS,
-    })
+    .select(recommendationFields)
     .from(schema.claimReferences)
     .innerJoin(schema.claims, eq(schema.claimReferences.claimId, schema.claims.id))
+    .innerJoin(
+      schema.claimEvidence,
+      and(
+        eq(schema.claimEvidence.claimId, schema.claims.id),
+        eq(schema.claimEvidence.role, 'primary')
+      )
+    )
     .where(and(...clauses))
     .orderBy(desc(schema.claims.saidOn))
     .limit(200);
