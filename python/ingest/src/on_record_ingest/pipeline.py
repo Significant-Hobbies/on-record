@@ -20,6 +20,8 @@ from .seed.topics import TOPICS
 from .segment import cues_to_segments
 from .sources import podcast_index, rss_feed, youtube_rss
 from .transcripts.rss_transcript import parse_transcript
+from .transcripts.whisper_local import TranscriptionUnavailable
+from .transcripts.whisper_local import transcribe as whisper_transcribe
 from .transcripts.youtube_captions import fetch_cues
 
 LOGGER = logging.getLogger("on_record_ingest")
@@ -136,8 +138,13 @@ def discover_show(
 
 
 def resolve_cues(
-    item: dict[str, Any], client: httpx.Client
+    item: dict[str, Any], client: httpx.Client, whisper: bool = False
 ) -> tuple[str, list[dict[str, float | str]]]:
+    """Publisher transcript, then YouTube captions, then our own ears.
+
+    Whisper is last because it is the only step that costs real time, and it
+    is opt-in because it only works where the machine can run it.
+    """
     transcript_url = str(item.get("transcriptUrl") or "")
     if transcript_url:
         response = client.get(transcript_url, timeout=30.0, follow_redirects=True)
@@ -150,10 +157,21 @@ def resolve_cues(
         cues = fetch_cues(video_id)
         if cues:
             return "youtube_captions", cues
+    audio_url = str(item.get("audioUrl") or "")
+    if whisper and audio_url:
+        cues = whisper_transcribe(audio_url, client)
+        if cues:
+            return "whisper_local", cues
     return "none", []
 
 
-def run_transcripts(api: ApiClient, episode_id: str | None, force: bool, dry_run: bool) -> int:
+def run_transcripts(
+    api: ApiClient,
+    episode_id: str | None,
+    force: bool,
+    dry_run: bool,
+    whisper: bool = False,
+) -> int:
     episodes = api.list_episodes(status=None if force else "discovered")
     if episode_id:
         episodes = [row for row in episodes if row["id"] == episode_id]
@@ -176,16 +194,26 @@ def run_transcripts(api: ApiClient, episode_id: str | None, force: bool, dry_run
                     "youtubeVideoId": episode.get("youtubeVideoId"),
                 }
             video_id = episode.get("youtubeVideoId") or raw.get("youtubeVideoId")
-            if not (raw.get("transcriptUrl") or video_id):
+            audio_url = episode.get("audioUrl") or raw.get("audioUrl")
+            if not (raw.get("transcriptUrl") or video_id or (whisper and audio_url)):
                 # Nothing to try yet. no_transcript means "we looked and there
                 # is none", so leave this episode alone for a later pass rather
                 # than retiring it on the strength of a throttled discovery.
                 LOGGER.info("transcripts %s no source yet", episode["id"])
                 continue
-            kind, cues = resolve_cues(
-                {"transcriptUrl": raw.get("transcriptUrl"), "youtubeVideoId": video_id},
-                client,
-            )
+            try:
+                kind, cues = resolve_cues(
+                    {
+                        "transcriptUrl": raw.get("transcriptUrl"),
+                        "youtubeVideoId": video_id,
+                        "audioUrl": audio_url,
+                    },
+                    client,
+                    whisper,
+                )
+            except TranscriptionUnavailable as exc:
+                LOGGER.warning("episode %s left for a later pass: %s", episode["id"], exc)
+                continue
             count += 1
             if dry_run:
                 LOGGER.info(
@@ -193,6 +221,8 @@ def run_transcripts(api: ApiClient, episode_id: str | None, force: bool, dry_run
                 )
                 continue
             if not cues:
+                # Only retire the episode when we actually looked and found
+                # nothing. A stalled download is not evidence of absence.
                 api.set_episode_status(episode["id"], status="no_transcript", transcriptKind="none")
                 continue
             api.put_raw(
@@ -418,6 +448,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-segments", type=int, default=0)
     parser.add_argument("--skip-segments", type=int, default=0)
     parser.add_argument("--focus", choices=["all", "recs"], default="all")
+    parser.add_argument(
+        "--whisper",
+        action="store_true",
+        help="transcribe audio locally when no caption source exists",
+    )
     args = parser.parse_args(argv)
     cfg = load_settings()
     api = ApiClient(cfg)
@@ -448,7 +483,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         transcribed = 0
         if args.stage in {"all", "transcripts"}:
-            transcribed = run_transcripts(api, args.episode or None, args.force, args.dry_run)
+            transcribed = run_transcripts(
+                api, args.episode or None, args.force, args.dry_run, args.whisper
+            )
         extracted = 0
         if args.stage in {"all", "extract", "publish"}:
             extracted = run_extract(

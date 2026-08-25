@@ -25,3 +25,25 @@ def test_parse_json_transcript():
     kind, cues = parse_transcript(raw, "application/json")
     assert kind == "rss_json"
     assert cues[0]["start"] == 1.5
+
+
+def test_whisper_report_becomes_cues_without_control_tokens():
+    from on_record_ingest.transcripts.whisper_local import cues_from_report
+
+    cues = cues_from_report(
+        {
+            "segments": [
+                {
+                    "start": 0,
+                    "end": 3.78,
+                    "text": "<|startoftranscript|><|transcribe|><|0.00|> Right now,<|3.78|>",
+                },
+                {"start": 3.84, "end": 5.18, "text": "<|3.84|> they can use it.<|5.18|>"},
+                {"start": 5.2, "end": 5.4, "text": "<|5.20|><|5.40|>"},
+            ]
+        }
+    )
+    assert [c["text"] for c in cues] == ["Right now,", "they can use it."]
+    assert cues[0]["start"] == 0 and round(float(cues[0]["duration"]), 2) == 3.78
+    # A segment that is only control tokens carries no words and is dropped.
+    assert len(cues) == 2

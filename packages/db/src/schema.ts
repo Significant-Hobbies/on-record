@@ -98,7 +98,7 @@ export const episodes = sqliteTable(
     statusDetail: text('status_detail'),
     title: text('title').notNull(),
     transcriptKind: text('transcript_kind', {
-      enum: ['rss_vtt', 'rss_srt', 'rss_json', 'youtube_captions', 'none'],
+      enum: ['rss_vtt', 'rss_srt', 'rss_json', 'youtube_captions', 'whisper_local', 'none'],
     }),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
