@@ -559,15 +559,18 @@ def run_youtube_verify(api: ApiClient, cfg: Settings) -> dict[str, int]:
     shows = {s["slug"]: s.get("youtubeChannelId") for s in SHOWS}
     slug_of = {row["id"]: row["slug"] for row in api.list_shows()}
     episodes = [e for e in api.list_episodes() if e.get("youtubeVideoId")]
-    tally = {"kept": 0, "wrong_channel": 0, "gone": 0}
+    tally = {"kept": 0, "wrong_channel": 0, "gone": 0, "unverified": 0}
     with httpx.Client() as client:
         owners = youtube_api.channels_for(
             [str(e["youtubeVideoId"]) for e in episodes], cfg.youtube_api_key, client
         )
     for episode in episodes:
         expected = shows.get(slug_of.get(str(episode.get("showId")), ""))
+        if not expected:
+            tally["unverified"] += 1
+            continue
         owner = owners.get(str(episode["youtubeVideoId"]))
-        if owner and expected and owner == expected:
+        if owner == expected:
             tally["kept"] += 1
             continue
         tally["gone" if owner is None else "wrong_channel"] += 1
@@ -769,6 +772,23 @@ def seed_maps_for_stage(
     )
 
 
+def run_standalone_stage(api: ApiClient, cfg: Settings, args: argparse.Namespace) -> bool:
+    """Run stages that do not participate in the discover/extract pipeline."""
+    handlers = {
+        "youtube-verify": lambda: run_youtube_verify(api, cfg),
+        "youtube-api": lambda: run_youtube_api(api, cfg),
+        "youtube-ids": lambda: run_youtube_ids(api, args.limit),
+        "attributions": lambda: run_attributions(api, cfg, args.episode or None, args.limit),
+        "identify": lambda: run_identify(api, cfg, args.episode or None),
+        "retime": lambda: run_retime(api, args.episode or None, args.dry_run),
+    }
+    handler = handlers.get(args.stage)
+    if handler is None:
+        return False
+    handler()
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(prog="on-record-ingest")
@@ -803,23 +823,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 except Exception as exc:
                     LOGGER.warning("discover %s failed: %s", show["slug"], exc)
-        if args.stage == "youtube-verify":
-            run_youtube_verify(api, cfg)
-            return 0
-        if args.stage == "youtube-api":
-            run_youtube_api(api, cfg)
-            return 0
-        if args.stage == "youtube-ids":
-            run_youtube_ids(api, args.limit)
-            return 0
-        if args.stage == "attributions":
-            run_attributions(api, cfg, args.episode or None, args.limit)
-            return 0
-        if args.stage == "identify":
-            run_identify(api, cfg, args.episode or None)
-            return 0
-        if args.stage == "retime":
-            run_retime(api, args.episode or None, args.dry_run)
+        if run_standalone_stage(api, cfg, args):
             return 0
         transcribed = 0
         if args.stage in {"all", "transcripts"}:

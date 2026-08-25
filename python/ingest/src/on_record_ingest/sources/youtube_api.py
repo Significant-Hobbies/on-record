@@ -78,20 +78,20 @@ LOOKUP_PAGE = 50
 
 
 def channels_for(video_ids: list[str], api_key: str, client: httpx.Client) -> dict[str, str | None]:
-    """Which channel each video is on. Missing means the video is gone."""
+    """Which channel each video is on. Missing means the video is gone.
+
+    Transport and API failures propagate so a transient lookup failure can
+    never be mistaken for a deleted video by the mutating verification stage.
+    """
     found: dict[str, str | None] = {}
     for start in range(0, len(video_ids), LOOKUP_PAGE):
         chunk = video_ids[start : start + LOOKUP_PAGE]
-        try:
-            response = client.get(
-                VIDEOS_API,
-                params={"part": "snippet", "id": ",".join(chunk), "key": api_key},
-                timeout=40.0,
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            LOGGER.warning("youtube video lookup failed: %s", exc)
-            continue
+        response = client.get(
+            VIDEOS_API,
+            params={"part": "snippet", "id": ",".join(chunk), "key": api_key},
+            timeout=40.0,
+        )
+        response.raise_for_status()
         for item in response.json().get("items") or []:
             found[item["id"]] = (item.get("snippet") or {}).get("channelId")
     return {video_id: found.get(video_id) for video_id in video_ids}
