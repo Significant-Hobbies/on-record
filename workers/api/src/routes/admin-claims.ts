@@ -7,6 +7,7 @@ import type { Env } from '../env';
 import { dedupeHash, newId } from '../ids';
 import { judgeClaim } from '../publish-rules';
 import { findVerbatimAnchor, normalizeWs } from '../quote';
+import { getSegmentBodies, type SegmentBody } from '../segment-store';
 import { timestampForOffset } from '../timestamp';
 import { sanitizeReferences, type ClaimReference } from '../references';
 
@@ -66,10 +67,12 @@ async function topicIdForSlug(database: Database, slug: string): Promise<string 
 
 async function loadEpisode(
   database: Database,
+  bucket: R2Bucket,
   episodeId: string
 ): Promise<{
   episode: typeof schema.episodes.$inferSelect;
   segments: Map<string, typeof schema.segments.$inferSelect>;
+  bodies: Map<number, SegmentBody>;
 } | null> {
   const [episode] = await database
     .select()
@@ -83,7 +86,9 @@ async function loadEpisode(
     .select()
     .from(schema.segments)
     .where(eq(schema.segments.episodeId, episodeId));
-  return { episode, segments: new Map(rows.map((row) => [row.id, row])) };
+  // One object read for the whole batch, not one per claim.
+  const bodies = await getSegmentBodies(bucket, episodeId);
+  return { bodies, episode, segments: new Map(rows.map((row) => [row.id, row])) };
 }
 
 async function persistTopics(database: Database, claimId: string, slugs: string[]): Promise<void> {
@@ -122,9 +127,12 @@ async function persistOneClaim(
   d1: D1Database,
   episode: typeof schema.episodes.$inferSelect,
   segment: typeof schema.segments.$inferSelect,
+  body: SegmentBody,
   incoming: IncomingClaim
 ): Promise<{ id: string; reviewStatus: string; reason: string }> {
-  const anchor = findVerbatimAnchor(segment.text, incoming.quote);
+  // The guarantee is unchanged: the quote must appear in the stored source
+  // text. That text is now read from R2 rather than carried in the row.
+  const anchor = findVerbatimAnchor(body.text, incoming.quote);
   const decision = judgeClaim({
     extractionConfidence: incoming.extractionConfidence,
     quoteValidated: anchor !== null,
@@ -138,11 +146,14 @@ async function persistOneClaim(
     .where(eq(schema.claims.dedupeHash, hash))
     .limit(1);
   if (existing) {
-    await persistReferences(database, existing.id, incoming, segment.text);
+    await persistReferences(database, existing.id, incoming, body.text);
     return { id: existing.id, reason: 'duplicate', reviewStatus: existing.reviewStatus };
   }
   const id = newId();
-  const timestampS = timestampForOffset(segment, anchor?.start ?? null);
+  const timestampS = timestampForOffset(
+    { cueMap: body.cueMap, endS: segment.endS, startS: segment.startS, text: body.text },
+    anchor?.start ?? null
+  );
   const now = new Date();
   await database.insert(schema.claims).values({
     assertion: incoming.assertion,
@@ -184,7 +195,7 @@ async function persistOneClaim(
   if (decision.reviewStatus === 'published') {
     await indexPublishedClaim(d1, id, incoming.assertion, incoming.quote);
   }
-  await persistReferences(database, id, incoming, segment.text);
+  await persistReferences(database, id, incoming, body.text);
   return { id, reason: decision.publishReason, reviewStatus: decision.reviewStatus };
 }
 
@@ -192,11 +203,11 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
   const episodeId = c.req.param('id');
   const body = (await c.req.json()) as { claims?: IncomingClaim[]; llmRuns?: LlmRunInput[] };
   const database = db(c.env.DB);
-  const loaded = await loadEpisode(database, episodeId);
+  const loaded = await loadEpisode(database, c.env.RAW, episodeId);
   if (!loaded) {
     return c.json({ error: 'episode_not_found' }, 404);
   }
-  const { episode, segments } = loaded;
+  const { episode, segments, bodies } = loaded;
   const results = [];
   let rejectedQuote = 0;
   let rejectedSpeaker = 0;
@@ -211,7 +222,12 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
       results.push({ error: 'segment_not_found' });
       continue;
     }
-    const saved = await persistOneClaim(database, c.env.DB, episode, segment, incoming);
+    const body_ = bodies.get(segment.idx);
+    if (!body_) {
+      results.push({ error: 'segment_body_missing' });
+      continue;
+    }
+    const saved = await persistOneClaim(database, c.env.DB, episode, segment, body_, incoming);
     if (saved.reason === 'quote_not_verbatim') {
       rejectedQuote += 1;
     }
@@ -252,11 +268,11 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
 adminClaimsRoute.post('/episodes/:id/retime', async (c) => {
   const episodeId = c.req.param('id');
   const database = db(c.env.DB);
-  const loaded = await loadEpisode(database, episodeId);
+  const loaded = await loadEpisode(database, c.env.RAW, episodeId);
   if (!loaded) {
     return c.json({ error: 'episode_not_found' }, 404);
   }
-  const { episode, segments } = loaded;
+  const { episode, segments, bodies } = loaded;
   const claims = await database
     .select()
     .from(schema.claims)
@@ -267,8 +283,15 @@ adminClaimsRoute.post('/episodes/:id/retime', async (c) => {
     if (!segment) {
       continue;
     }
-    const anchor = findVerbatimAnchor(segment.text, claim.quote);
-    const timestampS = timestampForOffset(segment, anchor?.start ?? claim.quoteStartChar);
+    const body = bodies.get(segment.idx);
+    if (!body) {
+      continue;
+    }
+    const anchor = findVerbatimAnchor(body.text, claim.quote);
+    const timestampS = timestampForOffset(
+      { cueMap: body.cueMap, endS: segment.endS, startS: segment.startS, text: body.text },
+      anchor?.start ?? claim.quoteStartChar
+    );
     if (timestampS === claim.timestampS) {
       continue;
     }

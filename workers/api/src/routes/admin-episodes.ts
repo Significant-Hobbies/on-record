@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { CueMap } from '@on-record/db';
 import { db, schema } from '../db';
+import { getSegmentBodies, putSegmentBodies } from '../segment-store';
 import type { Env } from '../env';
 import { newId, sha256Hex } from '../ids';
 
@@ -56,11 +57,15 @@ adminEpisodesRoute.get('/episodes/:id', async (c) => {
       claimed.map((row) => row.segmentId).filter((value): value is string => Boolean(value))
     ),
   ];
+  // The extractor needs the words; they live in R2 now.
+  const bodies = await getSegmentBodies(c.env.RAW, id);
   return c.json({
     episode,
     extractedSegmentIds,
     people,
-    segments: segments.sort((a, b) => a.idx - b.idx),
+    segments: segments
+      .sort((a, b) => a.idx - b.idx)
+      .map((row) => ({ ...row, text: bodies.get(row.idx)?.text ?? '' })),
   });
 });
 
@@ -175,34 +180,40 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
     }>;
   };
   const database = db(c.env.DB);
+  const incoming = body.segments ?? [];
+  if (incoming.length) {
+    await putSegmentBodies(
+      c.env.RAW,
+      id,
+      incoming.map((s) => ({ cueMap: s.cueMap ?? null, idx: s.idx, text: s.text }))
+    );
+  }
   const existing = await database
     .select()
     .from(schema.segments)
     .where(eq(schema.segments.episodeId, id));
   const byIdx = new Map(existing.map((row) => [row.idx, row]));
-  for (const segment of body.segments ?? []) {
+  for (const segment of incoming) {
     const match = byIdx.get(segment.idx);
     if (match) {
       await database
         .update(schema.segments)
         .set({
-          cueMap: segment.cueMap ?? match.cueMap,
           endS: segment.endS,
           speakerHint: segment.speakerHint ?? null,
           startS: segment.startS,
-          text: segment.text,
+          text: '',
         })
         .where(eq(schema.segments.id, match.id));
     } else {
       await database.insert(schema.segments).values({
-        cueMap: segment.cueMap ?? null,
         endS: segment.endS,
         episodeId: id,
         id: newId(),
         idx: segment.idx,
         speakerHint: segment.speakerHint ?? null,
         startS: segment.startS,
-        text: segment.text,
+        text: '',
       });
     }
   }

@@ -29,6 +29,13 @@
       "when": 1756051380000,
       "tag": "0003_segment_cue_map",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1756051440000,
+      "tag": "0004_segments_to_r2",
+      "breakpoints": true
     }
   ]
 }

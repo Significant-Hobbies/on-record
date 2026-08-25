@@ -141,7 +141,6 @@ export type CueMap = [number, number][];
 export const segments = sqliteTable(
   'segments',
   {
-    cueMap: text('cue_map', { mode: 'json' }).$type<CueMap>(),
     endS: real('end_s').notNull(),
     episodeId: text('episode_id')
       .notNull()
@@ -150,6 +149,11 @@ export const segments = sqliteTable(
     idx: integer('idx').notNull(),
     speakerHint: text('speaker_hint'),
     startS: real('start_s').notNull(),
+    /**
+     * Always written empty. The words live in R2 — see `segment-store.ts`.
+     * The column survives only because dropping it needs a table rebuild that
+     * D1 refuses while claims reference this table.
+     */
     text: text('text').notNull(),
   },
   (t) => [
