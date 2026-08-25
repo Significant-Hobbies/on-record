@@ -173,3 +173,26 @@ def test_extraction_prompt_carries_only_this_episode_roster():
     assert "dario-amodei" in prompt
     # Someone on the global roster but not on this episode must not appear.
     assert "jensen-huang" not in prompt
+
+
+def test_local_and_gateway_requests_differ_where_they_must():
+    from dataclasses import replace
+
+    from on_record_ingest.config import settings as load
+    from on_record_ingest.extract.claims import build_body, is_local
+
+    base = load()
+    local = replace(base, ai_base_url="http://localhost:1234/v1", force_model="qwen/qwen3.5-27b")
+    gateway = replace(base, ai_base_url="https://ai-gateway.sassmaker.com/v1", force_model="")
+
+    assert is_local(local) and not is_local(gateway)
+
+    lb = build_body(local, "sys", "user")
+    assert lb["response_format"]["type"] == "json_schema"
+    # Thinking left on returns an empty message; extraction is a reading task.
+    assert lb["reasoning_effort"] == "none"
+    assert "min_reasoning_level" not in lb and "project_id" not in lb
+
+    gb = build_body(gateway, "sys", "user")
+    assert gb["response_format"]["type"] == "json_object"
+    assert gb["min_reasoning_level"] == "high"

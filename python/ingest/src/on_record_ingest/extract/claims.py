@@ -40,20 +40,93 @@ def build_user_prompt(
     )
 
 
-def _chat(
-    settings: Settings, user_prompt: str, system_prompt: str = SYSTEM_PROMPT
-) -> tuple[str, dict[str, Any], int]:
-    started = time.perf_counter()
-    headers = {
-        "Authorization": f"Bearer {settings.ai_api_key}",
-        "Content-Type": "application/json",
-        "X-Gateway-Project-Id": settings.ai_project_id,
-    }
-    if settings.force_model:
-        # Pinning wins the model but loses the fallback: when that one model
-        # is rate limited every call 503s. Only pin deliberately.
-        headers["X-Gateway-Force-Model"] = settings.force_model
-    body = {
+CLAIM_TYPES_LIST = [
+    "belief",
+    "prediction",
+    "recommendation",
+    "evaluation",
+    "observation",
+    "preference",
+    "commitment",
+    "disagreement",
+    "uncertainty",
+]
+
+# A local runtime enforces this shape token by token, so malformed answers stop
+# being possible rather than being salvaged after the fact.
+CLAIMS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "claims": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "speaker": {"type": "string"},
+                    "speaker_confidence": {"type": "number"},
+                    "claim_type": {"type": "string", "enum": CLAIM_TYPES_LIST},
+                    "assertion": {"type": "string"},
+                    "stance": {"type": "string"},
+                    "quote": {"type": "string"},
+                    "topics": {"type": "array", "items": {"type": "string"}},
+                    "extraction_confidence": {"type": "number"},
+                    "references": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "kind": {"type": "string"},
+                                "name": {"type": "string"},
+                                "role": {"type": "string"},
+                            },
+                            "required": ["kind", "name", "role"],
+                        },
+                    },
+                },
+                "required": [
+                    "speaker",
+                    "speaker_confidence",
+                    "claim_type",
+                    "assertion",
+                    "quote",
+                    "extraction_confidence",
+                ],
+            },
+        }
+    },
+    "required": ["claims"],
+}
+
+
+def is_local(settings: Settings) -> bool:
+    """A model served from this machine, rather than through the gateway."""
+    return "localhost" in settings.ai_base_url or "127.0.0.1" in settings.ai_base_url
+
+
+def build_body(settings: Settings, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    if is_local(settings):
+        # LM Studio rejects json_object and wants a schema, which is the
+        # stronger guarantee anyway. None of the gateway's routing fields mean
+        # anything here.
+        return {
+            "model": settings.force_model or settings.extract_model,
+            "temperature": 0,
+            "max_tokens": 8000,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "claims", "strict": True, "schema": CLAIMS_SCHEMA},
+            },
+            # Qwen3.5 is a hybrid reasoning model and defaults to thinking.
+            # Left on, it spent 588 of 589 tokens reasoning and returned an
+            # empty message. Extraction is a reading task, not a puzzle.
+            "reasoning_effort": "none",
+            "messages": messages,
+        }
+    return {
         "model": settings.force_model or "auto",
         "temperature": 0,
         # The gateway caps max_tokens at 8192 whatever the model allows.
@@ -67,11 +140,25 @@ def _chat(
         # emit JSON; the floor drops the low-reasoning tier, which is where
         # ministral-3b lives. 38 candidates across nine providers survive.
         "min_reasoning_level": "high",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        "messages": messages,
     }
+
+
+def _chat(
+    settings: Settings, user_prompt: str, system_prompt: str = SYSTEM_PROMPT
+) -> tuple[str, dict[str, Any], int]:
+    started = time.perf_counter()
+    headers = {
+        "Authorization": f"Bearer {settings.ai_api_key}",
+        "Content-Type": "application/json",
+    }
+    if not is_local(settings):
+        headers["X-Gateway-Project-Id"] = settings.ai_project_id
+        if settings.force_model:
+            # Pinning wins the model but loses the fallback: when that one
+            # model is rate limited every call 503s. Only pin deliberately.
+            headers["X-Gateway-Force-Model"] = settings.force_model
+    body = build_body(settings, system_prompt, user_prompt)
     last_error: Exception | None = None
     payload: dict[str, Any] = {}
     with httpx.Client(timeout=90.0) as client:
