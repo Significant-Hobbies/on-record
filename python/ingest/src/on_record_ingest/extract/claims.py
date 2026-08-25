@@ -46,12 +46,20 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
         "Authorization": f"Bearer {settings.ai_api_key}",
         "Content-Type": "application/json",
         "X-Gateway-Project-Id": settings.ai_project_id,
+        # Without this the gateway treats `model` as a hint and is free to
+        # answer from whatever is cheapest and healthy — which is how every
+        # extraction up to 2026-08-25 was quietly served by a 3B model.
+        "X-Gateway-Force-Model": settings.extract_model,
     }
     body = {
         "model": settings.extract_model,
         "temperature": 0,
-        "max_tokens": 4000,
+        # The gateway caps max_tokens at 8192 whatever the model allows.
+        "max_tokens": 8000,
         "project_id": settings.ai_project_id,
+        # Supported by every model we pin, and it is what stops the answer
+        # arriving wrapped in prose that then fails to parse.
+        "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -85,6 +93,14 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
     return str(content), payload, latency_ms
 
 
+def served_model(response_json: dict[str, Any], requested: str) -> str:
+    """Which model actually answered. Claims record this, not what we asked for."""
+    gateway = response_json.get("x_gateway")
+    if isinstance(gateway, dict) and gateway.get("model"):
+        return str(gateway["model"])
+    return str(response_json.get("model") or requested)
+
+
 def extract_segment(
     settings: Settings,
     segment_text: str,
@@ -114,7 +130,7 @@ def extract_segment(
             continue
         accepted.append(claim)
     run = {
-        "model": settings.extract_model,
+        "model": served_model(response_json, settings.extract_model),
         "promptVersion": settings.prompt_version,
         "accepted": bool(accepted),
         "reason": "ok" if parsed is not None else "json_parse_failed",

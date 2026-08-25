@@ -148,3 +148,13 @@ def test_well_formed_json_is_untouched():
 
     assert parse_claims_json('{"claims":[]}') == []
     assert parse_claims_json('```json\n{"claims":[{"quote":"a"}]}\n```') == [{"quote": "a"}]
+
+
+def test_served_model_prefers_what_the_gateway_actually_used():
+    from on_record_ingest.extract.claims import served_model
+
+    assert served_model({"x_gateway": {"model": "ministral-3b-latest"}}, "gemini-2.5-flash") == (
+        "ministral-3b-latest"
+    )
+    assert served_model({"model": "gemini-2.5-flash"}, "gemini-2.5-flash") == "gemini-2.5-flash"
+    assert served_model({}, "gemini-2.5-flash") == "gemini-2.5-flash"

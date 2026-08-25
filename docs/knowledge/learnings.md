@@ -17,3 +17,20 @@
   could be fixed with a YouTube Data API key (`playlistItems.list` on the
   uploads playlist, 1 quota unit per show per day); captions cannot, because
   `captions.download` needs OAuth as the video owner.
+- The free-ai gateway treats `model` in the request body as a hint. Asking for
+  `gemini-2.5-flash` and asking for `stealth/ox-alpha` both returned
+  `ministral-3b-latest`, with `degraded: false` — it is ordinary routing, not a
+  failure, so nothing in our logs looked wrong. Every extraction before
+  2026-08-25 was done by a 3B model, which is what produced the truncated JSON
+  and the weak claims. Pin the model with the `X-Gateway-Force-Model` header,
+  and record `x_gateway.model` from the response as the claim's provenance
+  rather than what was asked for. With gemini pinned plus
+  `response_format: {"type":"json_object"}`, a sample segment went from
+  0-2 accepted against 3-6 rejected to 5 accepted and 0 rejected.
+- `stealth/ox-alpha` is listed in the registry (1M context, JSON mode, 100
+  requests/day) but forcing it returns `no_candidate`,
+  "No healthy free-tier model available" — no OpenRouter capacity behind it as
+  of 2026-08-25. Force by config id (`openrouter-stealth-ox-alpha`) when it
+  comes back; `/v1/models` lists config ids, not model strings.
+- The gateway caps `max_tokens` at 8192 regardless of what the model supports.
+

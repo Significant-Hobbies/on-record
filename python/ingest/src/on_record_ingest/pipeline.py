@@ -257,7 +257,8 @@ def extract_one_segment(
     for claim in accepted:
         claim["segmentId"] = segment["id"]
         claim["pipelineVersion"] = cfg.pipeline_version
-        claim["model"] = cfg.extract_model
+        # The model that answered, not the one we asked for.
+        claim["model"] = run.get("model") or cfg.extract_model
         claim["promptVersion"] = cfg.prompt_version
     LOGGER.info(
         "segment %s accepted=%s rejected=%s",
