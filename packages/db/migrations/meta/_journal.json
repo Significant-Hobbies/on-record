@@ -36,6 +36,13 @@
       "when": 1756051440000,
       "tag": "0004_segments_to_r2",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1756051500000,
+      "tag": "0005_claim_corrected_at",
+      "breakpoints": true
     }
   ]
 }

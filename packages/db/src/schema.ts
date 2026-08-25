@@ -196,6 +196,7 @@ export const claims = sqliteTable(
       .references(() => people.id),
     pipelineVersion: text('pipeline_version').notNull(),
     promptVersion: text('prompt_version'),
+    correctedAt: integer('corrected_at', { mode: 'timestamp' }),
     publishedAt: integer('published_at', { mode: 'timestamp' }),
     publishReason: text('publish_reason'),
     quote: text('quote').notNull(),

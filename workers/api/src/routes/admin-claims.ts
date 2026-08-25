@@ -311,3 +311,79 @@ adminClaimsRoute.post('/episodes/:id/retime', async (c) => {
   }
   return c.json({ claims: claims.length, moved });
 });
+
+async function unpublish(
+  database: Database,
+  d1: D1Database,
+  claimId: string,
+  reason: string
+): Promise<void> {
+  await database
+    .update(schema.claims)
+    .set({
+      correctedAt: new Date(),
+      publishedAt: null,
+      publishReason: reason,
+      reviewStatus: 'corrected',
+    })
+    .where(eq(schema.claims.id, claimId));
+  // It must leave the search index too, or a retracted claim keeps surfacing.
+  await d1.prepare('DELETE FROM claims_fts WHERE claim_id = ?').bind(claimId).run();
+}
+
+/**
+ * Re-check every claim against the source as it stands now.
+ *
+ * Re-transcribing an episode rewrites its segments in place. Claims made
+ * against the old text survive with quotes that may no longer appear anywhere
+ * and speakers the new diarization disagrees with — 71 of 144 on the first
+ * episode this happened to. Reprocessing must not leave the index asserting
+ * two different people said the same sentence.
+ */
+adminClaimsRoute.post('/episodes/:id/reverify', async (c) => {
+  const episodeId = c.req.param('id');
+  const database = db(c.env.DB);
+  const loaded = await loadEpisode(database, c.env.RAW, episodeId);
+  if (!loaded) {
+    return c.json({ error: 'episode_not_found' }, 404);
+  }
+  const { segments, bodies } = loaded;
+  // Retracting is two writes a claim, so a long episode outruns the request
+  // budget. Work a slice at a time and let the caller come back for more.
+  const limit = Math.min(Number(c.req.query('limit') ?? 60) || 60, 200);
+  const claims = await database
+    .select()
+    .from(schema.claims)
+    .where(eq(schema.claims.episodeId, episodeId));
+  let quoteGone = 0;
+  let speakerChanged = 0;
+  let kept = 0;
+  for (const claim of claims) {
+    if (claim.reviewStatus === 'corrected' || claim.reviewStatus === 'killed') {
+      continue;
+    }
+    const segment = claim.segmentId ? segments.get(claim.segmentId) : undefined;
+    const body = segment ? bodies.get(segment.idx) : undefined;
+    if (!(segment && body && findVerbatimAnchor(body.text, claim.quote))) {
+      quoteGone += 1;
+      await unpublish(database, c.env.DB, claim.id, 'source_changed');
+      continue;
+    }
+    if (segment.speakerHint && segment.speakerHint !== claim.personId) {
+      speakerChanged += 1;
+      await unpublish(database, c.env.DB, claim.id, 'speaker_reattributed');
+      continue;
+    }
+    kept += 1;
+    if (quoteGone + speakerChanged >= limit) {
+      return c.json({
+        done: false,
+        kept,
+        quoteGone,
+        speakerChanged,
+        total: claims.length,
+      });
+    }
+  }
+  return c.json({ done: true, kept, quoteGone, speakerChanged, total: claims.length });
+});

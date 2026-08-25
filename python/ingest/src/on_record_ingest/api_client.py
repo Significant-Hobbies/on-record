@@ -82,6 +82,21 @@ class ApiClient:
         params = {"key": key} if key else {}
         return self._json(self._client.get(f"/admin/episodes/{episode_id}/raw", params=params))
 
+    def reverify(self, episode_id: str) -> dict[str, Any]:
+        """Re-check an episode's claims, resuming until the worker reports done."""
+        totals = {"kept": 0, "quoteGone": 0, "speakerChanged": 0, "total": 0}
+        for _ in range(50):
+            page = self._json(
+                self._client.post(f"/admin/episodes/{episode_id}/reverify", json={}, timeout=120.0)
+            )
+            totals["quoteGone"] += int(page.get("quoteGone") or 0)
+            totals["speakerChanged"] += int(page.get("speakerChanged") or 0)
+            totals["kept"] += int(page.get("kept") or 0)
+            totals["total"] = int(page.get("total") or 0)
+            if page.get("done"):
+                break
+        return totals
+
     def retime(self, episode_id: str) -> dict[str, Any]:
         return self._json(self._client.post(f"/admin/episodes/{episode_id}/retime", json={}))
 
