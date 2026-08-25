@@ -86,6 +86,49 @@ def timestamp_for_offset(
     return None
 
 
+def _balanced_spans(text: str) -> list[tuple[int, int]]:
+    """Every complete {...} region in ``text``, innermost first, quotes respected."""
+    spans: list[tuple[int, int]] = []
+    stack: list[int] = []
+    in_string = False
+    escaped = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append(i)
+        elif ch == "}" and stack:
+            spans.append((stack.pop(), i + 1))
+    return spans
+
+
+def salvage_claim_objects(text: str) -> list[dict[str, Any]]:
+    """Pull whole claim objects out of a response that stopped mid-array.
+
+    A truncated answer still carries every claim before the cut. Dropping the
+    lot because the final object lost its closing brace throws away good
+    extractions and buys a second call that truncates in the same place.
+    """
+    rows: list[tuple[int, dict[str, Any]]] = []
+    for opened, closed in _balanced_spans(text):
+        try:
+            row = json.loads(text[opened:closed])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and isinstance(row.get("claims"), list):
+            return [item for item in row["claims"] if isinstance(item, dict)]
+        if isinstance(row, dict) and "quote" in row:
+            rows.append((opened, row))
+    return [row for _, row in sorted(rows, key=lambda pair: pair[0])]
+
+
 def parse_claims_json(raw: str) -> list[dict[str, Any]] | None:
     text = raw.strip()
     if text.startswith("```"):
@@ -94,7 +137,8 @@ def parse_claims_json(raw: str) -> list[dict[str, Any]] | None:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
-        return None
+        salvaged = salvage_claim_objects(text)
+        return salvaged or None
     if isinstance(payload, dict) and isinstance(payload.get("claims"), list):
         payload = payload["claims"]
     if not isinstance(payload, list):

@@ -117,3 +117,34 @@ def test_claim_includes_validated_references():
     assert reason is None
     assert claim is not None
     assert claim["references"][0]["name"] == "The Sovereign Individual"
+
+
+def test_salvages_claims_from_a_truncated_response():
+    from on_record_ingest.extract.validate import parse_claims_json
+
+    truncated = (
+        '{"claims":[{"speaker":"andrej-karpathy","quote":"first quote here","claim_type":"belief"},'
+        '{"speaker":"dario-amodei","quote":"second quote here","claim_type":"prediction"},'
+        '{"speaker":"sam-altman","quote":"third one that got cut'
+    )
+    rows = parse_claims_json(truncated)
+    assert rows is not None
+    assert [row["speaker"] for row in rows] == ["andrej-karpathy", "dario-amodei"]
+
+
+def test_braces_inside_quoted_text_do_not_confuse_the_salvage():
+    from on_record_ingest.extract.validate import parse_claims_json
+
+    truncated = (
+        '{"claims":[{"speaker":"x","quote":"he said {weird} things","claim_type":"belief"},{'
+    )
+    rows = parse_claims_json(truncated)
+    assert rows is not None
+    assert rows[0]["quote"] == "he said {weird} things"
+
+
+def test_well_formed_json_is_untouched():
+    from on_record_ingest.extract.validate import parse_claims_json
+
+    assert parse_claims_json('{"claims":[]}') == []
+    assert parse_claims_json('```json\n{"claims":[{"quote":"a"}]}\n```') == [{"quote": "a"}]

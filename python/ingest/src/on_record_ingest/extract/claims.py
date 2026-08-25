@@ -50,7 +50,7 @@ def _chat(settings: Settings, user_prompt: str) -> tuple[str, dict[str, Any], in
     body = {
         "model": settings.extract_model,
         "temperature": 0,
-        "max_tokens": 1200,
+        "max_tokens": 4000,
         "project_id": settings.ai_project_id,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
