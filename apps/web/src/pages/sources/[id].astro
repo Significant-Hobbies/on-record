@@ -1,4 +1,5 @@
 ---
+import ClaimCard from '../../components/ClaimCard.astro';
 import Layout from '../../layouts/Base.astro';
 import { apiGet, runtimeEnvFromLocals, type Claim } from '../../lib/api';
 
@@ -26,12 +27,7 @@ try {
       {claims.length === 0 ? (
         <p class="empty">No published claims from this source yet.</p>
       ) : (
-        claims.map((claim) => (
-          <article class="card">
-            <a href={`/claims/${claim.id}`}>{claim.assertion}</a>
-            <p class="quote">{claim.quote}</p>
-          </article>
-        ))
+        claims.map((claim) => <ClaimCard claim={claim} />)
       )}
     </>
   )}

@@ -1,6 +1,7 @@
 ---
 import Layout from '../layouts/Base.astro';
 import { apiGet, runtimeEnvFromLocals, type Recommendation } from '../lib/api';
+import { whenLabel } from '../lib/time';
 
 const kind = Astro.url.searchParams.get('kind') ?? '';
 const role = Astro.url.searchParams.get('role') ?? '';
@@ -37,7 +38,9 @@ try {
     items.map((item) => (
       <article class="card">
         <b>{item.name}</b>
-        <div class="meta">{item.kind} · {item.role}</div>
+        <div class="meta">
+          {[item.kind, item.role, whenLabel(item)].filter(Boolean).join(' · ')}
+        </div>
         <p class="quote">{item.quote}</p>
         <a href={`/claims/${item.claimId}`}>Claim</a>
       </article>

@@ -1,5 +1,6 @@
 ---
 import Layout from '../../layouts/Base.astro';
+import ClaimCard from '../../components/ClaimCard.astro';
 import {
   apiGet,
   runtimeEnvFromLocals,
@@ -7,6 +8,7 @@ import {
   type Person,
   type Recommendation,
 } from '../../lib/api';
+import { whenLabel } from '../../lib/time';
 
 const { slug } = Astro.params;
 const env = runtimeEnvFromLocals(Astro.locals);
@@ -41,7 +43,9 @@ try {
         recommendations.map((item) => (
           <article class="card">
             <b>{item.name}</b>
-            <div class="meta">{item.kind} · {item.role}</div>
+            <div class="meta">
+              {[item.kind, item.role, whenLabel(item)].filter(Boolean).join(' · ')}
+            </div>
             <p class="quote">{item.quote}</p>
           </article>
         ))
@@ -50,12 +54,7 @@ try {
       {claims.length === 0 ? (
         <p class="empty">Insufficient evidence.</p>
       ) : (
-        claims.map((claim) => (
-          <article class="card">
-            <a href={`/claims/${claim.id}`}>{claim.assertion}</a>
-            <p class="quote">{claim.quote}</p>
-          </article>
-        ))
+        claims.map((claim) => <ClaimCard claim={claim} />)
       )}
     </>
   )}

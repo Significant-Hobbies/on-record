@@ -51,6 +51,8 @@ export type Recommendation = {
   assertion: string;
   claimId: string;
   quote: string;
+  timestampS?: number | null;
+  saidOn?: string | null;
 };
 
 export type Stats = {

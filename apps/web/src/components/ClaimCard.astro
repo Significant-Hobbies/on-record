@@ -1,0 +1,13 @@
+---
+import type { Claim } from '../lib/api';
+import { whenLabel } from '../lib/time';
+
+type Props = { claim: Claim };
+const { claim } = Astro.props;
+const when = whenLabel(claim);
+---
+<article class="card">
+  <a href={`/claims/${claim.id}`}>{claim.assertion}</a>
+  <p class="quote">{claim.quote}</p>
+  {when && <div class="meta">{when}</div>}
+</article>

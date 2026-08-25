@@ -1,8 +1,9 @@
 ---
 import Layout from '../../layouts/Base.astro';
 import { apiGet, runtimeEnvFromLocals } from '../../lib/api';
+import { formatSaidOn } from '../../lib/time';
 
-type Source = { id: string; title: string; status: string };
+type Source = { id: string; title: string; status: string; publishedAt?: string | null };
 let sources: Source[] = [];
 try {
   const payload = await apiGet<{ sources: Source[] }>(
@@ -22,7 +23,9 @@ try {
     sources.map((source) => (
       <article class="card">
         <a href={`/sources/${source.id}`}>{source.title}</a>
-        <div class="meta">{source.status}</div>
+        <div class="meta">
+          {[formatSaidOn(source.publishedAt), source.status].filter(Boolean).join(' · ')}
+        </div>
       </article>
     ))
   )}

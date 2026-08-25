@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Base.astro';
 import { apiGet, runtimeEnvFromLocals, type Claim } from '../../lib/api';
+import { formatClock, whenLabel } from '../../lib/time';
 
 const { id } = Astro.params;
 let claim: Claim | null = null;
@@ -26,10 +27,16 @@ const link = evidence[0]?.deepLinkUrl;
     <p class="empty">Insufficient evidence. This claim is unpublished or missing.</p>
   ) : (
     <>
-      <p class="meta">{claim.claimType}</p>
+      <p class="meta">
+        {[claim.claimType, whenLabel(claim)].filter(Boolean).join(' · ')}
+      </p>
       <h1>{claim.assertion}</h1>
       <p class="quote">{claim.quote}</p>
-      {link && <p><a href={link}>Open source at timestamp</a></p>}
+      {link && (
+        <p>
+          <a href={link}>Watch at {formatClock(claim.timestampS) ?? 'timestamp'}</a>
+        </p>
+      )}
       {references.length > 0 && (
         <section>
           <h2>Named things</h2>
