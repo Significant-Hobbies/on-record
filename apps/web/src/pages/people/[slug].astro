@@ -47,6 +47,9 @@ try {
               {[item.kind, item.role, whenLabel(item)].filter(Boolean).join(' · ')}
             </div>
             <p class="quote">{item.quote}</p>
+            {item.deepLinkUrl && (
+              <a href={item.deepLinkUrl} rel="noreferrer" target="_blank">Source</a>
+            )}
           </article>
         ))
       )}
