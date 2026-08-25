@@ -33,6 +33,15 @@ def _since(days: int) -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=days)
 
 
+def load_roster(api: ApiClient) -> dict[str, str]:
+    """slug -> id for people already seeded.
+
+    Extraction only needs the mapping. Re-upserting 1,255 people first meant
+    ~2,500 D1 round-trips before a single claim was read.
+    """
+    return {str(p["slug"]): str(p["id"]) for p in api.list_people()}
+
+
 def seed_roster(api: ApiClient) -> tuple[dict[str, str], dict[str, str]]:
     people_ids = api.upsert_people(PEOPLE)
     show_ids = api.upsert_shows(SHOWS)
