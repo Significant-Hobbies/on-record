@@ -175,11 +175,15 @@ def run_transcripts(api: ApiClient, episode_id: str | None, force: bool, dry_run
                     "transcriptUrl": "",
                     "youtubeVideoId": episode.get("youtubeVideoId"),
                 }
+            video_id = episode.get("youtubeVideoId") or raw.get("youtubeVideoId")
+            if not (raw.get("transcriptUrl") or video_id):
+                # Nothing to try yet. no_transcript means "we looked and there
+                # is none", so leave this episode alone for a later pass rather
+                # than retiring it on the strength of a throttled discovery.
+                LOGGER.info("transcripts %s no source yet", episode["id"])
+                continue
             kind, cues = resolve_cues(
-                {
-                    "transcriptUrl": raw.get("transcriptUrl"),
-                    "youtubeVideoId": episode.get("youtubeVideoId") or raw.get("youtubeVideoId"),
-                },
+                {"transcriptUrl": raw.get("transcriptUrl"), "youtubeVideoId": video_id},
                 client,
             )
             count += 1
@@ -203,7 +207,7 @@ def run_transcripts(api: ApiClient, episode_id: str | None, force: bool, dry_run
                 episode["id"],
                 status="segmented",
                 transcriptKind=kind,
-                youtubeVideoId=episode.get("youtubeVideoId") or raw.get("youtubeVideoId"),
+                youtubeVideoId=video_id,
             )
     return count
 
