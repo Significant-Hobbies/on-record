@@ -80,3 +80,23 @@ def test_hosts_are_added_and_outrank_metadata_guesses():
     )
     roles = {row["personId"]: row["role"] for row in merged}
     assert roles == {"dwarkesh-patel": "host", "dario-amodei": "guest"}
+
+
+def test_finds_a_video_id_in_any_link_shape():
+    from on_record_ingest.match import video_id_from_metadata
+
+    assert video_id_from_metadata("watch https://youtu.be/QbdbAhaJoCQ now") == "QbdbAhaJoCQ"
+    assert (
+        video_id_from_metadata(None, "https://www.youtube.com/watch?v=TfyPshgMbug&t=10s")
+        == "TfyPshgMbug"
+    )
+    assert (
+        video_id_from_metadata("<iframe src='https://youtube.com/embed/U1FrhkLQnCI'>")
+        == "U1FrhkLQnCI"
+    )
+    assert video_id_from_metadata("no link here", "https://example.com/ep") is None
+    # The first field that has one wins.
+    assert (
+        video_id_from_metadata("https://youtu.be/AAAAAAAAAAA", "https://youtu.be/BBBBBBBBBBB")
+        == "AAAAAAAAAAA"
+    )

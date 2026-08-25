@@ -60,3 +60,20 @@ def guests_from_text(text: str) -> list[dict[str, Any]]:
                 }
             )
     return guests
+
+
+# Shows link their own video in the episode blurb or on the episode page.
+# The channel feed only ever returns its latest 15 videos, so this is where
+# most ids actually come from.
+YOUTUBE_URL = re.compile(
+    r"(?:youtube\.com/(?:watch\?v=|embed/|live/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})"
+)
+
+
+def video_id_from_metadata(*fields: str | None) -> str | None:
+    """A YouTube id linked anywhere in the text we already hold."""
+    for field in fields:
+        found = YOUTUBE_URL.search(field or "")
+        if found:
+            return found.group(1)
+    return None

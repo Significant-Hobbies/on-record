@@ -15,7 +15,7 @@ from .config import Settings, settings as load_settings
 from .extract.claims import extract_segment
 from .extract.triage import triage_segment
 from .identify import UNKNOWN, identify_speakers
-from .match import guests_from_text, merge_video
+from .match import guests_from_text, merge_video, video_id_from_metadata
 from .seed.people import PEOPLE
 from .seed.shows import SHOWS
 from .seed.topics import TOPICS
@@ -29,6 +29,7 @@ from .transcripts.youtube_captions import fetch_cues
 LOGGER = logging.getLogger("on_record_ingest")
 STAGES = (
     "discover",
+    "youtube-ids",
     "transcripts",
     "extract",
     "publish",
@@ -143,7 +144,8 @@ def discover_show(
             "publishedAt": item.get("publishedAt"),
             "sourceUrl": item.get("sourceUrl"),
             "audioUrl": item.get("audioUrl"),
-            "youtubeVideoId": item.get("youtubeVideoId"),
+            "youtubeVideoId": item.get("youtubeVideoId")
+            or video_id_from_metadata(item.get("description"), item.get("sourceUrl")),
             "durationS": item.get("durationS"),
             "people": people,
         }
@@ -497,6 +499,32 @@ def run_extract(
 RETIME_STATUSES = ("segmented", "extracted", "published")
 
 
+def run_youtube_ids(api: ApiClient, limit: int = 0) -> int:
+    """Recover video ids already linked in metadata we hold.
+
+    Nothing is fetched: the links sit in descriptions and episode URLs saved at
+    discovery. They matter because a claim's deep link is built from the video
+    id, and without one a quote cannot be checked by clicking.
+    """
+    found = 0
+    for episode in api.list_episodes():
+        if episode.get("youtubeVideoId"):
+            continue
+        video_id = video_id_from_metadata(episode.get("description"), episode.get("sourceUrl"))
+        if not video_id:
+            continue
+        api.set_episode_status(
+            episode["id"],
+            status=str(episode.get("status") or "discovered"),
+            youtubeVideoId=video_id,
+        )
+        found += 1
+        if limit and found >= limit:
+            break
+    LOGGER.info("youtube ids recovered: %s", found)
+    return found
+
+
 def run_attributions(
     api: ApiClient, cfg: Settings, episode_id: str | None, limit: int = 0
 ) -> dict[str, int]:
@@ -656,6 +684,9 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 except Exception as exc:
                     LOGGER.warning("discover %s failed: %s", show["slug"], exc)
+        if args.stage == "youtube-ids":
+            run_youtube_ids(api, args.limit)
+            return 0
         if args.stage == "attributions":
             run_attributions(api, cfg, args.episode or None, args.limit)
             return 0
