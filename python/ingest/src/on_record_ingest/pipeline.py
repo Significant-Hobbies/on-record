@@ -26,7 +26,7 @@ from .transcripts.whisper_local import transcribe as whisper_transcribe
 from .transcripts.youtube_captions import fetch_cues
 
 LOGGER = logging.getLogger("on_record_ingest")
-STAGES = ("discover", "transcripts", "extract", "publish", "retime")
+STAGES = ("discover", "transcripts", "extract", "publish", "retime", "identify")
 
 
 def _since(days: int) -> datetime:
@@ -193,15 +193,39 @@ def resolve_segment_speakers(
     guessing. A voice we cannot place is left unset and its claims stay
     unpublishable.
     """
-    if not any(segment.get("speakerHint") for segment in segments):
+    if not any(segment.get("diarLabel") or segment.get("speakerHint") for segment in segments):
         return segments
-    roster = episode_roster(api, episode["id"])
-    mapping = identify_speakers(cfg, segments, roster, str(episode.get("title") or ""))
     for segment in segments:
-        label = segment.get("speakerHint")
+        segment.setdefault("diarLabel", segment.get("speakerHint"))
+    roster = episode_roster(api, episode["id"])
+    mapping = identify_speakers(
+        cfg,
+        segments,
+        roster,
+        str(episode.get("title") or ""),
+        str(episode.get("description") or ""),
+    )
+    for segment in segments:
+        label = segment.get("diarLabel")
         slug = mapping.get(str(label)) if label else None
         segment["speakerHint"] = None if not slug or slug == UNKNOWN else slug
     return segments
+
+
+def discovery_payload(api: ApiClient, episode: dict[str, Any]) -> dict[str, Any]:
+    """What discovery saved for this episode, or enough of a stand-in."""
+    try:
+        content = api.get_raw(episode["id"], key=f"episodes/{episode['id']}/discover.json").get(
+            "content"
+        )
+        return json.loads(content or "{}")
+    except Exception:
+        return {"transcriptUrl": "", "youtubeVideoId": episode.get("youtubeVideoId")}
+
+
+def expected_speakers(api: ApiClient, episode_id: str) -> int:
+    """Voices to expect: everyone attached, plus one for whoever we missed."""
+    return 1 + len(api.get_episode(episode_id).get("people") or [])
 
 
 def run_transcripts(
@@ -220,19 +244,7 @@ def run_transcripts(
         for episode in episodes:
             if episode.get("status") == "no_transcript" and not force:
                 continue
-            raw = {}
-            try:
-                raw = json.loads(
-                    api.get_raw(episode["id"], key=f"episodes/{episode['id']}/discover.json").get(
-                        "content"
-                    )
-                    or "{}"
-                )
-            except Exception:
-                raw = {
-                    "transcriptUrl": "",
-                    "youtubeVideoId": episode.get("youtubeVideoId"),
-                }
+            raw = discovery_payload(api, episode)
             video_id = episode.get("youtubeVideoId") or raw.get("youtubeVideoId")
             audio_url = episode.get("audioUrl") or raw.get("audioUrl")
             if not (raw.get("transcriptUrl") or video_id or (whisper and audio_url)):
@@ -241,9 +253,6 @@ def run_transcripts(
                 # than retiring it on the strength of a throttled discovery.
                 LOGGER.info("transcripts %s no source yet", episode["id"])
                 continue
-            expected = 1 + len(
-                [row for row in (api.get_episode(episode["id"]).get("people") or [])]
-            )
             try:
                 kind, cues = resolve_cues(
                     {
@@ -253,7 +262,7 @@ def run_transcripts(
                     },
                     client,
                     whisper,
-                    expected,
+                    expected_speakers(api, episode["id"]),
                 )
             except TranscriptionUnavailable as exc:
                 LOGGER.warning("episode %s left for a later pass: %s", episode["id"], exc)
@@ -269,22 +278,31 @@ def run_transcripts(
                 # nothing. A stalled download is not evidence of absence.
                 api.set_episode_status(episode["id"], status="no_transcript", transcriptKind="none")
                 continue
-            api.put_raw(
-                episode["id"],
-                f"episodes/{episode['id']}/cues.json",
-                json.dumps(cues),
-                "application/json",
-            )
-            segments = cues_to_segments(cues)
-            segments = resolve_segment_speakers(api, cfg, episode, segments) if cfg else segments
-            api.put_segments(episode["id"], segments, kind)
-            api.set_episode_status(
-                episode["id"],
-                status="segmented",
-                transcriptKind=kind,
-                youtubeVideoId=video_id,
-            )
+            store_transcript(api, cfg, episode, cues, kind, video_id)
     return count
+
+
+def store_transcript(
+    api: ApiClient,
+    cfg: Settings | None,
+    episode: dict[str, Any],
+    cues: list[dict[str, float | str]],
+    kind: str,
+    video_id: str | None,
+) -> None:
+    api.put_raw(
+        episode["id"],
+        f"episodes/{episode['id']}/cues.json",
+        json.dumps(cues),
+        "application/json",
+    )
+    segments = cues_to_segments(cues)
+    if cfg:
+        segments = resolve_segment_speakers(api, cfg, episode, segments)
+    api.put_segments(episode["id"], segments, kind)
+    api.set_episode_status(
+        episode["id"], status="segmented", transcriptKind=kind, youtubeVideoId=video_id
+    )
 
 
 def attach_person_ids(
@@ -454,6 +472,29 @@ def run_extract(
 RETIME_STATUSES = ("segmented", "extracted", "published")
 
 
+def run_identify(api: ApiClient, cfg: Settings, episode_id: str | None) -> int:
+    """Redo speaker identification on stored segments.
+
+    Transcribing again costs minutes of audio processing for a decision that
+    only reads text, so naming the voices is separately re-runnable.
+    """
+    episodes = (
+        [api.get_episode(episode_id)["episode"]]
+        if episode_id
+        else [row for s in RETIME_STATUSES for row in api.list_episodes(status=s)]
+    )
+    named = 0
+    for episode in episodes:
+        detail = api.get_episode(episode["id"])
+        segments = list(detail.get("segments") or [])
+        if not segments:
+            continue
+        resolved = resolve_segment_speakers(api, cfg, episode, segments)
+        api.put_segments(episode["id"], resolved, str(episode.get("transcriptKind") or "none"))
+        named += sum(1 for s in resolved if s.get("speakerHint"))
+    return named
+
+
 def run_retime(api: ApiClient, episode_id: str | None, dry_run: bool) -> int:
     """Re-derive cue maps from stored captions and re-time existing claims.
 
@@ -488,6 +529,19 @@ def run_retime(api: ApiClient, episode_id: str | None, dry_run: bool) -> int:
     return moved
 
 
+def seed_maps_for_stage(
+    api: ApiClient, stage: str, dry_run: bool
+) -> tuple[dict[str, str], dict[str, str]]:
+    if stage not in {"all", "discover", "extract"}:
+        return {}, {}
+    if not dry_run:
+        return seed_roster(api)
+    return (
+        {person["slug"]: person["slug"] for person in PEOPLE},
+        {show["slug"]: show["slug"] for show in SHOWS},
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(prog="on-record-ingest")
@@ -509,16 +563,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_settings()
     api = ApiClient(cfg)
     try:
-        people_map, show_map = ({}, {})
-        if args.stage in {"all", "discover", "extract"}:
-            people_map, show_map = (
-                seed_roster(api)
-                if not args.dry_run
-                else (
-                    {p["slug"]: p["slug"] for p in PEOPLE},
-                    {s["slug"]: s["slug"] for s in SHOWS},
-                )
-            )
+        people_map, show_map = seed_maps_for_stage(api, args.stage, args.dry_run)
         discovered = 0
         if args.stage in {"all", "discover"}:
             shows = [show for show in SHOWS if not args.show or show["slug"] == args.show]
@@ -530,6 +575,9 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 except Exception as exc:
                     LOGGER.warning("discover %s failed: %s", show["slug"], exc)
+        if args.stage == "identify":
+            run_identify(api, cfg, args.episode or None)
+            return 0
         if args.stage == "retime":
             run_retime(api, args.episode or None, args.dry_run)
             return 0

@@ -14,9 +14,11 @@ export type StoredSegment = {
   idx: number;
   text: string;
   cueMap: CueMap | null;
+  /** Diarization's own label ("A", "B"), kept so voices can be re-identified. */
+  diarLabel?: string | null;
 };
 
-export type SegmentBody = { text: string; cueMap: CueMap | null };
+export type SegmentBody = { text: string; cueMap: CueMap | null; diarLabel: string | null };
 
 function segmentsKey(episodeId: string): string {
   return `episodes/${episodeId}/segments.json`;
@@ -29,7 +31,11 @@ export async function putSegmentBodies(
 ): Promise<void> {
   const byIdx: Record<string, SegmentBody> = {};
   for (const segment of segments) {
-    byIdx[String(segment.idx)] = { cueMap: segment.cueMap ?? null, text: segment.text };
+    byIdx[String(segment.idx)] = {
+      cueMap: segment.cueMap ?? null,
+      diarLabel: segment.diarLabel ?? null,
+      text: segment.text,
+    };
   }
   await bucket.put(segmentsKey(episodeId), JSON.stringify(byIdx), {
     httpMetadata: { contentType: 'application/json' },
@@ -54,7 +60,11 @@ export async function getSegmentBodies(
   }
   const out = new Map<number, SegmentBody>();
   for (const [idx, body] of Object.entries(parsed)) {
-    out.set(Number(idx), { cueMap: body?.cueMap ?? null, text: String(body?.text ?? '') });
+    out.set(Number(idx), {
+      cueMap: body?.cueMap ?? null,
+      diarLabel: body?.diarLabel ?? null,
+      text: String(body?.text ?? ''),
+    });
   }
   return out;
 }

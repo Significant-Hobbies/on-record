@@ -75,3 +75,21 @@ def test_a_diarized_segment_decides_its_own_speaker(monkeypatch):
     )
     assert seen["roster"] == ["martin-casado"]
     assert claims[0]["speakerRaw"] == "martin-casado"
+
+
+def test_the_model_may_answer_with_the_wording_it_was_shown():
+    # It is shown "Speaker B" and answers "Speaker B"; the label is "B".
+    raw = '{"speakers": {"Speaker A": "unknown", "Speaker B": "martin-casado"}}'
+    mapping = parse_mapping(raw, LABELS, SLUGS)
+    assert mapping["B"] == "martin-casado"
+    assert mapping["A"] == UNKNOWN
+
+
+def test_label_matching_is_forgiving_but_not_loose():
+    from on_record_ingest.identify import match_label
+
+    assert match_label("Speaker C", {"A", "B", "C"}) == "C"
+    assert match_label("speaker c", {"A", "B", "C"}) == "C"
+    assert match_label(" B ", {"A", "B", "C"}) == "B"
+    assert match_label("Speaker Z", {"A", "B", "C"}) is None
+    assert match_label("Martin Casado", {"A", "B", "C"}) is None

@@ -65,7 +65,11 @@ adminEpisodesRoute.get('/episodes/:id', async (c) => {
     people,
     segments: segments
       .sort((a, b) => a.idx - b.idx)
-      .map((row) => ({ ...row, text: bodies.get(row.idx)?.text ?? '' })),
+      .map((row) => ({
+        ...row,
+        diarLabel: bodies.get(row.idx)?.diarLabel ?? null,
+        text: bodies.get(row.idx)?.text ?? '',
+      })),
   });
 });
 
@@ -177,6 +181,7 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
       text: string;
       speakerHint?: string;
       cueMap?: CueMap;
+      diarLabel?: string;
     }>;
   };
   const database = db(c.env.DB);
@@ -185,7 +190,12 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
     await putSegmentBodies(
       c.env.RAW,
       id,
-      incoming.map((s) => ({ cueMap: s.cueMap ?? null, idx: s.idx, text: s.text }))
+      incoming.map((s) => ({
+        cueMap: s.cueMap ?? null,
+        diarLabel: s.diarLabel ?? null,
+        idx: s.idx,
+        text: s.text,
+      }))
     );
   }
   const existing = await database

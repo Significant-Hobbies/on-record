@@ -77,6 +77,9 @@ def cues_to_segments(cues: list[Cue], target_chars: int = TARGET_CHARS) -> list[
                 "endS": float(last["start"]) + float(last["duration"]),
                 "text": text,
                 "speakerHint": buf[0].get("speaker"),
+                # Kept alongside the resolved person so a voice can be named
+                # again later without transcribing the audio a second time.
+                "diarLabel": buf[0].get("speaker"),
                 "cueMap": _prefix_anchor(segments[-1] if segments else None, overlap_from, prefix)
                 + _cue_map(pieces, [float(cue["start"]) for cue in buf], lead, shift),
             }
@@ -84,7 +87,10 @@ def cues_to_segments(cues: list[Cue], target_chars: int = TARGET_CHARS) -> list[
         buf = []
         buf_len = 0
 
-    previous_text = ""
+    # The prefix belongs to whatever is currently buffered, so it has to be
+    # decided at the break and survive until that buffer is flushed — including
+    # the final flush after the loop.
+    pending_prefix = ""
     for cue in cues:
         piece = str(cue.get("text") or "").strip()
         if not piece:
@@ -95,9 +101,14 @@ def cues_to_segments(cues: list[Cue], target_chars: int = TARGET_CHARS) -> list[
         # failure diarization exists to remove.
         changed = bool(buf) and cue.get("speaker") != buf[0].get("speaker")
         if buf and (next_len > target_chars or changed):
-            flush(previous_text)
-            previous_text = segments[-1]["text"] if segments else ""
+            flush(pending_prefix)
+            # Overlap carries context across an arbitrary split in one person's
+            # speech. Carried across a change of voice it does the opposite:
+            # the previous speaker's words would open the next speaker's
+            # segment, and a quote anchored there is credited to the wrong
+            # person.
+            pending_prefix = "" if changed else (segments[-1]["text"] if segments else "")
         buf.append(cue)
         buf_len += len(piece) + 1
-    flush(previous_text)
+    flush(pending_prefix)
     return segments

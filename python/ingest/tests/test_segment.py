@@ -69,3 +69,29 @@ def test_undiarized_cues_still_segment_by_length():
     segments = cues_to_segments(cues, target_chars=200)
     assert len(segments) > 1
     assert all(s["speakerHint"] is None for s in segments)
+
+
+def test_overlap_never_crosses_a_change_of_voice():
+    long_turn = "word " * 60
+    cues = [
+        {"start": 0.0, "duration": 1.0, "text": f"alpha {long_turn}", "speaker": "A"},
+        {"start": 1.0, "duration": 1.0, "text": "bravo distinctive phrase here", "speaker": "B"},
+    ]
+    segments = cues_to_segments(cues, target_chars=10_000)
+    assert [s["speakerHint"] for s in segments] == ["A", "B"]
+    # B's segment must contain none of A's words.
+    assert "alpha" not in segments[1]["text"]
+    assert "word" not in segments[1]["text"]
+    assert segments[1]["text"].startswith("bravo")
+
+
+def test_overlap_is_kept_within_one_speaker():
+    cues = [
+        {"start": float(i), "duration": 1.0, "text": f"chunk{i} " + ("word " * 25), "speaker": "A"}
+        for i in range(4)
+    ]
+    segments = cues_to_segments(cues, target_chars=200)
+    assert len(segments) > 1
+    assert all(s["speakerHint"] == "A" for s in segments)
+    # A length-based split still carries context forward.
+    assert any(seg["text"].startswith("word") or "chunk" in seg["text"] for seg in segments[1:])
