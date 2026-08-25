@@ -1,14 +1,18 @@
 name: cron-ingest
 
+# Two cadences. Discovery and transcript resolution are just HTTP fetches, so
+# they run daily and keep the corpus current for free. Extraction is the part
+# that costs LLM calls, so it runs once a week over everything that landed.
 on:
   schedule:
     - cron: "0 6 * * *"
+    - cron: "0 7 * * 0"
   workflow_dispatch:
     inputs:
       stage:
         description: pipeline stage
         type: choice
-        options: [all, discover, transcripts, extract, publish]
+        options: [all, discover, transcripts, extract, publish, retime]
         default: all
       show:
         description: show slug (empty = all)
@@ -17,39 +21,67 @@ on:
       days:
         description: lookback days
         type: string
-        default: "2"
+        default: "8"
       focus:
         description: extract focus (recs keeps LLM cost down)
         type: choice
-        options: [recs, all]
-        default: recs
+        options: [all, recs]
+        default: all
+      max_segments:
+        description: cap segments per episode (0 = no cap)
+        type: string
+        default: "0"
+
+concurrency:
+  group: cron-ingest
+  cancel-in-progress: false
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
+    env:
+      ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+      API_BASE: ${{ secrets.API_BASE }}
+      AI_BASE_URL: ${{ secrets.AI_BASE_URL || 'https://ai-gateway.sassmaker.com/v1' }}
+      AI_API_KEY: ${{ secrets.AI_API_KEY }}
+      AI_MODEL: ${{ secrets.AI_MODEL }}
+      AI_PROJECT_ID: on-record
+      ON_RECORD_EXTRACT_MODEL: ${{ secrets.ON_RECORD_EXTRACT_MODEL || 'gemini-2.5-flash' }}
+      PODCAST_INDEX_KEY: ${{ secrets.PODCAST_INDEX_KEY }}
+      PODCAST_INDEX_SECRET: ${{ secrets.PODCAST_INDEX_SECRET }}
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.1.0
       - uses: actions/setup-python@v6
         with: { python-version: "3.11" }
       - run: uv sync --project python/ingest
-      - name: ingest
-        env:
-          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
-          API_BASE: ${{ secrets.API_BASE }}
-          AI_BASE_URL: ${{ secrets.AI_BASE_URL || 'https://ai-gateway.sassmaker.com/v1' }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_MODEL: ${{ secrets.AI_MODEL }}
-          AI_PROJECT_ID: on-record
-          ON_RECORD_EXTRACT_MODEL: ${{ secrets.ON_RECORD_EXTRACT_MODEL || 'gemini-2.5-flash' }}
-          PODCAST_INDEX_KEY: ${{ secrets.PODCAST_INDEX_KEY }}
-          PODCAST_INDEX_SECRET: ${{ secrets.PODCAST_INDEX_SECRET }}
+
+      - name: discover and resolve transcripts
+        if: github.event_name == 'schedule'
+        run: |
+          uv run --project python/ingest python -m on_record_ingest --stage discover --days 3
+          uv run --project python/ingest python -m on_record_ingest --stage transcripts
+
+      - name: extract claims
+        if: github.event_name == 'schedule' && github.event.schedule == '0 7 * * 0'
         run: >
           uv run --project python/ingest python -m on_record_ingest
-          --stage ${{ github.event.inputs.stage || 'all' }}
-          --days ${{ github.event.inputs.days || '2' }}
-          --focus ${{ github.event.inputs.focus || 'recs' }}
-          ${{ github.event.inputs.show && format('--show {0}', github.event.inputs.show) || '' }}
-      - name: site stays current
-        run: echo "SSR at podcasts.highsignal.app reads the API; no web rebuild after ingest."
+          --stage extract --focus all --max-segments 40
+
+      - name: manual run
+        if: github.event_name == 'workflow_dispatch'
+        run: >
+          uv run --project python/ingest python -m on_record_ingest
+          --stage ${{ inputs.stage }}
+          --days ${{ inputs.days }}
+          --focus ${{ inputs.focus }}
+          --max-segments ${{ inputs.max_segments }}
+          ${{ inputs.show && format('--show {0}', inputs.show) || '' }}
+
+      - name: report
+        if: always()
+        run: |
+          echo "Stage run complete. The SSR site at podcasts.highsignal.app reads"
+          echo "the API directly, so there is no web rebuild after ingest."
+          curl -sS "$API_BASE/api/stats" || true

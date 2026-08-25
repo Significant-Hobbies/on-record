@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 import feedparser
 import httpx
 
+LOGGER = logging.getLogger("on_record_ingest")
 USER_AGENT = "on-record/0.1 rss-ingest"
 
 
@@ -88,6 +90,15 @@ def entries_from_xml(xml: str, since: datetime) -> list[dict[str, Any]]:
 
 
 def fetch_feed(feed_url: str, since: datetime, client: httpx.Client) -> list[dict[str, Any]]:
-    response = client.get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=20.0)
-    response.raise_for_status()
+    """Recent items from a podcast feed, or an empty list if it will not load.
+
+    Publishers move hosts and let certificates lapse; one broken feed should
+    cost that show a cycle, not take the whole run down.
+    """
+    try:
+        response = client.get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=20.0)
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        LOGGER.warning("feed %s unavailable: %s", feed_url, exc)
+        return []
     return entries_from_xml(response.text, since)

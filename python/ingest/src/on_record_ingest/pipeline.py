@@ -51,6 +51,26 @@ def remap_people(guests: list[dict[str, Any]], people_map: dict[str, str]) -> li
     return out
 
 
+def host_people(show: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "personId": str(slug),
+            "role": "host",
+            "attributionSource": "show_config",
+            "confidence": 1.0,
+        }
+        for slug in show.get("hostPersonIds") or []
+    ]
+
+
+def with_hosts(guests: list[dict[str, Any]], hosts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hosts are on every episode of their show; they outrank a metadata guess."""
+    by_slug = {str(row["personId"]): row for row in guests}
+    for host in hosts:
+        by_slug[str(host["personId"])] = host
+    return list(by_slug.values())
+
+
 def discover_show(
     show: dict[str, Any],
     show_id: str,
@@ -85,10 +105,13 @@ def discover_show(
         guid = str(video["guid"])
         if guid not in by_guid:
             by_guid[guid] = video
+    hosts = host_people(show)
     for item in by_guid.values():
         blob = json.dumps(item)
         people = remap_people(
-            guests_from_text(f"{item.get('title', '')} {item.get('description', '')}"),
+            with_hosts(
+                guests_from_text(f"{item.get('title', '')} {item.get('description', '')}"), hosts
+            ),
             people_map,
         )
         payload = {
@@ -398,9 +421,12 @@ def main(argv: list[str] | None = None) -> int:
             shows = [show for show in SHOWS if not args.show or show["slug"] == args.show]
             for show in shows:
                 show_id = show_map.get(show["slug"], "")
-                discovered += discover_show(
-                    show, show_id, people_map, _since(args.days), api, cfg, args.dry_run
-                )
+                try:
+                    discovered += discover_show(
+                        show, show_id, people_map, _since(args.days), api, cfg, args.dry_run
+                    )
+                except Exception as exc:
+                    LOGGER.warning("discover %s failed: %s", show["slug"], exc)
         if args.stage == "retime":
             run_retime(api, args.episode or None, args.dry_run)
             return 0

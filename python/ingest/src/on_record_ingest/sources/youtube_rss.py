@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 import feedparser
 import httpx
 
+LOGGER = logging.getLogger("on_record_ingest")
 USER_AGENT = "on-record/0.1 youtube-rss"
+# YouTube answers bursts of channel-feed requests with 404s and 500s that clear
+# on their own. Treat them as throttling, not as a missing channel.
+RETRY_STATUSES = (404, 429, 500, 502, 503)
 
 
 def parse_published(value: str) -> datetime | None:
@@ -57,8 +63,26 @@ def entries_from_xml(xml: str, since: datetime) -> list[dict[str, Any]]:
     return out
 
 
-def fetch_channel(channel_id: str, since: datetime, client: httpx.Client) -> list[dict[str, Any]]:
+def fetch_channel(
+    channel_id: str, since: datetime, client: httpx.Client, attempts: int = 3
+) -> list[dict[str, Any]]:
+    """Recent videos for a channel, or an empty list if YouTube will not answer.
+
+    A dead channel feed must not take the run down with it: the rest of the
+    show still discovers from RSS, and the next run tries again.
+    """
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-    response = client.get(url, headers={"User-Agent": USER_AGENT}, timeout=20.0)
-    response.raise_for_status()
-    return entries_from_xml(response.text, since)
+    for attempt in range(attempts):
+        try:
+            response = client.get(url, headers={"User-Agent": USER_AGENT}, timeout=20.0)
+            if response.status_code in RETRY_STATUSES and attempt < attempts - 1:
+                time.sleep(2**attempt)
+                continue
+            response.raise_for_status()
+            return entries_from_xml(response.text, since)
+        except httpx.HTTPError as exc:
+            if attempt == attempts - 1:
+                LOGGER.warning("youtube channel %s unavailable: %s", channel_id, exc)
+                return []
+            time.sleep(2**attempt)
+    return []

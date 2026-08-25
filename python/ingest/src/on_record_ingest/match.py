@@ -33,12 +33,24 @@ def merge_video(episode: dict[str, Any], videos: list[dict[str, Any]]) -> dict[s
     return episode
 
 
-def guests_from_text(text: str) -> list[dict[str, Any]]:
+def names_text(text: str, names: list[str]) -> bool:
+    """Whole-word match, so "Sam" does not match "same" and "Gil" not "Gilbert"."""
     lowered = text.lower()
+    return any(re.search(rf"\b{re.escape(str(name).lower())}\b", lowered) for name in names if name)
+
+
+def guests_from_text(text: str) -> list[dict[str, Any]]:
+    """Credit an episode to someone only when its metadata names them.
+
+    Matching uses the full name plus the person's explicit `matchAliases` —
+    distinctive surnames and handles. Bare first names stay out of it: the
+    roster decides who a claim is attributed to, and a wrong roster entry is
+    how a quote ends up on the wrong person.
+    """
     guests: list[dict[str, Any]] = []
     for person in PEOPLE:
-        names = [person["name"], *list(person.get("aliases") or [])]
-        if any(str(name).lower() in lowered for name in names if len(str(name)) > 3):
+        names = [str(person["name"]), *[str(a) for a in person.get("matchAliases") or []]]
+        if names_text(text, names):
             guests.append(
                 {
                     "personId": person["slug"],

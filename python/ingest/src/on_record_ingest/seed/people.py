@@ -1,6 +1,18 @@
+"""People whose statements the index attributes.
+
+Aliases feed two things: matching a guest out of an episode title, and mapping
+whatever name the extractor writes back onto a roster slug. Keep them
+distinctive — a bare first name that is common across the roster ("Bill",
+"Ben") will attach the wrong person to an episode.
+
+Hosts appear here too. They are on every episode of their show, so most of
+what gets said on these feeds is theirs.
+"""
+
 PEOPLE: list[dict] = [
     {
         "slug": "andrej-karpathy",
+        "matchAliases": ["Karpathy"],
         "name": "Andrej Karpathy",
         "title": "Researcher",
         "org": "Eureka Labs",
@@ -15,6 +27,7 @@ PEOPLE: list[dict] = [
     },
     {
         "slug": "sam-altman",
+        "matchAliases": ["Altman"],
         "name": "Sam Altman",
         "title": "CEO",
         "org": "OpenAI",
@@ -22,6 +35,7 @@ PEOPLE: list[dict] = [
     },
     {
         "slug": "demis-hassabis",
+        "matchAliases": ["Hassabis"],
         "name": "Demis Hassabis",
         "title": "CEO",
         "org": "Google DeepMind",
@@ -29,6 +43,7 @@ PEOPLE: list[dict] = [
     },
     {
         "slug": "yann-lecun",
+        "matchAliases": ["LeCun"],
         "name": "Yann LeCun",
         "title": "Chief AI Scientist",
         "org": "Meta",
@@ -36,6 +51,7 @@ PEOPLE: list[dict] = [
     },
     {
         "slug": "satya-nadella",
+        "matchAliases": ["Nadella"],
         "name": "Satya Nadella",
         "title": "CEO",
         "org": "Microsoft",
@@ -43,6 +59,7 @@ PEOPLE: list[dict] = [
     },
     {
         "slug": "greg-brockman",
+        "matchAliases": ["Brockman"],
         "name": "Greg Brockman",
         "title": "President",
         "org": "OpenAI",
@@ -50,6 +67,7 @@ PEOPLE: list[dict] = [
     },
     {
         "slug": "patrick-collison",
+        "matchAliases": ["Collison"],
         "name": "Patrick Collison",
         "title": "CEO",
         "org": "Stripe",
@@ -57,6 +75,7 @@ PEOPLE: list[dict] = [
     },
     {
         "slug": "ilya-sutskever",
+        "matchAliases": ["Sutskever"],
         "name": "Ilya Sutskever",
         "title": "Co-founder",
         "org": "SSI",
@@ -68,5 +87,104 @@ PEOPLE: list[dict] = [
         "title": "CEO",
         "org": "NVIDIA",
         "aliases": ["Jensen", "Huang", "Jen-Hsun"],
+    },
+    {
+        "slug": "dwarkesh-patel",
+        "matchAliases": ["Dwarkesh"],
+        "name": "Dwarkesh Patel",
+        "title": "Host",
+        "org": "Dwarkesh Podcast",
+        "aliases": ["Dwarkesh"],
+    },
+    {
+        "slug": "lex-fridman",
+        "matchAliases": ["Fridman"],
+        "name": "Lex Fridman",
+        "title": "Host",
+        "org": "Lex Fridman Podcast",
+        "aliases": ["Fridman"],
+    },
+    {
+        "slug": "sarah-guo",
+        "name": "Sarah Guo",
+        "title": "Founder",
+        "org": "Conviction",
+        "aliases": ["Sarah"],
+    },
+    {
+        "slug": "elad-gil",
+        "name": "Elad Gil",
+        "title": "Investor",
+        "org": "Independent",
+        "aliases": ["Elad"],
+    },
+    {
+        "slug": "shawn-wang",
+        "matchAliases": ["swyx"],
+        "name": "Shawn Wang",
+        "title": "Host",
+        "org": "Latent Space",
+        "aliases": ["swyx"],
+    },
+    {
+        "slug": "alessio-fanelli",
+        "name": "Alessio Fanelli",
+        "title": "Partner",
+        "org": "Decibel",
+        "aliases": ["Alessio"],
+    },
+    {
+        "slug": "ben-gilbert",
+        "name": "Ben Gilbert",
+        "title": "Host",
+        "org": "Acquired",
+        "aliases": [],
+    },
+    {
+        "slug": "david-rosenthal",
+        "matchAliases": ["Rosenthal"],
+        "name": "David Rosenthal",
+        "title": "Host",
+        "org": "Acquired",
+        "aliases": ["Rosenthal"],
+    },
+    {
+        "slug": "harry-stebbings",
+        "matchAliases": ["Stebbings"],
+        "name": "Harry Stebbings",
+        "title": "Founder",
+        "org": "20VC",
+        "aliases": ["Stebbings"],
+    },
+    {
+        "slug": "nathan-labenz",
+        "matchAliases": ["Labenz"],
+        "name": "Nathan Labenz",
+        "title": "Host",
+        "org": "The Cognitive Revolution",
+        "aliases": ["Labenz"],
+    },
+    {
+        "slug": "brad-gerstner",
+        "matchAliases": ["Gerstner"],
+        "name": "Brad Gerstner",
+        "title": "Founder",
+        "org": "Altimeter Capital",
+        "aliases": ["Gerstner"],
+    },
+    {
+        "slug": "bill-gurley",
+        "matchAliases": ["Gurley"],
+        "name": "Bill Gurley",
+        "title": "Partner",
+        "org": "Benchmark",
+        "aliases": ["Gurley"],
+    },
+    {
+        "slug": "garry-tan",
+        "name": "Garry Tan",
+        "title": "CEO",
+        "org": "Y Combinator",
+        "aliases": ["Garry"],
     },
 ]

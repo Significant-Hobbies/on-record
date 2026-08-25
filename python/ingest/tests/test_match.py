@@ -48,3 +48,35 @@ def test_podcast_index_filters_old_items():
     items = items_from_response(payload, since)
     assert len(items) == 1
     assert items[0]["guid"] == "g1"
+
+
+def test_guests_need_a_whole_word_name():
+    from on_record_ingest.match import guests_from_text
+
+    named = [g["personId"] for g in guests_from_text("Dario Amodei on scaling")]
+    assert named == ["dario-amodei"]
+    # A bare first name is not enough to credit an episode to someone.
+    assert guests_from_text("Sam went to the shops") == []
+    # Substrings of longer words must not match either.
+    assert guests_from_text("Elad Gilbert is someone else") == []
+
+
+def test_surname_only_titles_still_match():
+    from on_record_ingest.match import guests_from_text
+
+    assert [g["personId"] for g in guests_from_text("Karpathy on agents")] == ["andrej-karpathy"]
+
+
+def test_hosts_are_added_and_outrank_metadata_guesses():
+    from on_record_ingest.pipeline import host_people, with_hosts
+
+    hosts = host_people({"hostPersonIds": ["dwarkesh-patel"]})
+    merged = with_hosts(
+        [
+            {"personId": "dwarkesh-patel", "role": "guest", "attributionSource": "metadata_match"},
+            {"personId": "dario-amodei", "role": "guest", "attributionSource": "metadata_match"},
+        ],
+        hosts,
+    )
+    roles = {row["personId"]: row["role"] for row in merged}
+    assert roles == {"dwarkesh-patel": "host", "dario-amodei": "guest"}
