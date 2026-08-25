@@ -334,8 +334,14 @@ def _extract_episode(
     return extracted, llm_calls, skipped
 
 
+# An episode is only finished when its segments are, not when it first
+# reaches `extracted`. Selecting on status alone stranded 185 of 250 segments
+# in episodes that earlier runs had capped part way through.
+EXTRACTABLE_STATUSES = ("segmented", "extracted", "published")
+
+
 def _extract_targets(api: ApiClient, episode_id: str | None) -> list[dict[str, Any]]:
-    episodes = api.list_episodes(status="segmented")
+    episodes = [row for status in EXTRACTABLE_STATUSES for row in api.list_episodes(status=status)]
     if not episode_id:
         return episodes
     matched = [row for row in episodes if row["id"] == episode_id]
