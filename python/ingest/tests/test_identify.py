@@ -93,3 +93,20 @@ def test_label_matching_is_forgiving_but_not_loose():
     assert match_label(" B ", {"A", "B", "C"}) == "B"
     assert match_label("Speaker Z", {"A", "B", "C"}) is None
     assert match_label("Martin Casado", {"A", "B", "C"}) is None
+
+
+def test_a_title_match_is_never_buried():
+    from on_record_ingest.attributions import confidence_for
+
+    # Lex's "#500 - Guest: topics" was misread twice; the title still counts.
+    held = confidence_for(
+        {"appears": False}, "Khabib Nurmagomedov", "#500 - Khabib Nurmagomedov: MMA"
+    )
+    assert held is not None and held >= 0.6
+    # Not in the title and judged a mention: safe to bury.
+    buried = confidence_for({"appears": False}, "Sundar Pichai", "Dylan Patel: GPT-5, NVIDIA")
+    assert buried is not None and buried < 0.2
+    # Confirmed appearance is confident either way.
+    assert confidence_for({"appears": True}, "Anyone", "Some title") == 0.95
+    # An undecided verdict must not change anything.
+    assert confidence_for(None, "Anyone", "Some title") is None

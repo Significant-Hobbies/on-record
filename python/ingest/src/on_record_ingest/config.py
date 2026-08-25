@@ -18,6 +18,7 @@ class Settings:
     ai_project_id: str
     extract_model: str
     force_model: str
+    attribution_model: str
     podcast_index_key: str
     podcast_index_secret: str
     pipeline_version: str = "claims-v1"
@@ -41,6 +42,9 @@ def settings() -> Settings:
         # want day to day. Set it to pin one deliberately, e.g. when a specific
         # model is being evaluated.
         force_model=os.environ.get("ON_RECORD_FORCE_MODEL", ""),
+        # Judging a short passage, not reproducing text — a small local model
+        # is both sufficient and fast enough to run over every attribution.
+        attribution_model=os.environ.get("ON_RECORD_ATTRIBUTION_MODEL", "qwen/qwen3.5-4b"),
         podcast_index_key=os.environ.get("PODCAST_INDEX_KEY", ""),
         podcast_index_secret=os.environ.get("PODCAST_INDEX_SECRET", ""),
     )

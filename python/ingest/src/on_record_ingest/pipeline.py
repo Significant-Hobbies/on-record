@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from .api_client import ApiClient
+from .attributions import confidence_for, judge
 from .config import Settings, settings as load_settings
 from .extract.claims import extract_segment
 from .extract.triage import triage_segment
@@ -26,7 +27,15 @@ from .transcripts.whisper_local import transcribe as whisper_transcribe
 from .transcripts.youtube_captions import fetch_cues
 
 LOGGER = logging.getLogger("on_record_ingest")
-STAGES = ("discover", "transcripts", "extract", "publish", "retime", "identify")
+STAGES = (
+    "discover",
+    "transcripts",
+    "extract",
+    "publish",
+    "retime",
+    "identify",
+    "attributions",
+)
 
 
 def _since(days: int) -> datetime:
@@ -388,12 +397,19 @@ class ExtractOpts:
     focus: str = "all"
 
 
+# Below this, a person was judged to be merely mentioned rather than present.
+# They must not reach the extractor: a name on the roster is a name it is
+# allowed to put quotes into the mouth of.
+GUEST_CONFIDENCE_FLOOR = 0.5
+
+
 def _episode_guests(detail: dict[str, Any], people_map: dict[str, str]) -> list[str]:
     id_to_slug = {person_id: slug for slug, person_id in people_map.items()}
     return [
         id_to_slug[str(row["personId"])]
         for row in detail.get("people") or []
         if str(row.get("personId") or "") in id_to_slug
+        and float(row.get("confidence") or 1.0) >= GUEST_CONFIDENCE_FLOOR
     ]
 
 
@@ -481,6 +497,61 @@ def run_extract(
 RETIME_STATUSES = ("segmented", "extracted", "published")
 
 
+def run_attributions(
+    api: ApiClient, cfg: Settings, episode_id: str | None, limit: int = 0
+) -> dict[str, int]:
+    """Ask a small local model whether each named person is really on the episode.
+
+    Half of metadata matches are people the blurb merely mentions, and a false
+    guest is worse than a missing one: it becomes a name the extractor may
+    attribute quotes to.
+    """
+    people = {p["id"]: p["name"] for p in api.list_people()}
+    episodes = [api.get_episode(episode_id)["episode"]] if episode_id else api.list_episodes()
+    tally = {"appears": 0, "mentioned": 0, "undecided": 0}
+    judged = 0
+    with httpx.Client() as client:
+        for episode in episodes:
+            detail = api.get_episode(episode["id"])
+            rows = [r for r in detail.get("people") or [] if r.get("role") == "guest"]
+            if not rows:
+                continue
+            updates = []
+            for row in rows:
+                if limit and judged >= limit:
+                    break
+                name = people.get(str(row.get("personId")))
+                if not name:
+                    continue
+                judged += 1
+                verdict = judge(
+                    client,
+                    cfg.ai_base_url,
+                    cfg.attribution_model,
+                    name,
+                    str(episode.get("title") or ""),
+                    str(episode.get("description") or ""),
+                )
+                confidence = confidence_for(verdict, name, str(episode.get("title") or ""))
+                if confidence is None:
+                    tally["undecided"] += 1
+                    continue
+                tally["appears" if confidence > 0.5 else "mentioned"] += 1
+                updates.append(
+                    {
+                        "personId": str(row["personId"]),
+                        "confidence": confidence,
+                        "attributionSource": "llm",
+                    }
+                )
+            if updates:
+                api.set_episode_people(episode["id"], updates)
+            if limit and judged >= limit:
+                break
+    LOGGER.info("attributions %s", tally)
+    return tally
+
+
 def run_identify(api: ApiClient, cfg: Settings, episode_id: str | None) -> int:
     """Redo speaker identification on stored segments.
 
@@ -562,6 +633,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-segments", type=int, default=0)
     parser.add_argument("--skip-segments", type=int, default=0)
+    parser.add_argument("--limit", type=int, default=0, help="cap how many items a stage handles")
     parser.add_argument("--focus", choices=["all", "recs"], default="all")
     parser.add_argument(
         "--whisper",
@@ -584,6 +656,9 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 except Exception as exc:
                     LOGGER.warning("discover %s failed: %s", show["slug"], exc)
+        if args.stage == "attributions":
+            run_attributions(api, cfg, args.episode or None, args.limit)
+            return 0
         if args.stage == "identify":
             run_identify(api, cfg, args.episode or None)
             return 0

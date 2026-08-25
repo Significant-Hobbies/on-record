@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { CueMap } from '@on-record/db';
 import { db, schema } from '../db';
@@ -242,6 +242,30 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
   return c.json({
     ids: stored.sort((a, b) => a.idx - b.idx).map((row) => row.id),
   });
+});
+
+adminEpisodesRoute.post('/episodes/:id/people', async (c) => {
+  const id = c.req.param('id');
+  const body = (await c.req.json()) as {
+    people?: Array<{ personId: string; confidence: number; attributionSource?: string }>;
+  };
+  const database = db(c.env.DB);
+  for (const person of body.people ?? []) {
+    await database
+      .update(schema.episodePeople)
+      .set({
+        attributionSource:
+          (person.attributionSource as 'show_config' | 'metadata_match' | 'llm') ?? 'llm',
+        confidence: person.confidence,
+      })
+      .where(
+        and(
+          eq(schema.episodePeople.episodeId, id),
+          eq(schema.episodePeople.personId, person.personId)
+        )
+      );
+  }
+  return c.json({ updated: (body.people ?? []).length });
 });
 
 adminEpisodesRoute.post('/episodes/:id/status', async (c) => {
