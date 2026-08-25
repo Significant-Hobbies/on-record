@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import type { CueMap } from '@on-record/db';
 import { db, schema } from '../db';
 import type { Env } from '../env';
 import { newId, sha256Hex } from '../ids';
@@ -120,19 +121,26 @@ adminEpisodesRoute.post('/episodes/upsert', async (c) => {
 
 adminEpisodesRoute.get('/episodes/:id/raw', async (c) => {
   const id = c.req.param('id');
+  // Each stage overwrites rawR2Key, so callers that want an earlier artefact
+  // (the discovery payload, the cue list) ask for it by key.
+  const requested = c.req.query('key');
+  if (requested && !requested.startsWith(`episodes/${id}/`)) {
+    return c.json({ error: 'bad_key' }, 400);
+  }
   const [episode] = await db(c.env.DB)
     .select()
     .from(schema.episodes)
     .where(eq(schema.episodes.id, id))
     .limit(1);
-  if (!episode?.rawR2Key) {
+  const key = requested ?? episode?.rawR2Key;
+  if (!key) {
     return c.json({ error: 'not_found' }, 404);
   }
-  const object = await c.env.RAW.get(episode.rawR2Key);
+  const object = await c.env.RAW.get(key);
   if (!object) {
     return c.json({ error: 'not_found' }, 404);
   }
-  return c.json({ content: await object.text(), key: episode.rawR2Key });
+  return c.json({ content: await object.text(), key });
 });
 
 adminEpisodesRoute.post('/episodes/:id/raw', async (c) => {
@@ -163,6 +171,7 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
       endS: number;
       text: string;
       speakerHint?: string;
+      cueMap?: CueMap;
     }>;
   };
   const database = db(c.env.DB);
@@ -177,6 +186,7 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
       await database
         .update(schema.segments)
         .set({
+          cueMap: segment.cueMap ?? match.cueMap,
           endS: segment.endS,
           speakerHint: segment.speakerHint ?? null,
           startS: segment.startS,
@@ -185,6 +195,7 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
         .where(eq(schema.segments.id, match.id));
     } else {
       await database.insert(schema.segments).values({
+        cueMap: segment.cueMap ?? null,
         endS: segment.endS,
         episodeId: id,
         id: newId(),

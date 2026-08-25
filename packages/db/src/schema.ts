@@ -130,9 +130,18 @@ export const episodePeople = sqliteTable(
   (t) => [primaryKey({ columns: [t.episodeId, t.personId] })]
 );
 
+/**
+ * Sparse `[charOffset, startSeconds]` pairs mapping positions in a segment's
+ * text back to the caption cue that was being spoken there. Sampled rather
+ * than exhaustive: one entry roughly every 40 characters keeps the row small
+ * while staying accurate to a second or two.
+ */
+export type CueMap = [number, number][];
+
 export const segments = sqliteTable(
   'segments',
   {
+    cueMap: text('cue_map', { mode: 'json' }).$type<CueMap>(),
     endS: real('end_s').notNull(),
     episodeId: text('episode_id')
       .notNull()

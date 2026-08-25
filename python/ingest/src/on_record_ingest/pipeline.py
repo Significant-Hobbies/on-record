@@ -23,7 +23,7 @@ from .transcripts.rss_transcript import parse_transcript
 from .transcripts.youtube_captions import fetch_cues
 
 LOGGER = logging.getLogger("on_record_ingest")
-STAGES = ("discover", "transcripts", "extract", "publish")
+STAGES = ("discover", "transcripts", "extract", "publish", "retime")
 
 
 def _since(days: int) -> datetime:
@@ -141,7 +141,12 @@ def run_transcripts(api: ApiClient, episode_id: str | None, force: bool, dry_run
                 continue
             raw = {}
             try:
-                raw = json.loads(api.get_raw(episode["id"]).get("content") or "{}")
+                raw = json.loads(
+                    api.get_raw(episode["id"], key=f"episodes/{episode['id']}/discover.json").get(
+                        "content"
+                    )
+                    or "{}"
+                )
             except Exception:
                 raw = {
                     "transcriptUrl": "",
@@ -246,6 +251,71 @@ class ExtractOpts:
     focus: str = "all"
 
 
+def _episode_guests(detail: dict[str, Any], people_map: dict[str, str]) -> list[str]:
+    id_to_slug = {person_id: slug for slug, person_id in people_map.items()}
+    return [
+        id_to_slug[str(row["personId"])]
+        for row in detail.get("people") or []
+        if str(row.get("personId") or "") in id_to_slug
+    ]
+
+
+def _extract_episode(
+    api: ApiClient,
+    cfg: Settings,
+    people_map: dict[str, str],
+    episode: dict[str, Any],
+    opts: ExtractOpts,
+) -> tuple[int, int, int]:
+    detail = api.get_episode(episode["id"])
+    already = set(detail.get("extractedSegmentIds") or [])
+    guests = _episode_guests(detail, people_map)
+    segments = _slice_segments(
+        list(detail.get("segments") or []), opts.skip_segments, opts.max_segments
+    )
+    extracted = 0
+    llm_calls = 0
+    skipped = 0
+    prev_tail = ""
+    for segment in segments:
+        action = segment_action(segment, already, opts.force, opts.focus)
+        if action in {"extracted", "skip"}:
+            skipped += 1
+            LOGGER.info("segment %s skip %s", segment["idx"], action)
+            continue
+        llm_calls += 1
+        if opts.dry_run:
+            LOGGER.info("segment %s keep=%s dry-run", segment["idx"], action)
+            continue
+        try:
+            posted, run, n = extract_one_segment(cfg, people_map, segment, prev_tail, guests)
+        except httpx.HTTPError as exc:
+            LOGGER.warning("segment %s extract failed: %s", segment["idx"], exc)
+            continue
+        extracted += n
+        prev_tail = str(segment["text"])[-300:]
+        if posted or run:
+            api.post_claims(episode["id"], posted, [run])
+    LOGGER.info(
+        "episode %s llm_calls=%s skipped=%s claims=%s",
+        episode["id"],
+        llm_calls,
+        skipped,
+        extracted,
+    )
+    return extracted, llm_calls, skipped
+
+
+def _extract_targets(api: ApiClient, episode_id: str | None) -> list[dict[str, Any]]:
+    episodes = api.list_episodes(status="segmented")
+    if not episode_id:
+        return episodes
+    matched = [row for row in episodes if row["id"] == episode_id]
+    if matched:
+        return matched
+    return [api.get_episode(episode_id)["episode"]]
+
+
 def run_extract(
     api: ApiClient,
     cfg: Settings,
@@ -254,58 +324,47 @@ def run_extract(
 ) -> int:
     if not cfg.ai_api_key and not opts.dry_run:
         raise SystemExit("AI_API_KEY is required for extract")
-    episodes = api.list_episodes(status="segmented")
-    if opts.episode_id:
-        episodes = [row for row in episodes if row["id"] == opts.episode_id]
-        if not episodes:
-            detail = api.get_episode(opts.episode_id)
-            episodes = [detail["episode"]]
     extracted = 0
-    llm_calls = 0
-    skipped = 0
-    for episode in episodes:
-        detail = api.get_episode(episode["id"])
-        already = set(detail.get("extractedSegmentIds") or [])
-        prev_tail = ""
-        id_to_slug = {person_id: slug for slug, person_id in people_map.items()}
-        guests = [
-            id_to_slug[str(row["personId"])]
-            for row in detail.get("people") or []
-            if str(row.get("personId") or "") in id_to_slug
-        ]
-        segments = _slice_segments(
-            list(detail.get("segments") or []), opts.skip_segments, opts.max_segments
-        )
-        for segment in segments:
-            action = segment_action(segment, already, opts.force, opts.focus)
-            if action in {"extracted", "skip"}:
-                skipped += 1
-                LOGGER.info("segment %s skip %s", segment["idx"], action)
-                continue
-            if opts.dry_run:
-                llm_calls += 1
-                LOGGER.info("segment %s keep=%s dry-run", segment["idx"], action)
-                continue
-            llm_calls += 1
-            try:
-                posted, run, n = extract_one_segment(
-                    cfg, people_map, segment, prev_tail, guests
-                )
-            except httpx.HTTPError as exc:
-                LOGGER.warning("segment %s extract failed: %s", segment["idx"], exc)
-                continue
-            extracted += n
-            prev_tail = str(segment["text"])[-300:]
-            if posted or run:
-                api.post_claims(episode["id"], posted, [run])
-        LOGGER.info(
-            "episode %s llm_calls=%s skipped=%s claims=%s",
-            episode["id"],
-            llm_calls,
-            skipped,
-            extracted,
-        )
+    for episode in _extract_targets(api, opts.episode_id):
+        extracted += _extract_episode(api, cfg, people_map, episode, opts)[0]
     return extracted
+
+
+RETIME_STATUSES = ("segmented", "extracted", "published")
+
+
+def run_retime(api: ApiClient, episode_id: str | None, dry_run: bool) -> int:
+    """Re-derive cue maps from stored captions and re-time existing claims.
+
+    Claims written before segments carried cue maps were all pinned to the
+    start of their segment. The captions are still in R2, so the exact moment
+    is recoverable without re-running extraction.
+    """
+    if episode_id:
+        episodes = [api.get_episode(episode_id)["episode"]]
+    else:
+        episodes = [row for status in RETIME_STATUSES for row in api.list_episodes(status=status)]
+    moved = 0
+    for episode in episodes:
+        key = f"episodes/{episode['id']}/cues.json"
+        try:
+            cues = json.loads(api.get_raw(episode["id"], key=key).get("content") or "[]")
+        except Exception as exc:
+            LOGGER.warning("retime %s no cues: %s", episode["id"], exc)
+            continue
+        if not cues:
+            continue
+        segments = cues_to_segments(cues)
+        if dry_run:
+            LOGGER.info("retime dry-run %s segments=%s", episode["id"], len(segments))
+            continue
+        api.put_segments(episode["id"], segments, str(episode.get("transcriptKind") or "none"))
+        result = api.retime(episode["id"])
+        moved += int(result.get("moved") or 0)
+        LOGGER.info(
+            "retime %s claims=%s moved=%s", episode["id"], result.get("claims"), result.get("moved")
+        )
+    return moved
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -342,6 +401,9 @@ def main(argv: list[str] | None = None) -> int:
                 discovered += discover_show(
                     show, show_id, people_map, _since(args.days), api, cfg, args.dry_run
                 )
+        if args.stage == "retime":
+            run_retime(api, args.episode or None, args.dry_run)
+            return 0
         transcribed = 0
         if args.stage in {"all", "transcripts"}:
             transcribed = run_transcripts(api, args.episode or None, args.force, args.dry_run)

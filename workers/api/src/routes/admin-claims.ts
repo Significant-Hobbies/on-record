@@ -7,6 +7,7 @@ import type { Env } from '../env';
 import { dedupeHash, newId } from '../ids';
 import { judgeClaim } from '../publish-rules';
 import { findVerbatimAnchor, normalizeWs } from '../quote';
+import { timestampForOffset } from '../timestamp';
 import { sanitizeReferences, type ClaimReference } from '../references';
 
 export const adminClaimsRoute = new Hono<{ Bindings: Env }>();
@@ -63,6 +64,38 @@ async function topicIdForSlug(database: Database, slug: string): Promise<string 
   return topic?.id ?? null;
 }
 
+async function loadEpisode(
+  database: Database,
+  episodeId: string
+): Promise<{
+  episode: typeof schema.episodes.$inferSelect;
+  segments: Map<string, typeof schema.segments.$inferSelect>;
+} | null> {
+  const [episode] = await database
+    .select()
+    .from(schema.episodes)
+    .where(eq(schema.episodes.id, episodeId))
+    .limit(1);
+  if (!episode) {
+    return null;
+  }
+  const rows = await database
+    .select()
+    .from(schema.segments)
+    .where(eq(schema.segments.episodeId, episodeId));
+  return { episode, segments: new Map(rows.map((row) => [row.id, row])) };
+}
+
+async function persistTopics(database: Database, claimId: string, slugs: string[]): Promise<void> {
+  for (const slug of slugs) {
+    const topicId = await topicIdForSlug(database, slug);
+    if (!topicId) {
+      continue;
+    }
+    await database.insert(schema.claimTopics).values({ claimId, topicId }).onConflictDoNothing();
+  }
+}
+
 async function persistReferences(
   database: Database,
   claimId: string,
@@ -109,7 +142,7 @@ async function persistOneClaim(
     return { id: existing.id, reason: 'duplicate', reviewStatus: existing.reviewStatus };
   }
   const id = newId();
-  const timestampS = segment.startS;
+  const timestampS = timestampForOffset(segment, anchor?.start ?? null);
   const now = new Date();
   await database.insert(schema.claims).values({
     assertion: incoming.assertion,
@@ -147,16 +180,7 @@ async function persistOneClaim(
     role: 'primary',
     timestampS,
   });
-  for (const slug of incoming.topics ?? []) {
-    const topicId = await topicIdForSlug(database, slug);
-    if (!topicId) {
-      continue;
-    }
-    await database
-      .insert(schema.claimTopics)
-      .values({ claimId: id, topicId })
-      .onConflictDoNothing();
-  }
+  await persistTopics(database, id, incoming.topics ?? []);
   if (decision.reviewStatus === 'published') {
     await indexPublishedClaim(d1, id, incoming.assertion, incoming.quote);
   }
@@ -168,19 +192,11 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
   const episodeId = c.req.param('id');
   const body = (await c.req.json()) as { claims?: IncomingClaim[]; llmRuns?: LlmRunInput[] };
   const database = db(c.env.DB);
-  const [episode] = await database
-    .select()
-    .from(schema.episodes)
-    .where(eq(schema.episodes.id, episodeId))
-    .limit(1);
-  if (!episode) {
+  const loaded = await loadEpisode(database, episodeId);
+  if (!loaded) {
     return c.json({ error: 'episode_not_found' }, 404);
   }
-  const segmentRows = await database
-    .select()
-    .from(schema.segments)
-    .where(eq(schema.segments.episodeId, episodeId));
-  const segments = new Map(segmentRows.map((row) => [row.id, row]));
+  const { episode, segments } = loaded;
   const results = [];
   let rejectedQuote = 0;
   let rejectedSpeaker = 0;
@@ -231,4 +247,44 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
     })
     .where(eq(schema.episodes.id, episodeId));
   return c.json({ published, rejectedQuote, rejectedSpeaker, results });
+});
+
+adminClaimsRoute.post('/episodes/:id/retime', async (c) => {
+  const episodeId = c.req.param('id');
+  const database = db(c.env.DB);
+  const loaded = await loadEpisode(database, episodeId);
+  if (!loaded) {
+    return c.json({ error: 'episode_not_found' }, 404);
+  }
+  const { episode, segments } = loaded;
+  const claims = await database
+    .select()
+    .from(schema.claims)
+    .where(eq(schema.claims.episodeId, episodeId));
+  let moved = 0;
+  for (const claim of claims) {
+    const segment = claim.segmentId ? segments.get(claim.segmentId) : undefined;
+    if (!segment) {
+      continue;
+    }
+    const anchor = findVerbatimAnchor(segment.text, claim.quote);
+    const timestampS = timestampForOffset(segment, anchor?.start ?? claim.quoteStartChar);
+    if (timestampS === claim.timestampS) {
+      continue;
+    }
+    moved += 1;
+    await database
+      .update(schema.claims)
+      .set({
+        quoteEndChar: anchor?.end ?? claim.quoteEndChar,
+        quoteStartChar: anchor?.start ?? claim.quoteStartChar,
+        timestampS,
+      })
+      .where(eq(schema.claims.id, claim.id));
+    await database
+      .update(schema.claimEvidence)
+      .set({ deepLinkUrl: youtubeDeepLink(episode.youtubeVideoId, timestampS), timestampS })
+      .where(eq(schema.claimEvidence.claimId, claim.id));
+  }
+  return c.json({ claims: claims.length, moved });
 });

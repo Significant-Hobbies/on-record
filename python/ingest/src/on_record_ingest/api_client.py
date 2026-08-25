@@ -62,8 +62,12 @@ class ApiClient:
     def get_episode(self, episode_id: str) -> dict[str, Any]:
         return self._json(self._client.get(f"/admin/episodes/{episode_id}"))
 
-    def get_raw(self, episode_id: str) -> dict[str, Any]:
-        return self._json(self._client.get(f"/admin/episodes/{episode_id}/raw"))
+    def get_raw(self, episode_id: str, key: str | None = None) -> dict[str, Any]:
+        params = {"key": key} if key else {}
+        return self._json(self._client.get(f"/admin/episodes/{episode_id}/raw", params=params))
+
+    def retime(self, episode_id: str) -> dict[str, Any]:
+        return self._json(self._client.post(f"/admin/episodes/{episode_id}/retime", json={}))
 
     def list_episodes(
         self, status: str | None = None, show_id: str | None = None
