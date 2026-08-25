@@ -24,9 +24,21 @@ class ApiClient:
         response.raise_for_status()
         return response.json()
 
-    def upsert_people(self, people: list[dict[str, Any]]) -> list[str]:
-        payload = self._json(self._client.post("/admin/people/upsert", json={"people": people}))
-        return list(payload.get("ids") or [])
+    def upsert_people(self, people: list[dict[str, Any]], batch: int = 100) -> list[str]:
+        """Seed the roster in batches.
+
+        The worker reads then writes per person, so a 1,255-person roster in one
+        request is 2,500 D1 round-trips and times out.
+        """
+        ids: list[str] = []
+        for start in range(0, len(people), batch):
+            payload = self._json(
+                self._client.post(
+                    "/admin/people/upsert", json={"people": people[start : start + batch]}
+                )
+            )
+            ids.extend(payload.get("ids") or [])
+        return ids
 
     def upsert_shows(self, shows: list[dict[str, Any]]) -> list[str]:
         payload = self._json(self._client.post("/admin/shows/upsert", json={"shows": shows}))

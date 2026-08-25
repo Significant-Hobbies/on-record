@@ -114,8 +114,13 @@ def extract_segment(
     prev_tail: str,
     guests: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    # Only the people who could plausibly be talking in this episode: its host
+    # and whoever its metadata names. Pasting the whole roster in was 329
+    # characters at 23 people and would be 18,000 at 1,236, on every call, for
+    # a list the model has to ignore all but two lines of.
+    episode_roster = sorted(set(guests or ()))
     user_prompt = build_user_prompt(
-        sorted(roster_slugs()),
+        episode_roster,
         prev_tail,
         segment_text,
         sorted(topic_slugs()),
@@ -131,7 +136,9 @@ def extract_segment(
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     for row in parsed or []:
-        claim, reason = validate_claim(row, segment_text, roster_slugs(), topic_slugs())
+        # Validate against the same short list. A speaker the episode gives no
+        # reason to expect is a misattribution, not a discovery.
+        claim, reason = validate_claim(row, segment_text, set(episode_roster), topic_slugs())
         if claim is None:
             rejected.append({"reason": reason, "row": row})
             continue

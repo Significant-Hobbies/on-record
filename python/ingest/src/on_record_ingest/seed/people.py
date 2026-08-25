@@ -1,190 +1,27 @@
 """People whose statements the index attributes.
 
-Aliases feed two things: matching a guest out of an episode title, and mapping
-whatever name the extractor writes back onto a roster slug. Keep them
-distinctive — a bare first name that is common across the roster ("Bill",
-"Ben") will attach the wrong person to an episode.
+The list lives in `people.json` because most of it is mined rather than
+written: episode titles across the archives are a ranked list of who the shows
+book, and `roster.py` turns that into candidates. Entries marked `curated` were
+written by hand and carry titles, employers and aliases; mined entries carry
+only a name and how many episodes named them.
 
-Hosts appear here too. They are on every episode of their show, so most of
-what gets said on these feeds is theirs.
+Two kinds of alias, deliberately separate:
+
+- `aliases` map whatever the extractor writes back onto a slug. The roster it
+  chooses from is one episode's worth of people, so a bare first name is safe.
+- `matchAliases` decide whether an episode is credited to someone from its
+  title. Those must be distinctive — a common first name here attaches the
+  wrong person to an episode, which is how a quote ends up on the wrong page.
+  Mined entries get none, so they match on full name only.
 """
 
-PEOPLE: list[dict] = [
-    {
-        "slug": "andrej-karpathy",
-        "matchAliases": ["Karpathy"],
-        "name": "Andrej Karpathy",
-        "title": "Researcher",
-        "org": "Eureka Labs",
-        "aliases": ["Karpathy", "Andrej"],
-    },
-    {
-        "slug": "dario-amodei",
-        "name": "Dario Amodei",
-        "title": "CEO",
-        "org": "Anthropic",
-        "aliases": ["Dario"],
-    },
-    {
-        "slug": "sam-altman",
-        "matchAliases": ["Altman"],
-        "name": "Sam Altman",
-        "title": "CEO",
-        "org": "OpenAI",
-        "aliases": ["Altman", "Sam"],
-    },
-    {
-        "slug": "demis-hassabis",
-        "matchAliases": ["Hassabis"],
-        "name": "Demis Hassabis",
-        "title": "CEO",
-        "org": "Google DeepMind",
-        "aliases": ["Hassabis", "Demis"],
-    },
-    {
-        "slug": "yann-lecun",
-        "matchAliases": ["LeCun"],
-        "name": "Yann LeCun",
-        "title": "Chief AI Scientist",
-        "org": "Meta",
-        "aliases": ["LeCun", "Yann"],
-    },
-    {
-        "slug": "satya-nadella",
-        "matchAliases": ["Nadella"],
-        "name": "Satya Nadella",
-        "title": "CEO",
-        "org": "Microsoft",
-        "aliases": ["Nadella", "Satya"],
-    },
-    {
-        "slug": "greg-brockman",
-        "matchAliases": ["Brockman"],
-        "name": "Greg Brockman",
-        "title": "President",
-        "org": "OpenAI",
-        "aliases": ["Brockman", "Greg"],
-    },
-    {
-        "slug": "patrick-collison",
-        "matchAliases": ["Collison"],
-        "name": "Patrick Collison",
-        "title": "CEO",
-        "org": "Stripe",
-        "aliases": ["Collison", "Patrick"],
-    },
-    {
-        "slug": "ilya-sutskever",
-        "matchAliases": ["Sutskever"],
-        "name": "Ilya Sutskever",
-        "title": "Co-founder",
-        "org": "SSI",
-        "aliases": ["Sutskever", "Ilya"],
-    },
-    {
-        "slug": "jensen-huang",
-        "name": "Jensen Huang",
-        "title": "CEO",
-        "org": "NVIDIA",
-        "aliases": ["Jensen", "Huang", "Jen-Hsun"],
-    },
-    {
-        "slug": "dwarkesh-patel",
-        "matchAliases": ["Dwarkesh"],
-        "name": "Dwarkesh Patel",
-        "title": "Host",
-        "org": "Dwarkesh Podcast",
-        "aliases": ["Dwarkesh"],
-    },
-    {
-        "slug": "lex-fridman",
-        "matchAliases": ["Fridman"],
-        "name": "Lex Fridman",
-        "title": "Host",
-        "org": "Lex Fridman Podcast",
-        "aliases": ["Fridman"],
-    },
-    {
-        "slug": "sarah-guo",
-        "name": "Sarah Guo",
-        "title": "Founder",
-        "org": "Conviction",
-        "aliases": ["Sarah"],
-    },
-    {
-        "slug": "elad-gil",
-        "name": "Elad Gil",
-        "title": "Investor",
-        "org": "Independent",
-        "aliases": ["Elad"],
-    },
-    {
-        "slug": "shawn-wang",
-        "matchAliases": ["swyx"],
-        "name": "Shawn Wang",
-        "title": "Host",
-        "org": "Latent Space",
-        "aliases": ["swyx"],
-    },
-    {
-        "slug": "alessio-fanelli",
-        "name": "Alessio Fanelli",
-        "title": "Partner",
-        "org": "Decibel",
-        "aliases": ["Alessio"],
-    },
-    {
-        "slug": "ben-gilbert",
-        "name": "Ben Gilbert",
-        "title": "Host",
-        "org": "Acquired",
-        "aliases": [],
-    },
-    {
-        "slug": "david-rosenthal",
-        "matchAliases": ["Rosenthal"],
-        "name": "David Rosenthal",
-        "title": "Host",
-        "org": "Acquired",
-        "aliases": ["Rosenthal"],
-    },
-    {
-        "slug": "harry-stebbings",
-        "matchAliases": ["Stebbings"],
-        "name": "Harry Stebbings",
-        "title": "Founder",
-        "org": "20VC",
-        "aliases": ["Stebbings"],
-    },
-    {
-        "slug": "nathan-labenz",
-        "matchAliases": ["Labenz"],
-        "name": "Nathan Labenz",
-        "title": "Host",
-        "org": "The Cognitive Revolution",
-        "aliases": ["Labenz"],
-    },
-    {
-        "slug": "brad-gerstner",
-        "matchAliases": ["Gerstner"],
-        "name": "Brad Gerstner",
-        "title": "Founder",
-        "org": "Altimeter Capital",
-        "aliases": ["Gerstner"],
-    },
-    {
-        "slug": "bill-gurley",
-        "matchAliases": ["Gurley"],
-        "name": "Bill Gurley",
-        "title": "Partner",
-        "org": "Benchmark",
-        "aliases": ["Gurley"],
-    },
-    {
-        "slug": "garry-tan",
-        "name": "Garry Tan",
-        "title": "CEO",
-        "org": "Y Combinator",
-        "aliases": ["Garry"],
-    },
-]
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+_DATA = Path(__file__).with_name("people.json")
+
+PEOPLE: list[dict[str, Any]] = json.loads(_DATA.read_text(encoding="utf-8"))

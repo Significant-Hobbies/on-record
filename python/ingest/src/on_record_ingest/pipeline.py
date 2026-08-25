@@ -298,6 +298,11 @@ def _extract_episode(
     detail = api.get_episode(episode["id"])
     already = set(detail.get("extractedSegmentIds") or [])
     guests = _episode_guests(detail, people_map)
+    if not guests:
+        # Nobody identifiable is on this episode, so every claim would be
+        # attributed to "unknown" and never published. Skip before spending.
+        LOGGER.info("episode %s skipped: no identifiable speaker", episode["id"])
+        return 0, 0, 0
     segments = _slice_segments(
         list(detail.get("segments") or []), opts.skip_segments, opts.max_segments
     )

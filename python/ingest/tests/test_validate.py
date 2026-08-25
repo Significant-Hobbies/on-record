@@ -158,3 +158,18 @@ def test_served_model_prefers_what_the_gateway_actually_used():
     )
     assert served_model({"model": "gemini-2.5-flash"}, "auto") == "gemini-2.5-flash"
     assert served_model({}, "auto") == "auto"
+
+
+def test_extraction_prompt_carries_only_this_episode_roster():
+    from on_record_ingest.extract.claims import build_user_prompt
+
+    prompt = build_user_prompt(
+        ["dwarkesh-patel", "dario-amodei"],
+        "",
+        "segment text",
+        ["ai-agents"],
+        ["dwarkesh-patel", "dario-amodei"],
+    )
+    assert "dario-amodei" in prompt
+    # Someone on the global roster but not on this episode must not appear.
+    assert "jensen-huang" not in prompt
