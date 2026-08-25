@@ -90,27 +90,68 @@ def cues_from_report(report: dict[str, Any]) -> list[Cue]:
     return cues
 
 
-def _run_whisper(wav: Path, workdir: Path) -> list[Cue]:
-    subprocess.run(
-        [
-            "whisperkit-cli",
-            "transcribe",
-            "--audio-path",
-            str(wav),
-            "--model-path",
-            str(MODEL_DIR),
-            "--report",
-            "--report-path",
-            str(workdir),
-        ],
-        check=True,
-        capture_output=True,
-        timeout=7200,
-    )
+def turns_from_rttm(rttm: str) -> list[dict[str, Any]]:
+    """Speaker turns from WhisperKit's RTTM output.
+
+    Lines look like: SPEAKER clip 1 <start> <duration> <text...> <NA> A <NA> <NA>
+    The transcript sits inline, so the speaker label is counted from the end.
+    """
+    turns: list[dict[str, Any]] = []
+    for line in rttm.splitlines():
+        fields = line.split()
+        if len(fields) < 9 or fields[0] != "SPEAKER":
+            continue
+        try:
+            start = float(fields[3])
+            duration = float(fields[4])
+        except ValueError:
+            continue
+        turns.append({"start": start, "end": start + duration, "speaker": fields[-3]})
+    return sorted(turns, key=lambda t: t["start"])
+
+
+def speaker_at(turns: list[dict[str, Any]], start: float, end: float) -> str | None:
+    """Whichever turn overlaps this cue the most."""
+    best: str | None = None
+    best_overlap = 0.0
+    for turn in turns:
+        overlap = min(end, turn["end"]) - max(start, turn["start"])
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best = str(turn["speaker"])
+    return best
+
+
+def _run_whisper(wav: Path, workdir: Path, speakers: int = 0) -> list[Cue]:
+    command = [
+        "whisperkit-cli",
+        "transcribe",
+        "--audio-path",
+        str(wav),
+        "--model-path",
+        str(MODEL_DIR),
+        "--report",
+        "--report-path",
+        str(workdir),
+    ]
+    if speakers:
+        # Left unconstrained it split one host across two labels. The roster
+        # already tells us how many voices to expect.
+        command += ["--diarization", "--diarization-num-speakers", str(speakers)]
+    result = subprocess.run(command, check=True, capture_output=True, timeout=7200)
     report = workdir / f"{wav.stem}.json"
     if not report.is_file():
         return []
-    return cues_from_report(json.loads(report.read_text()))
+    cues = cues_from_report(json.loads(report.read_text()))
+    if not speakers:
+        return cues
+    turns = turns_from_rttm(result.stdout.decode("utf-8", "replace"))
+    for cue in cues:
+        start = float(cue["start"])
+        speaker = speaker_at(turns, start, start + float(cue["duration"]))
+        if speaker:
+            cue["speaker"] = speaker
+    return cues
 
 
 class TranscriptionUnavailable(RuntimeError):
@@ -121,7 +162,7 @@ class TranscriptionUnavailable(RuntimeError):
     """
 
 
-def transcribe(audio_url: str, client: httpx.Client | None = None) -> list[Cue]:
+def transcribe(audio_url: str, client: httpx.Client | None = None, speakers: int = 0) -> list[Cue]:
     """Cues for an episode. Raises TranscriptionUnavailable on a transient failure."""
     if not available():
         LOGGER.warning("whisper unavailable: need whisperkit-cli, ffmpeg and the turbo model")
@@ -133,7 +174,7 @@ def transcribe(audio_url: str, client: httpx.Client | None = None) -> list[Cue]:
         wav = workdir / "episode.wav"
         _to_wav(source, wav)
         source.unlink(missing_ok=True)
-        return _run_whisper(wav, workdir)
+        return _run_whisper(wav, workdir, speakers)
     except subprocess.CalledProcessError as exc:
         LOGGER.warning("whisper failed: %s", (exc.stderr or b"")[:200])
         return []

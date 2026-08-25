@@ -47,3 +47,25 @@ def test_cue_map_offsets_survive_the_overlap_prefix():
     assert later["cueMap"][0][1] < later["startS"]
     own = next(entry for entry in later["cueMap"] if entry[0] > 0)
     assert later["text"][own[0] :].startswith("tok")
+
+
+def test_segments_never_span_two_speakers():
+    cues = [
+        {"start": 0.0, "duration": 1.0, "text": "host asks a question", "speaker": "A"},
+        {"start": 1.0, "duration": 1.0, "text": "guest starts answering", "speaker": "B"},
+        {"start": 2.0, "duration": 1.0, "text": "guest keeps going", "speaker": "B"},
+        {"start": 3.0, "duration": 1.0, "text": "host again", "speaker": "A"},
+    ]
+    segments = cues_to_segments(cues, target_chars=10_000)
+    assert [s["speakerHint"] for s in segments] == ["A", "B", "A"]
+    assert "guest starts answering" in segments[1]["text"]
+    assert "host asks" not in segments[1]["text"].replace(
+        segments[1]["text"][: segments[1]["text"].find("guest")], ""
+    )
+
+
+def test_undiarized_cues_still_segment_by_length():
+    cues = [{"start": float(i), "duration": 1.0, "text": "word " * 30} for i in range(8)]
+    segments = cues_to_segments(cues, target_chars=200)
+    assert len(segments) > 1
+    assert all(s["speakerHint"] is None for s in segments)

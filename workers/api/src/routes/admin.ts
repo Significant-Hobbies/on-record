@@ -41,6 +41,17 @@ type TopicInput = {
   status?: 'proposed' | 'approved';
 };
 
+adminRoute.get('/people', async (c) => {
+  const rows = await db(c.env.DB)
+    .select({
+      id: schema.people.id,
+      name: schema.people.name,
+      slug: schema.people.slug,
+    })
+    .from(schema.people);
+  return c.json({ people: rows });
+});
+
 adminRoute.post('/people/upsert', async (c) => {
   const body = (await c.req.json()) as { people?: PersonInput[] };
   const database = db(c.env.DB);

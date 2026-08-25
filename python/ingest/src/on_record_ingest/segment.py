@@ -76,7 +76,7 @@ def cues_to_segments(cues: list[Cue], target_chars: int = TARGET_CHARS) -> list[
                 "startS": float(buf[0]["start"]),
                 "endS": float(last["start"]) + float(last["duration"]),
                 "text": text,
-                "speakerHint": None,
+                "speakerHint": buf[0].get("speaker"),
                 "cueMap": _prefix_anchor(segments[-1] if segments else None, overlap_from, prefix)
                 + _cue_map(pieces, [float(cue["start"]) for cue in buf], lead, shift),
             }
@@ -90,7 +90,11 @@ def cues_to_segments(cues: list[Cue], target_chars: int = TARGET_CHARS) -> list[
         if not piece:
             continue
         next_len = buf_len + len(piece) + 1
-        if buf and next_len > target_chars:
+        # Break where the voice changes as well as on length. A segment that
+        # spans two people cannot be attributed to either, which is the whole
+        # failure diarization exists to remove.
+        changed = bool(buf) and cue.get("speaker") != buf[0].get("speaker")
+        if buf and (next_len > target_chars or changed):
             flush(previous_text)
             previous_text = segments[-1]["text"] if segments else ""
         buf.append(cue)

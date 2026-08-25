@@ -13,6 +13,7 @@ from .api_client import ApiClient
 from .config import Settings, settings as load_settings
 from .extract.claims import extract_segment
 from .extract.triage import triage_segment
+from .identify import UNKNOWN, identify_speakers
 from .match import guests_from_text, merge_video
 from .seed.people import PEOPLE
 from .seed.shows import SHOWS
@@ -138,7 +139,7 @@ def discover_show(
 
 
 def resolve_cues(
-    item: dict[str, Any], client: httpx.Client, whisper: bool = False
+    item: dict[str, Any], client: httpx.Client, whisper: bool = False, speakers: int = 0
 ) -> tuple[str, list[dict[str, float | str]]]:
     """Publisher transcript, then YouTube captions, then our own ears.
 
@@ -159,10 +160,48 @@ def resolve_cues(
             return "youtube_captions", cues
     audio_url = str(item.get("audioUrl") or "")
     if whisper and audio_url:
-        cues = whisper_transcribe(audio_url, client)
+        cues = whisper_transcribe(audio_url, client, speakers)
         if cues:
             return "whisper_local", cues
     return "none", []
+
+
+def episode_roster(api: ApiClient, episode_id: str) -> list[dict[str, str]]:
+    detail = api.get_episode(episode_id)
+    people = {p["id"]: p for p in api.list_people()}
+    out: list[dict[str, str]] = []
+    for row in detail.get("people") or []:
+        person = people.get(str(row.get("personId")))
+        if person:
+            out.append(
+                {
+                    "slug": str(person["slug"]),
+                    "name": str(person["name"]),
+                    "role": str(row.get("role") or "guest"),
+                }
+            )
+    return out
+
+
+def resolve_segment_speakers(
+    api: ApiClient, cfg: Settings, episode: dict[str, Any], segments: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Turn diarized labels into people, or into nothing.
+
+    speakerHint carries a label like "B" out of diarization. From here it
+    carries a roster slug, so extraction reads who is talking instead of
+    guessing. A voice we cannot place is left unset and its claims stay
+    unpublishable.
+    """
+    if not any(segment.get("speakerHint") for segment in segments):
+        return segments
+    roster = episode_roster(api, episode["id"])
+    mapping = identify_speakers(cfg, segments, roster, str(episode.get("title") or ""))
+    for segment in segments:
+        label = segment.get("speakerHint")
+        slug = mapping.get(str(label)) if label else None
+        segment["speakerHint"] = None if not slug or slug == UNKNOWN else slug
+    return segments
 
 
 def run_transcripts(
@@ -171,6 +210,7 @@ def run_transcripts(
     force: bool,
     dry_run: bool,
     whisper: bool = False,
+    cfg: Settings | None = None,
 ) -> int:
     episodes = api.list_episodes(status=None if force else "discovered")
     if episode_id:
@@ -201,6 +241,9 @@ def run_transcripts(
                 # than retiring it on the strength of a throttled discovery.
                 LOGGER.info("transcripts %s no source yet", episode["id"])
                 continue
+            expected = 1 + len(
+                [row for row in (api.get_episode(episode["id"]).get("people") or [])]
+            )
             try:
                 kind, cues = resolve_cues(
                     {
@@ -210,6 +253,7 @@ def run_transcripts(
                     },
                     client,
                     whisper,
+                    expected,
                 )
             except TranscriptionUnavailable as exc:
                 LOGGER.warning("episode %s left for a later pass: %s", episode["id"], exc)
@@ -232,6 +276,7 @@ def run_transcripts(
                 "application/json",
             )
             segments = cues_to_segments(cues)
+            segments = resolve_segment_speakers(api, cfg, episode, segments) if cfg else segments
             api.put_segments(episode["id"], segments, kind)
             api.set_episode_status(
                 episode["id"],
@@ -283,7 +328,14 @@ def extract_one_segment(
     prev_tail: str,
     guests: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
-    accepted, rejected, run = extract_segment(cfg, segment["text"], prev_tail, guests)
+    # A diarized segment already knows whose voice it is. Offering the model
+    # one name stops it choosing between several and calling the choice 0.9.
+    known = segment.get("speakerHint")
+    roster = [str(known)] if known else guests
+    accepted, rejected, run = extract_segment(cfg, segment["text"], prev_tail, roster)
+    if known:
+        for claim in accepted:
+            claim["speakerRaw"] = str(known)
     for claim in accepted:
         claim["segmentId"] = segment["id"]
         claim["pipelineVersion"] = cfg.pipeline_version
@@ -484,7 +536,7 @@ def main(argv: list[str] | None = None) -> int:
         transcribed = 0
         if args.stage in {"all", "transcripts"}:
             transcribed = run_transcripts(
-                api, args.episode or None, args.force, args.dry_run, args.whisper
+                api, args.episode or None, args.force, args.dry_run, args.whisper, cfg
             )
         extracted = 0
         if args.stage in {"all", "extract", "publish"}:

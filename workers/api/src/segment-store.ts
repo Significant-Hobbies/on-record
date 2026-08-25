@@ -18,7 +18,7 @@ export type StoredSegment = {
 
 export type SegmentBody = { text: string; cueMap: CueMap | null };
 
-export function segmentsKey(episodeId: string): string {
+function segmentsKey(episodeId: string): string {
   return `episodes/${episodeId}/segments.json`;
 }
 
