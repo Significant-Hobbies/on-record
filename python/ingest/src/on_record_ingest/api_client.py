@@ -71,6 +71,10 @@ class ApiClient:
         )
         return list(payload.get("ids") or [])
 
+    def list_shows(self) -> list[dict[str, Any]]:
+        payload = self._json(self._client.get("/admin/shows"))
+        return list(payload.get("shows") or [])
+
     def list_people(self) -> list[dict[str, Any]]:
         payload = self._json(self._client.get("/admin/people"))
         return list(payload.get("people") or [])

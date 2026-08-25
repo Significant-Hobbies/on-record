@@ -283,7 +283,9 @@ adminEpisodesRoute.post('/episodes/:id/status', async (c) => {
       statusDetail: body.statusDetail ?? null,
       transcriptKind: body.transcriptKind ?? undefined,
       updatedAt: new Date(),
-      youtubeVideoId: body.youtubeVideoId ?? undefined,
+      // An empty string means "clear this", not "store an empty id" — a
+      // wrong video link has to be removable.
+      youtubeVideoId: body.youtubeVideoId === '' ? null : (body.youtubeVideoId ?? undefined),
     })
     .where(eq(schema.episodes.id, id));
   return c.json({ ok: true });

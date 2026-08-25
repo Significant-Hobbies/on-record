@@ -19,6 +19,7 @@ class Settings:
     extract_model: str
     force_model: str
     attribution_model: str
+    youtube_api_key: str
     podcast_index_key: str
     podcast_index_secret: str
     pipeline_version: str = "claims-v1"
@@ -45,6 +46,7 @@ def settings() -> Settings:
         # Judging a short passage, not reproducing text — a small local model
         # is both sufficient and fast enough to run over every attribution.
         attribution_model=os.environ.get("ON_RECORD_ATTRIBUTION_MODEL", "qwen/qwen3.5-4b"),
+        youtube_api_key=os.environ.get("YOUTUBE_API_KEY", ""),
         podcast_index_key=os.environ.get("PODCAST_INDEX_KEY", ""),
         podcast_index_secret=os.environ.get("PODCAST_INDEX_SECRET", ""),
     )

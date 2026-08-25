@@ -98,6 +98,11 @@ adminRoute.post('/people/upsert', async (c) => {
   return c.json({ ids });
 });
 
+adminRoute.get('/shows', async (c) => {
+  const rows = await db(c.env.DB).select().from(schema.shows);
+  return c.json({ shows: rows });
+});
+
 adminRoute.post('/shows/upsert', async (c) => {
   const body = (await c.req.json()) as { shows?: ShowInput[] };
   const database = db(c.env.DB);

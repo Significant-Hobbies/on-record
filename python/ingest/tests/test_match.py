@@ -100,3 +100,14 @@ def test_finds_a_video_id_in_any_link_shape():
         video_id_from_metadata("https://youtu.be/AAAAAAAAAAA", "https://youtu.be/BBBBBBBBBBB")
         == "AAAAAAAAAAA"
     )
+
+
+def test_timestamps_arrive_in_three_shapes():
+    from on_record_ingest.pipeline import _epoch_ms
+
+    assert _epoch_ms(1_700_000_000_000) == 1_700_000_000_000
+    assert _epoch_ms("1700000000000") == 1_700_000_000_000
+    # The YouTube API and the database both answer with ISO.
+    assert _epoch_ms("2026-08-03T17:32:13.000Z") == 1785778333000
+    assert _epoch_ms(None) == 0
+    assert _epoch_ms("not a date") == 0

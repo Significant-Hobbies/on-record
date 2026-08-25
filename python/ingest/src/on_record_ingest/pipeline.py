@@ -20,7 +20,7 @@ from .seed.people import PEOPLE
 from .seed.shows import SHOWS
 from .seed.topics import TOPICS
 from .segment import cues_to_segments
-from .sources import podcast_index, rss_feed, youtube_rss
+from .sources import podcast_index, rss_feed, youtube_api, youtube_rss
 from .transcripts.rss_transcript import parse_transcript
 from .transcripts.whisper_local import TranscriptionUnavailable
 from .transcripts.whisper_local import transcribe as whisper_transcribe
@@ -30,6 +30,8 @@ LOGGER = logging.getLogger("on_record_ingest")
 STAGES = (
     "discover",
     "youtube-ids",
+    "youtube-api",
+    "youtube-verify",
     "transcripts",
     "extract",
     "publish",
@@ -499,6 +501,123 @@ def run_extract(
 RETIME_STATUSES = ("segmented", "extracted", "published")
 
 
+def _epoch_ms(value: Any) -> int:
+    """Epoch milliseconds from either a stored timestamp or an ISO string.
+
+    The API answers with ISO; the database answers with ISO too once Drizzle
+    has serialised it; discovery wrote milliseconds. All three arrive here.
+    """
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value or "").strip()
+    if not text:
+        return 0
+    if text.isdigit():
+        return int(text)
+    try:
+        return int(datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp() * 1000)
+    except ValueError:
+        return 0
+
+
+def match_uploads(episodes: list[dict[str, Any]], videos: list[dict[str, Any]]) -> dict[str, str]:
+    """Pair episodes with videos by title and publication date.
+
+    Both signals are needed. Title alone once scored a cancer-research upload
+    as a perfect match for an a16z episode, because a two word title sits
+    inside any longer one.
+    """
+    pairs: dict[str, str] = {}
+    for episode in episodes:
+        if episode.get("youtubeVideoId"):
+            continue
+        merged = merge_video(
+            {
+                "title": episode.get("title"),
+                "publishedAt": _epoch_ms(episode.get("publishedAt")),
+                "sourceUrl": episode.get("sourceUrl"),
+            },
+            videos,
+        )
+        video_id = merged.get("youtubeVideoId")
+        if video_id:
+            pairs[str(episode["id"])] = str(video_id)
+    return pairs
+
+
+def run_youtube_verify(api: ApiClient, cfg: Settings) -> dict[str, int]:
+    """Drop video links that are not on the show's own channel.
+
+    Mining ids out of episode metadata takes the first YouTube link in the
+    blurb, and show notes link the guest's other appearances: Lex episodes
+    ended up pointing at Tucker Carlson's channel, at TED, at FloGrappling.
+    A deep link to a stranger's video is worse than no link, because a reader
+    clicks it expecting the quote.
+    """
+    if not cfg.youtube_api_key:
+        raise SystemExit("YOUTUBE_API_KEY is required for this stage")
+    shows = {s["slug"]: s.get("youtubeChannelId") for s in SHOWS}
+    slug_of = {row["id"]: row["slug"] for row in api.list_shows()}
+    episodes = [e for e in api.list_episodes() if e.get("youtubeVideoId")]
+    tally = {"kept": 0, "wrong_channel": 0, "gone": 0}
+    with httpx.Client() as client:
+        owners = youtube_api.channels_for(
+            [str(e["youtubeVideoId"]) for e in episodes], cfg.youtube_api_key, client
+        )
+    for episode in episodes:
+        expected = shows.get(slug_of.get(str(episode.get("showId")), ""))
+        owner = owners.get(str(episode["youtubeVideoId"]))
+        if owner and expected and owner == expected:
+            tally["kept"] += 1
+            continue
+        tally["gone" if owner is None else "wrong_channel"] += 1
+        api.set_episode_status(
+            episode["id"], status=str(episode.get("status") or "discovered"), youtubeVideoId=""
+        )
+    LOGGER.info("youtube verify %s", tally)
+    return tally
+
+
+def run_youtube_api(api: ApiClient, cfg: Settings) -> int:
+    """Fill in video ids from each show's full uploads list."""
+    if not cfg.youtube_api_key:
+        raise SystemExit("YOUTUBE_API_KEY is required for this stage")
+    shows = {s["slug"]: s for s in SHOWS}
+    show_ids = {row["id"]: row["slug"] for row in api.list_shows()}
+    episodes = api.list_episodes()
+    filled = 0
+    with httpx.Client() as client:
+        for show_id, slug in show_ids.items():
+            channel = (shows.get(slug) or {}).get("youtubeChannelId")
+            if not channel:
+                continue
+            videos = youtube_api.fetch_uploads(channel, cfg.youtube_api_key, client)
+            mine = [e for e in episodes if e.get("showId") == show_id]
+            pairs = match_uploads(mine, [_as_video(v) for v in videos])
+            LOGGER.info(
+                "%s: %s videos, matched %s of %s episodes", slug, len(videos), len(pairs), len(mine)
+            )
+            for episode_id, video_id in pairs.items():
+                episode = next(e for e in mine if e["id"] == episode_id)
+                api.set_episode_status(
+                    episode_id,
+                    status=str(episode.get("status") or "discovered"),
+                    youtubeVideoId=video_id,
+                )
+                filled += 1
+    LOGGER.info("youtube api filled %s ids", filled)
+    return filled
+
+
+def _as_video(video: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "title": video.get("title"),
+        "publishedAt": _epoch_ms(video.get("publishedAt")),
+        "youtubeVideoId": video.get("youtubeVideoId"),
+        "sourceUrl": f"https://www.youtube.com/watch?v={video.get('youtubeVideoId')}",
+    }
+
+
 def run_youtube_ids(api: ApiClient, limit: int = 0) -> int:
     """Recover video ids already linked in metadata we hold.
 
@@ -684,6 +803,12 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 except Exception as exc:
                     LOGGER.warning("discover %s failed: %s", show["slug"], exc)
+        if args.stage == "youtube-verify":
+            run_youtube_verify(api, cfg)
+            return 0
+        if args.stage == "youtube-api":
+            run_youtube_api(api, cfg)
+            return 0
         if args.stage == "youtube-ids":
             run_youtube_ids(api, args.limit)
             return 0
