@@ -43,4 +43,26 @@
   still fails over — observed falling back to codestral-latest and
   mistral-medium-latest once gemini was spent. Keep `X-Gateway-Force-Model`
   for deliberate pinning only (`ON_RECORD_FORCE_MODEL`).
+- The shows publish their own transcripts; we were only ever checking the RSS
+  tag. `<podcast:transcript>` appears twice in 4,197 feed items, so the
+  conclusion was "nobody publishes transcripts" — but that tag is not how they
+  publish them. Fetching one real episode page per show on 2026-08-26 found
+  seven of ten carry a full transcript, three of those with speaker labels and
+  timestamps. Recorded per show as `transcript` in `seed/shows.py`.
+- Lex Fridman's are the best data in the project. `lexfridman.com/<slug>-transcript`
+  serves `div.ts-segment` blocks holding `ts-name`, `ts-timestamp` (wrapping a
+  YouTube deep link) and `ts-text` — 513 turns and 29,359 words on the episode
+  measured, speakers named by the publisher. That skips diarization, the
+  speaker-identification pass and the confidence gate, which are the three
+  places attribution has gone wrong. The episode page itself is a stub; the
+  transcript is at a separate URL.
+- Ranking the transcript sources by what they cost and what they carry:
+  publisher page (free, authoritative speakers, ~40% of the corpus) beats
+  YouTube captions (free but IP rate-limited, no speakers) beats Whisper
+  (unlimited, 4.5 min an episode, speakers only via diarization). The
+  resolution order should follow that, and until now it started with the one
+  source that never fires.
+- YouTube caption availability cannot be measured from a warm IP. A sample of
+  12 verified video ids returned captions 12/12; twenty minutes later the same
+  ids returned 0/5. Nothing changed but the request count.
 

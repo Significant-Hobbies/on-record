@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import os
 import shutil
 import subprocess
 import tempfile
@@ -29,11 +30,16 @@ LOGGER = logging.getLogger("on_record_ingest")
 
 Cue = dict[str, float | str]
 
-MODEL_DIR = (
-    Path.home()
+# Overridable so a machine with a different model directory does not have to
+# edit code, and so nothing is ever downloaded unasked. Borrowed from mashup's
+# transcriber, which does the same — see "Kept in sync with Mashup" in AGENTS.md.
+MODEL_DIR = Path(
+    os.getenv("ON_RECORD_WHISPERKIT_MODEL")
+    or Path.home()
     / "Documents/huggingface/models/argmaxinc/whisperkit-coreml"
     / "openai_whisper-large-v3-v20240930_turbo"
-)
+).expanduser()
+LANGUAGE = "en"
 # Whisper emits its control tokens inline: <|startoftranscript|>, <|3.78|>.
 SPECIAL_TOKEN = re.compile(r"<\|[^|>]*\|>")
 
@@ -90,6 +96,14 @@ def cues_from_report(report: dict[str, Any]) -> list[Cue]:
     return cues
 
 
+class TranscriptionUnavailable(RuntimeError):
+    """The audio could not be fetched or decoded — try again another day.
+
+    Distinct from "this episode has no transcript", which is permanent. A CDN
+    that stalls must not retire an episode forever.
+    """
+
+
 def turns_from_rttm(rttm: str) -> list[dict[str, Any]]:
     """Speaker turns from WhisperKit's RTTM output.
 
@@ -130,6 +144,17 @@ def _run_whisper(wav: Path, workdir: Path, speakers: int = 0) -> list[Cue]:
         str(wav),
         "--model-path",
         str(MODEL_DIR),
+        # Pin the language. Auto-detection on an accented English speaker can
+        # decide the audio is another language and translate it, which would
+        # silently break every verbatim quote taken from that episode.
+        "--language",
+        LANGUAGE,
+        # Pin the chunking strategy rather than inherit whatever the default
+        # becomes. Mashup measured `vad` re-emitting whole decoded windows for
+        # 49% duplicate cues; ours currently sits at 5% and those are real
+        # ("Yeah.", "Right."), so this locks in the behaviour we verified.
+        "--chunking-strategy",
+        "none",
         "--report",
         "--report-path",
         str(workdir),
@@ -138,10 +163,16 @@ def _run_whisper(wav: Path, workdir: Path, speakers: int = 0) -> list[Cue]:
         # Left unconstrained it split one host across two labels. The roster
         # already tells us how many voices to expect.
         command += ["--diarization", "--diarization-num-speakers", str(speakers)]
-    result = subprocess.run(command, check=True, capture_output=True, timeout=7200)
+    result = subprocess.run(command, capture_output=True, timeout=7200, check=False)
+    if result.returncode != 0:
+        # Raising matters: returning nothing here reads to the caller as "this
+        # episode has no transcript", and the episode is then retired for good.
+        raise TranscriptionUnavailable(
+            f"whisperkit-cli failed: {result.stderr.decode('utf-8', 'replace').strip()[-300:]}"
+        )
     report = workdir / f"{wav.stem}.json"
     if not report.is_file():
-        return []
+        raise TranscriptionUnavailable("whisperkit-cli produced no report")
     cues = cues_from_report(json.loads(report.read_text()))
     if not speakers:
         return cues
@@ -152,14 +183,6 @@ def _run_whisper(wav: Path, workdir: Path, speakers: int = 0) -> list[Cue]:
         if speaker:
             cue["speaker"] = speaker
     return cues
-
-
-class TranscriptionUnavailable(RuntimeError):
-    """The audio could not be fetched or decoded — try again another day.
-
-    Distinct from "this episode has no transcript", which is permanent. A CDN
-    that stalls must not retire an episode forever.
-    """
 
 
 def transcribe(audio_url: str, client: httpx.Client | None = None, speakers: int = 0) -> list[Cue]:
@@ -175,9 +198,6 @@ def transcribe(audio_url: str, client: httpx.Client | None = None, speakers: int
         _to_wav(source, wav)
         source.unlink(missing_ok=True)
         return _run_whisper(wav, workdir, speakers)
-    except subprocess.CalledProcessError as exc:
-        LOGGER.warning("whisper failed: %s", (exc.stderr or b"")[:200])
-        return []
     except (httpx.HTTPError, OSError, ValueError) as exc:
         LOGGER.warning("whisper could not transcribe %s: %s", audio_url[:60], exc)
         raise TranscriptionUnavailable(str(exc)) from exc
