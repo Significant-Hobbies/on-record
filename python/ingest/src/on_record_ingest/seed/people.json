@@ -12604,5 +12604,140 @@
   "matchAliases": [],
   "source": "mined",
   "appearances": 1
+ },
+ {
+  "slug": "lenny-rachitsky",
+  "name": "Lenny Rachitsky",
+  "title": "Host",
+  "org": "Lenny's Newsletter",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "patrick-o-shaughnessy",
+  "name": "Patrick O'Shaughnessy",
+  "title": "CEO",
+  "org": "Positive Sum",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "david-friedberg",
+  "name": "David Friedberg",
+  "title": "CEO",
+  "org": "Ohalo",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "sam-parr",
+  "name": "Sam Parr",
+  "title": "Founder",
+  "org": "The Hustle",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "shaan-puri",
+  "name": "Shaan Puri",
+  "title": "Investor",
+  "org": "Independent",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "kevin-roose",
+  "name": "Kevin Roose",
+  "title": "Columnist",
+  "org": "The New York Times",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "casey-newton",
+  "name": "Casey Newton",
+  "title": "Founder",
+  "org": "Platformer",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "joe-weisenthal",
+  "name": "Joe Weisenthal",
+  "title": "Host",
+  "org": "Bloomberg",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "tracy-alloway",
+  "name": "Tracy Alloway",
+  "title": "Host",
+  "org": "Bloomberg",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "tim-scarfe",
+  "name": "Tim Scarfe",
+  "title": "Host",
+  "org": "Machine Learning Street Talk",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "jacob-effron",
+  "name": "Jacob Effron",
+  "title": "Partner",
+  "org": "Redpoint",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "john-coogan",
+  "name": "John Coogan",
+  "title": "Host",
+  "org": "TBPN",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "jordi-hays",
+  "name": "Jordi Hays",
+  "title": "Host",
+  "org": "TBPN",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "john-collison",
+  "name": "John Collison",
+  "title": "Co-founder",
+  "org": "Stripe",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
+ },
+ {
+  "slug": "turner-novak",
+  "name": "Turner Novak",
+  "title": "Founder",
+  "org": "Banana Capital",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "curated-host"
  }
 ]
