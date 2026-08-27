@@ -3,11 +3,13 @@
   "entries": [
     {
       "identifier": "urn:air:podcasts.highsignal.app:skill:evidence",
+      "displayName": "High Signal Podcasts evidence skill",
       "type": "application/ai-skill+md",
       "url": "https://podcasts.highsignal.app/.well-known/agent-skills/on-record-evidence/SKILL.md"
     },
     {
       "identifier": "urn:air:api.podcasts.highsignal.app:openapi:public",
+      "displayName": "High Signal Podcasts public API",
       "type": "application/openapi+json",
       "url": "https://podcasts.highsignal.app/openapi.json"
     }
