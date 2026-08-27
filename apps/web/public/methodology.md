@@ -1,4 +1,4 @@
-# Methodology — High Signal Podcasts
+# Methodology: High Signal Podcasts
 
 High Signal Podcasts indexes public statements as claims. A published record has
 a speaker, an assertion, a verbatim excerpt found in the stored transcript

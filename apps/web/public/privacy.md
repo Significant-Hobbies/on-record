@@ -1,4 +1,4 @@
-# Privacy — High Signal Podcasts
+# Privacy: High Signal Podcasts
 
 The public website and read-only API currently require no reader account or
 profile. The product does not ask readers to submit private podcast material.

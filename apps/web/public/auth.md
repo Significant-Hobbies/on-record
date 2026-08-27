@@ -1,4 +1,4 @@
-# Authentication — High Signal Podcasts
+# Authentication: High Signal Podcasts
 
 ## Public website and API
 

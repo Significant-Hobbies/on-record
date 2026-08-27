@@ -1,4 +1,4 @@
-# Sources — High Signal Podcasts
+# Sources: High Signal Podcasts
 
 The source index contains public podcast episodes that support at least one
 published claim. It is not a general podcast directory.

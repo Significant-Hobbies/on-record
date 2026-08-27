@@ -3,7 +3,7 @@ import '../styles/global.css';
 
 const {
   title = 'High Signal Podcasts',
-  description = 'What notable people actually said on podcasts — attributable claims, recommendations, books, and tools with verbatim evidence.',
+  description = 'What notable people actually said on podcasts, with attributable claims, recommendations, books, tools, and verbatim evidence.',
 } = Astro.props;
 const siteUrl = 'https://podcasts.highsignal.app';
 const canonical = new URL(Astro.url.pathname, siteUrl).toString();
@@ -56,7 +56,7 @@ const structuredData = JSON.stringify({
     <meta property="og:image" content={`${siteUrl}/og-card.png`} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="High Signal Podcasts — what notable people actually said" />
+    <meta property="og:image:alt" content="High Signal Podcasts: what notable people actually said" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />

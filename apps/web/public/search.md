@@ -1,4 +1,4 @@
-# Search — High Signal Podcasts
+# Search: High Signal Podcasts
 
 Search returns only published claims from the current evidence corpus.
 

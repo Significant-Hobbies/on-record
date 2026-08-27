@@ -1,4 +1,4 @@
-# Recommendations — High Signal Podcasts
+# Recommendations: High Signal Podcasts
 
 This surface contains books, tools, products, and other actionable references
 linked to published podcast claims and primary evidence.

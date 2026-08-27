@@ -1,4 +1,4 @@
-# Public API — High Signal Podcasts
+# Public API: High Signal Podcasts
 
 Base URL: `https://api.podcasts.highsignal.app`
 

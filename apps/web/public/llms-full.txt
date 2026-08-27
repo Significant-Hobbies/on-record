@@ -1,4 +1,4 @@
-# High Signal Podcasts — agent guide
+# High Signal Podcasts: agent guide
 
 High Signal Podcasts, also called On the Record in the repository, is a public
 index of evidence-backed statements and recommendations from notable podcast
@@ -21,15 +21,15 @@ record of everything a person has said.
 
 Base URL: `https://api.podcasts.highsignal.app`
 
-- `GET /api/stats` — public corpus counts.
-- `GET /api/people` — people with published claims.
-- `GET /api/people/{slug}` — one person, published claims, and recommendations.
-- `GET /api/claims/{id}` — one published claim with evidence and references.
-- `GET /api/sources` — source episodes with published claims.
-- `GET /api/sources/{id}` — one source and its published claims.
-- `GET /api/search` — published claim search; supports `q`, `person`, `type`,
+- `GET /api/stats`: public corpus counts.
+- `GET /api/people`: people with published claims.
+- `GET /api/people/{slug}`: one person, published claims, and recommendations.
+- `GET /api/claims/{id}`: one published claim with evidence and references.
+- `GET /api/sources`: source episodes with published claims.
+- `GET /api/sources/{id}`: one source and its published claims.
+- `GET /api/search`: published claim search; supports `q`, `person`, `type`,
   `topic`, `from`, and `to`.
-- `GET /api/recommendations` — published source-linked references; supports
+- `GET /api/recommendations`: published source-linked references; supports
   `person`, `kind`, and `role`.
 
 The public surfaces need no API key, user account, or checkout at present.

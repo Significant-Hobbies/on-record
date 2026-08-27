@@ -1,4 +1,4 @@
-# People — High Signal Podcasts
+# People: High Signal Podcasts
 
 The people index lists active speakers who have at least one published claim in
 the current corpus. It is not a complete guest roster.

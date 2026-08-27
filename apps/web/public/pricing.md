@@ -1,5 +1,5 @@
 ---
-title: Access and pricing — High Signal Podcasts
+title: "Access and pricing: High Signal Podcasts"
 description: Current access state for the public evidence index and read-only API.
 canonical: https://podcasts.highsignal.app/pricing.md
 ---

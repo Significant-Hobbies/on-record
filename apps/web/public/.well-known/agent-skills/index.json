@@ -6,7 +6,7 @@
       "type": "skill-md",
       "description": "Use High Signal Podcasts to find and cite source-backed claims, recommendations, books, and tools from notable podcast guests.",
       "url": "/.well-known/agent-skills/on-record-evidence/SKILL.md",
-      "digest": "sha256:6bd3115505859bd0e8adf2acf1d1221f92752d964f912ff085e544796c8a7918"
+      "digest": "sha256:5f8464670f58f304d7effe103b9f2bb779c492160b028bef8e44ad50e7b6a0e4"
     }
   ]
 }

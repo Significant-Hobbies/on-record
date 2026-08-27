@@ -29,7 +29,7 @@ try {
   missing = true;
 }
 ---
-<Layout title={`${person?.name ?? slug} — High Signal Podcasts`}>
+<Layout title={`${person?.name ?? slug}: High Signal Podcasts`}>
   {missing || !person ? (
     <p class="empty">Insufficient evidence for this person.</p>
   ) : (
@@ -38,7 +38,7 @@ try {
       <p class="meta">{[person.title, person.org].filter(Boolean).join(' · ')}</p>
       <h2>Recommendations and personal stack</h2>
       {recommendations.length === 0 ? (
-        <p class="empty">Insufficient evidence — no named books, apps, or tools yet.</p>
+        <p class="empty">Insufficient evidence. No named books, apps, or tools are published yet.</p>
       ) : (
         recommendations.map((item) => (
           <article class="card">

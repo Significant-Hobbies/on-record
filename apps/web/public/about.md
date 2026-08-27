@@ -1,4 +1,4 @@
-# About — High Signal Podcasts
+# About: High Signal Podcasts
 
 High Signal Podcasts is a High Signal project for finding attributable ideas and
 recommendations in long public conversations. It indexes the claim rather than

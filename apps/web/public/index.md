@@ -4,7 +4,7 @@ description: Source-backed claims and recommendations from notable podcast guest
 canonical: https://podcasts.highsignal.app/
 ---
 
-# What notable people actually said—without listening to every episode
+# What notable people actually said, without listening to every episode
 
 High Signal Podcasts is a public evidence index of attributable claims,
 recommendations, books, and tools from notable podcast guests. The unit is the
