@@ -11,14 +11,14 @@
       "get": {
         "operationId": "getCorpusStats",
         "summary": "Get public corpus counts",
-        "responses": { "200": { "description": "Current counts of people, episodes, published claims, and references" } }
+        "responses": { "200": { "description": "Current counts of people, episodes, published claims, and references", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Stats" } } } } }
       }
     },
     "/api/people": {
       "get": {
         "operationId": "listPeople",
         "summary": "List active people with published claims",
-        "responses": { "200": { "description": "People with public evidence" } }
+        "responses": { "200": { "description": "People with public evidence", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeopleResponse" } } } } }
       }
     },
     "/api/people/{slug}": {
@@ -27,8 +27,8 @@
         "summary": "Get one person with published claims and recommendations",
         "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
         "responses": {
-          "200": { "description": "Person, claims, and recommendations" },
-          "404": { "description": "No active person found" }
+          "200": { "description": "Person, claims, and recommendations", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PersonEvidenceResponse" } } } },
+          "404": { "description": "No active person found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
@@ -38,8 +38,8 @@
         "summary": "Get one published claim with evidence and actionable references",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
         "responses": {
-          "200": { "description": "Published claim, evidence, and references" },
-          "404": { "description": "No published claim found" }
+          "200": { "description": "Published claim, evidence, and references", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ClaimEvidenceResponse" } } } },
+          "404": { "description": "No published claim found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
@@ -47,7 +47,7 @@
       "get": {
         "operationId": "listSources",
         "summary": "List source episodes with published claims",
-        "responses": { "200": { "description": "Up to 100 source episodes" } }
+        "responses": { "200": { "description": "Up to 100 source episodes", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SourcesResponse" } } } } }
       }
     },
     "/api/sources/{id}": {
@@ -56,8 +56,8 @@
         "summary": "Get one source episode and its published claims",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
         "responses": {
-          "200": { "description": "Source and published claims" },
-          "404": { "description": "Source not found" }
+          "200": { "description": "Source and published claims", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SourceEvidenceResponse" } } } },
+          "404": { "description": "Source not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
@@ -73,7 +73,7 @@
           { "name": "from", "in": "query", "schema": { "type": "string", "format": "date" } },
           { "name": "to", "in": "query", "schema": { "type": "string", "format": "date" } }
         ],
-        "responses": { "200": { "description": "Published claims or an explicit insufficient-evidence result" } }
+        "responses": { "200": { "description": "Published claims or an explicit insufficient-evidence result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ClaimsResponse" } } } } }
       }
     },
     "/api/recommendations": {
@@ -85,7 +85,142 @@
           { "name": "kind", "in": "query", "description": "Reference kind such as book, tool, or product", "schema": { "type": "string" } },
           { "name": "role", "in": "query", "description": "Actionable role such as recommends or uses", "schema": { "type": "string" } }
         ],
-        "responses": { "200": { "description": "Published references or an explicit insufficient-evidence result" } }
+        "responses": { "200": { "description": "Published references or an explicit insufficient-evidence result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RecommendationsResponse" } } } } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } },
+        "additionalProperties": true
+      },
+      "Person": {
+        "type": "object",
+        "required": ["id", "name", "slug", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "slug": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "hidden"] },
+          "title": { "type": ["string", "null"] },
+          "org": { "type": ["string", "null"] },
+          "bio": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "Claim": {
+        "type": "object",
+        "required": ["id", "personId", "episodeId", "assertion", "quote", "claimType", "reviewStatus"],
+        "properties": {
+          "id": { "type": "string" },
+          "personId": { "type": "string" },
+          "episodeId": { "type": "string" },
+          "assertion": { "type": "string" },
+          "quote": { "type": "string" },
+          "claimType": { "type": "string" },
+          "reviewStatus": { "type": "string" },
+          "saidOn": { "type": ["string", "null"], "format": "date-time" },
+          "timestampS": { "type": ["number", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "Source": {
+        "type": "object",
+        "required": ["id", "showId", "title", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "showId": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "string" },
+          "publishedAt": { "type": ["string", "null"], "format": "date-time" },
+          "sourceUrl": { "type": ["string", "null"], "format": "uri" }
+        },
+        "additionalProperties": true
+      },
+      "Recommendation": {
+        "type": "object",
+        "required": ["claimId", "personId", "name", "kind", "role", "assertion", "quote"],
+        "properties": {
+          "claimId": { "type": "string" },
+          "personId": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": { "type": "string" },
+          "role": { "type": "string" },
+          "assertion": { "type": "string" },
+          "quote": { "type": "string" },
+          "deepLinkUrl": { "type": ["string", "null"], "format": "uri" },
+          "sourceUrl": { "type": ["string", "null"], "format": "uri" },
+          "episodeTitle": { "type": "string" },
+          "showName": { "type": "string" },
+          "saidOn": { "type": ["string", "null"], "format": "date-time" },
+          "timestampS": { "type": ["number", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "Stats": {
+        "type": "object",
+        "required": ["people", "episodes", "publishedClaims", "publishedReferences"],
+        "properties": {
+          "people": { "type": "integer", "minimum": 0 },
+          "episodes": { "type": "integer", "minimum": 0 },
+          "publishedClaims": { "type": "integer", "minimum": 0 },
+          "publishedReferences": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "PeopleResponse": {
+        "type": "object",
+        "required": ["people"],
+        "properties": { "people": { "type": "array", "items": { "$ref": "#/components/schemas/Person" } } }
+      },
+      "ClaimsResponse": {
+        "type": "object",
+        "required": ["claims"],
+        "properties": {
+          "claims": { "type": "array", "items": { "$ref": "#/components/schemas/Claim" } },
+          "evidence": { "type": "string", "enum": ["insufficient"] }
+        }
+      },
+      "RecommendationsResponse": {
+        "type": "object",
+        "required": ["recommendations"],
+        "properties": {
+          "recommendations": { "type": "array", "items": { "$ref": "#/components/schemas/Recommendation" } },
+          "evidence": { "type": "string", "enum": ["insufficient"] }
+        }
+      },
+      "PersonEvidenceResponse": {
+        "type": "object",
+        "required": ["person", "claims", "recommendations"],
+        "properties": {
+          "person": { "$ref": "#/components/schemas/Person" },
+          "claims": { "type": "array", "items": { "$ref": "#/components/schemas/Claim" } },
+          "recommendations": { "type": "array", "items": { "$ref": "#/components/schemas/Recommendation" } }
+        }
+      },
+      "ClaimEvidenceResponse": {
+        "type": "object",
+        "required": ["claim", "evidence", "references"],
+        "properties": {
+          "claim": { "$ref": "#/components/schemas/Claim" },
+          "evidence": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "references": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+        }
+      },
+      "SourcesResponse": {
+        "type": "object",
+        "required": ["sources"],
+        "properties": { "sources": { "type": "array", "items": { "$ref": "#/components/schemas/Source" } } }
+      },
+      "SourceEvidenceResponse": {
+        "type": "object",
+        "required": ["source", "claims"],
+        "properties": {
+          "source": { "$ref": "#/components/schemas/Source" },
+          "claims": { "type": "array", "items": { "$ref": "#/components/schemas/Claim" } }
+        }
       }
     }
   }
