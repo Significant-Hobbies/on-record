@@ -18,8 +18,17 @@ const agentView = {
   },
   discovery: {
     catalog: 'https://podcasts.highsignal.app/api/ai',
+    apiCatalog: 'https://podcasts.highsignal.app/.well-known/api-catalog',
     llms: 'https://podcasts.highsignal.app/llms.txt',
+    markdown: 'https://podcasts.highsignal.app/index.md',
+    sitemap: 'https://podcasts.highsignal.app/sitemap.xml',
     skill: 'https://podcasts.highsignal.app/.well-known/agent-skills/on-record-evidence/SKILL.md',
+  },
+  guidance: {
+    developers: 'https://podcasts.highsignal.app/developers',
+    methodology: 'https://podcasts.highsignal.app/methodology',
+    access: 'https://podcasts.highsignal.app/pricing',
+    contact: 'https://podcasts.highsignal.app/contact',
   },
 };
 
@@ -33,6 +42,8 @@ const markdownRoutes = new Map([
   ['/developers', '/developers.md'],
   ['/about', '/about.md'],
   ['/privacy', '/privacy.md'],
+  ['/pricing', '/pricing.md'],
+  ['/contact', '/contact.md'],
 ]);
 
 export const onRequest = defineMiddleware(async (context, next) => {

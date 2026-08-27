@@ -30,4 +30,5 @@ evidence instead of generalizing beyond published records.
 - [API documentation](https://podcasts.highsignal.app/developers): Public read-only API guide
 - [Authentication](https://podcasts.highsignal.app/auth.md): Public and administrative access boundary
 - [Pricing and access](https://podcasts.highsignal.app/pricing.md): Current no-charge state without a permanent pricing promise
+- [Contact](https://podcasts.highsignal.app/contact): Questions, corrections, and privacy concerns
 - [RFC 9727 API catalog](https://podcasts.highsignal.app/.well-known/api-catalog): Machine-readable API discovery

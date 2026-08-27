@@ -18,21 +18,61 @@ const nav = [
 ];
 const structuredData = JSON.stringify({
   '@context': 'https://schema.org',
-  '@type': 'WebSite',
-  name: 'High Signal Podcasts',
-  alternateName: 'On the Record',
-  url: siteUrl,
-  description,
-  isPartOf: {
-    '@type': 'WebSite',
-    name: 'High Signal',
-    url: 'https://highsignal.app',
-  },
-  potentialAction: {
-    '@type': 'SearchAction',
-    target: `${siteUrl}/search?q={search_term_string}`,
-    'query-input': 'required name=search_term_string',
-  },
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${siteUrl}/#organization`,
+      name: 'High Signal',
+      url: 'https://highsignal.app',
+      logo: `${siteUrl}/favicon.svg`,
+      sameAs: ['https://github.com/Significant-Hobbies'],
+      contactPoint: {
+        '@type': 'ContactPoint',
+        contactType: 'questions and corrections',
+        url: 'https://github.com/Significant-Hobbies/on-record/issues',
+        availableLanguage: 'English',
+      },
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${siteUrl}/#website`,
+      name: 'High Signal Podcasts',
+      alternateName: 'On the Record',
+      url: siteUrl,
+      description,
+      publisher: { '@id': `${siteUrl}/#organization` },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${siteUrl}/search?q={search_term_string}`,
+        'query-input': 'required name=search_term_string',
+      },
+    },
+    {
+      '@type': 'Dataset',
+      '@id': `${siteUrl}/#dataset`,
+      name: 'High Signal Podcasts public evidence corpus',
+      description: 'Published podcast claims and recommendations with verbatim excerpts and source evidence.',
+      url: siteUrl,
+      sameAs: ['https://github.com/Significant-Hobbies/on-record'],
+      creator: { '@id': `${siteUrl}/#organization` },
+      distribution: {
+        '@type': 'DataDownload',
+        contentUrl: 'https://api.podcasts.highsignal.app/api/stats',
+        encodingFormat: 'application/json',
+      },
+    },
+    {
+      '@type': 'HowTo',
+      '@id': `${siteUrl}/#method`,
+      name: 'How High Signal Podcasts publishes evidence',
+      description: 'The three-stage process used to turn public podcast records into auditable claims.',
+      step: [
+        { '@type': 'HowToStep', position: 1, name: 'Ingest the public record', text: 'Turn publisher transcripts and available captions into bounded source segments.' },
+        { '@type': 'HowToStep', position: 2, name: 'Extract attributable claims', text: 'Keep names, ideas, books, apps, and tools tied to the words that support them.' },
+        { '@type': 'HowToStep', position: 3, name: 'Publish auditable rows', text: 'Keep low-confidence speakers and unsupported interpretations out of the public index.' },
+      ],
+    },
+  ],
 });
 ---
 <!doctype html>
@@ -102,7 +142,8 @@ const structuredData = JSON.stringify({
           <a href="/developers">Public API</a>
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
-          <a href="/pricing.md">Access state</a>
+          <a href="/pricing">Access state</a>
+          <a href="/contact">Contact</a>
           <a href="https://github.com/Significant-Hobbies/on-record">Source code ↗</a>
         </div>
       </footer>

@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://podcasts.highsignal.app/</loc></url>
-  <url><loc>https://podcasts.highsignal.app/people</loc></url>
-  <url><loc>https://podcasts.highsignal.app/recommendations</loc></url>
-  <url><loc>https://podcasts.highsignal.app/sources</loc></url>
-  <url><loc>https://podcasts.highsignal.app/search</loc></url>
-  <url><loc>https://podcasts.highsignal.app/methodology</loc></url>
-  <url><loc>https://podcasts.highsignal.app/developers</loc></url>
-  <url><loc>https://podcasts.highsignal.app/about</loc></url>
-  <url><loc>https://podcasts.highsignal.app/privacy</loc></url>
+  <url><loc>https://podcasts.highsignal.app/</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/people</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/recommendations</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/sources</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/search</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/methodology</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/developers</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/about</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/privacy</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/pricing</loc><lastmod>2026-08-27</lastmod></url>
+  <url><loc>https://podcasts.highsignal.app/contact</loc><lastmod>2026-08-27</lastmod></url>
 </urlset>

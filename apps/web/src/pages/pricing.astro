@@ -1,0 +1,25 @@
+---
+import Layout from '../layouts/Base.astro';
+---
+<Layout
+  title="Access and pricing: High Signal Podcasts"
+  description="Current access and pricing state for the High Signal Podcasts website and public read-only API."
+>
+  <section class="info-page">
+    <p class="eyebrow">Current access state</p>
+    <h1>Browse the public index without an account or charge.</h1>
+    <p class="lede">
+      The website and public read-only API currently require no account, API key, subscription,
+      or checkout. This describes the product today and does not promise a permanent pricing model.
+    </p>
+    <div class="info-grid">
+      <article><p class="folio">Website / 01</p><h2>Public browsing.</h2><p>Search claims and browse people, sources, and recommendations without signing up.</p></article>
+      <article><p class="folio">API / 02</p><h2>Read-only access.</h2><p>Published evidence is available through the documented GET endpoints without an API key.</p></article>
+      <article><p class="folio">Boundary / 03</p><h2>No permanent promise.</h2><p>The repository establishes no future plan, paid tier, or permanent free tier, so none is claimed here.</p></article>
+    </div>
+    <div class="info-actions">
+      <a class="button button-primary" href="/search">Search published claims</a>
+      <a class="button button-secondary" href="/developers">Read the API guide</a>
+    </div>
+  </section>
+</Layout>
