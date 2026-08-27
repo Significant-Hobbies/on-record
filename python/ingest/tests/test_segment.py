@@ -95,3 +95,17 @@ def test_overlap_is_kept_within_one_speaker():
     assert all(s["speakerHint"] == "A" for s in segments)
     # A length-based split still carries context forward.
     assert any(seg["text"].startswith("word") or "chunk" in seg["text"] for seg in segments[1:])
+
+
+def test_one_oversized_publisher_cue_is_bounded_without_inventing_timestamps():
+    text = " ".join(f"Sentence {index} carries source words." for index in range(400))
+    segments = cues_to_segments(
+        [{"start": 10.0, "duration": 90.0, "text": text}],
+        target_chars=1000,
+    )
+    assert len(segments) > 1
+    assert all(len(segment["text"]) <= 1200 for segment in segments)
+    assert all(segment["startS"] == 10.0 for segment in segments)
+    assert all(segment["endS"] == 100.0 for segment in segments)
+    assert "Sentence 0 carries source words." in segments[0]["text"]
+    assert "Sentence 399 carries source words." in segments[-1]["text"]

@@ -1,0 +1,43 @@
+---
+import Layout from '../layouts/Base.astro';
+---
+<Layout
+  title="Public API — High Signal Podcasts"
+  description="Read-only API documentation for source-backed podcast claims, people, sources, search, and recommendations."
+>
+  <section class="info-page">
+    <p class="eyebrow">Public read-only API</p>
+    <h1>Retrieve the evidence without scraping the page.</h1>
+    <p class="lede">
+      The public API exposes only published records. It needs no account or API key and cannot
+      create, edit, review, or publish claims.
+    </p>
+    <div class="info-grid">
+      <article>
+        <p class="folio">Base URL / 01</p>
+        <h2>Start with the corpus.</h2>
+        <code>https://api.podcasts.highsignal.app</code>
+        <p>Use <code>GET /api/stats</code> for counts and <code>GET /api/people</code> for the current speaker index.</p>
+      </article>
+      <article>
+        <p class="folio">Evidence / 02</p>
+        <h2>Keep the receipt attached.</h2>
+        <p><code>GET /api/claims/{'{id}'}</code> returns one published claim with its evidence and actionable references.</p>
+      </article>
+      <article>
+        <p class="folio">Search / 03</p>
+        <h2>Ask only what the corpus can answer.</h2>
+        <p><code>GET /api/search?q=agents</code> supports person, type, topic, and date filters. Empty matches return explicit insufficient evidence.</p>
+      </article>
+    </div>
+    <div class="info-actions">
+      <a class="button button-primary" href="/openapi.json">OpenAPI specification</a>
+      <a class="button button-secondary" href="/auth.md">Authentication boundary</a>
+      <a class="button button-secondary" href="/.well-known/api-catalog">API catalog</a>
+    </div>
+    <p class="info-note">
+      The current public surface is unauthenticated and read-only. Administrative ingestion and
+      review routes are separate, protected operator surfaces and are not documented for public use.
+    </p>
+  </section>
+</Layout>

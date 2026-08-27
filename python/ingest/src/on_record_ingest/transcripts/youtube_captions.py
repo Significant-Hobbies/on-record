@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import logging
 
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import (
+    NoTranscriptFound,
+    TranscriptsDisabled,
+    YouTubeTranscriptApiException,
+)
+
 LOGGER = logging.getLogger(__name__)
+
+
+class CaptionSourceUnavailable(RuntimeError):
+    """The caption source failed without proving that captions are absent."""
 
 
 def _field(item: object, name: str) -> object:
@@ -14,14 +25,13 @@ def _field(item: object, name: str) -> object:
 
 def fetch_cues(video_id: str) -> list[dict[str, float | str]]:
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-    except ImportError as exc:
-        raise RuntimeError("youtube-transcript-api is required") from exc
-    try:
         items = YouTubeTranscriptApi().fetch(video_id, languages=["en"])
-    except Exception as exc:
-        LOGGER.info("youtube captions failed video=%s error=%s", video_id, exc)
+    except (NoTranscriptFound, TranscriptsDisabled):
         return []
+    except YouTubeTranscriptApiException as exc:
+        error = type(exc).__name__
+        LOGGER.warning("youtube captions unavailable video=%s error=%s", video_id, error)
+        raise CaptionSourceUnavailable(f"youtube captions unavailable: {error}") from exc
     cues: list[dict[str, float | str]] = []
     for item in items:
         text = str(_field(item, "text") or "").replace("\xa0", " ").replace("\n", " ").strip()

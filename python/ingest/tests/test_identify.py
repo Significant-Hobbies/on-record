@@ -57,8 +57,9 @@ def test_a_diarized_segment_decides_its_own_speaker(monkeypatch):
 
     seen = {}
 
-    def fake_extract(cfg, text, prev_tail, roster):
+    def fake_extract(cfg, text, prev_tail, roster, focus):
         seen["roster"] = roster
+        seen["focus"] = focus
         return ([{"speakerRaw": "someone-else", "assertion": "a"}], [], {"model": "m"})
 
     monkeypatch.setattr(pipeline, "extract_segment", fake_extract)
@@ -74,6 +75,7 @@ def test_a_diarized_segment_decides_its_own_speaker(monkeypatch):
         Cfg(), {}, segment, "", ["dwarkesh-patel", "steven-sinofsky"]
     )
     assert seen["roster"] == ["martin-casado"]
+    assert seen["focus"] == "all"
     assert claims[0]["speakerRaw"] == "martin-casado"
 
 

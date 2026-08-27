@@ -22,6 +22,11 @@ pipeline can produce.
 `hostPersonIds` are slugs from `seed/people.py`. Hosts are attached to every
 episode of their show, which is what makes host statements attributable at all;
 without them a roster is only whoever the episode title happens to name.
+
+`includeUnmatchedYoutube` is deliberately rare. When an RSS feed returned
+episodes, channel uploads normally enrich matching rows but do not create new
+ones: podcast channels also publish clips and unrelated videos. Set the flag
+only when YouTube is an intentional episode source for that show.
 """
 
 SHOWS: list[dict] = [
@@ -111,6 +116,7 @@ SHOWS: list[dict] = [
         "name": "BG2Pod",
         "feedUrl": "https://anchor.fm/s/f06c2370/podcast/rss",
         "youtubeChannelId": "UC-yRDvpR99LUc5l7i7jLzew",
+        "includeUnmatchedYoutube": True,
         "hostPersonIds": ["brad-gerstner", "bill-gurley"],
     },
     {
@@ -120,6 +126,7 @@ SHOWS: list[dict] = [
         "name": "Lightcone Podcast",
         "feedUrl": "https://anchor.fm/s/f58d3330/podcast/rss",
         "youtubeChannelId": "UCcefcZRL2oaA_uBNeo5UOWg",
+        "includeUnmatchedYoutube": True,
         "hostPersonIds": ["garry-tan"],
     },
     {
@@ -128,7 +135,9 @@ SHOWS: list[dict] = [
         "feedUrl": "https://api.substack.com/feed/podcast/10845.rss",
         "youtubeChannelId": "UC6t1O76G0jYXOAoYCm153dA",
         "hostPersonIds": ["lenny-rachitsky"],
-        "transcript": "none",
+        # Official Substack pages expose approved, timed transcript JSON and
+        # publisher speaker maps inside their page preload data.
+        "transcript": "structured",
     },
     {
         "slug": "invest-like-the-best",
@@ -242,7 +251,10 @@ SHOWS: list[dict] = [
     {
         "slug": "the-peel",
         "name": "The Peel",
-        "feedUrl": "https://api.substack.com/feed/podcast/3340718.rss",
+        # Apple collection 1694440669 resolves to Turner Novak's Spotify-hosted
+        # feed. The previous Substack id belonged to an unrelated four-episode
+        # farming show (SEEDS / Moringa / Goats) with the same short name.
+        "feedUrl": "https://anchor.fm/s/e231a4ec/podcast/rss",
         "youtubeChannelId": "UCtgBGZihRzzJnbRU7FPpJJw",
         "hostPersonIds": ["turner-novak"],
         "transcript": "none",

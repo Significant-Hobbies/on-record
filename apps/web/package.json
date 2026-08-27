@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy --tag \"$(git rev-parse HEAD)\""
   },
   "dependencies": {
     "astro": "^5.13.2"

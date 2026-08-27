@@ -23,6 +23,18 @@ app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
 app.route('/api', publicRoute);
 app.route('/admin', adminRoute);
 
+app.notFound((c) =>
+  c.json(
+    {
+      error: 'not_found',
+      message: 'No public API route matches this request.',
+      resolution:
+        'Use https://podcasts.highsignal.app/openapi.json for supported read-only routes.',
+    },
+    404
+  )
+);
+
 app.onError((err, c) => {
   console.error(`[error] ${c.req.method} ${c.req.path}:`, err.message);
   return c.json({ error: 'Internal Server Error' }, 500);

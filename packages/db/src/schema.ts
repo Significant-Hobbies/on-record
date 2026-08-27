@@ -98,7 +98,20 @@ export const episodes = sqliteTable(
     statusDetail: text('status_detail'),
     title: text('title').notNull(),
     transcriptKind: text('transcript_kind', {
-      enum: ['rss_vtt', 'rss_srt', 'rss_json', 'youtube_captions', 'whisper_local', 'none'],
+      enum: [
+        'rss_vtt',
+        'rss_srt',
+        'rss_json',
+        'rss_text',
+        'rss_text_coarse',
+        'rss_named_text',
+        'publisher_html',
+        'publisher_html_coarse',
+        'publisher_json',
+        'youtube_captions',
+        'whisper_local',
+        'none',
+      ],
     }),
     updatedAt: integer('updated_at', { mode: 'timestamp' })
       .notNull()
@@ -116,7 +129,7 @@ export const episodePeople = sqliteTable(
   'episode_people',
   {
     attributionSource: text('attribution_source', {
-      enum: ['show_config', 'metadata_match', 'llm'],
+      enum: ['show_config', 'metadata_match', 'publisher_transcript', 'llm'],
     }).notNull(),
     confidence: real('confidence'),
     episodeId: text('episode_id')

@@ -1,4 +1,4 @@
-from on_record_ingest.match import merge_video, titles_close
+from on_record_ingest.match import merge_discovery_items, merge_video, titles_close
 from on_record_ingest.sources.podcast_index import items_from_response
 from datetime import datetime, timezone
 
@@ -23,6 +23,42 @@ def test_merge_video_by_title_and_date():
     ]
     merged = merge_video(episode, videos)
     assert merged["youtubeVideoId"] == "abc123"
+
+
+def test_rss_backed_show_does_not_admit_unmatched_channel_videos():
+    published = 1_700_000_000_000
+    rss = [{"guid": "rss-guid", "title": "A real episode", "publishedAt": published}]
+    matching_video = {
+        "guid": "yt:AAAAAAAAAAA",
+        "title": "A real episode",
+        "publishedAt": published,
+        "youtubeVideoId": "AAAAAAAAAAA",
+    }
+    unmatched_video = {
+        "guid": "yt:BBBBBBBBBBB",
+        "title": "A separate video",
+        "publishedAt": published,
+        "youtubeVideoId": "BBBBBBBBBBB",
+    }
+    merged = merge_discovery_items(
+        rss,
+        [matching_video, unmatched_video],
+        include_unmatched_videos=False,
+    )
+    assert [item["guid"] for item in merged] == ["rss-guid"]
+    assert merged[0]["youtubeVideoId"] == "AAAAAAAAAAA"
+
+
+def test_youtube_primary_show_can_admit_unmatched_channel_videos():
+    rss = [{"guid": "rss-guid", "title": "A real episode", "publishedAt": 1}]
+    video = {
+        "guid": "yt:BBBBBBBBBBB",
+        "title": "Unrelated channel upload",
+        "publishedAt": 1,
+        "youtubeVideoId": "BBBBBBBBBBB",
+    }
+    merged = merge_discovery_items(rss, [video], include_unmatched_videos=True)
+    assert [item["guid"] for item in merged] == ["rss-guid", "yt:BBBBBBBBBBB"]
 
 
 def test_podcast_index_filters_old_items():
@@ -82,24 +118,20 @@ def test_hosts_are_added_and_outrank_metadata_guesses():
     assert roles == {"dwarkesh-patel": "host", "dario-amodei": "guest"}
 
 
-def test_finds_a_video_id_in_any_link_shape():
-    from on_record_ingest.match import video_id_from_metadata
+def test_finds_a_video_id_only_when_the_source_itself_is_youtube():
+    from on_record_ingest.match import video_id_from_source_url
 
-    assert video_id_from_metadata("watch https://youtu.be/QbdbAhaJoCQ now") == "QbdbAhaJoCQ"
+    assert video_id_from_source_url("https://youtu.be/QbdbAhaJoCQ") == "QbdbAhaJoCQ"
     assert (
-        video_id_from_metadata(None, "https://www.youtube.com/watch?v=TfyPshgMbug&t=10s")
+        video_id_from_source_url("https://www.youtube.com/watch?v=TfyPshgMbug&t=10s")
         == "TfyPshgMbug"
     )
-    assert (
-        video_id_from_metadata("<iframe src='https://youtube.com/embed/U1FrhkLQnCI'>")
-        == "U1FrhkLQnCI"
-    )
-    assert video_id_from_metadata("no link here", "https://example.com/ep") is None
-    # The first field that has one wins.
-    assert (
-        video_id_from_metadata("https://youtu.be/AAAAAAAAAAA", "https://youtu.be/BBBBBBBBBBB")
-        == "AAAAAAAAAAA"
-    )
+    assert video_id_from_source_url("https://youtube.com/embed/U1FrhkLQnCI") == "U1FrhkLQnCI"
+    assert video_id_from_source_url("https://youtube.com/live/BBBBBBBBBBB") == "BBBBBBBBBBB"
+    assert video_id_from_source_url("https://youtube.com/shorts/CCCCCCCCCCC") == "CCCCCCCCCCC"
+    assert video_id_from_source_url("https://example.com/ep") is None
+    assert video_id_from_source_url("watch https://youtu.be/AAAAAAAAAAA now") is None
+    assert video_id_from_source_url("<iframe src='https://youtube.com/embed/U1FrhkLQnCI'>") is None
 
 
 def test_timestamps_arrive_in_three_shapes():

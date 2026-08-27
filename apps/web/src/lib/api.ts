@@ -45,13 +45,17 @@ export type Claim = {
 };
 
 export type Recommendation = {
+  personId?: string;
   kind: string;
   role: string;
   name: string;
   assertion: string;
   claimId: string;
   deepLinkUrl?: string | null;
+  episodeTitle?: string | null;
   quote: string;
+  showName?: string | null;
+  sourceUrl?: string | null;
   timestampS?: number | null;
   saidOn?: string | null;
 };

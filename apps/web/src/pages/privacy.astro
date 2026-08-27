@@ -1,0 +1,26 @@
+---
+import Layout from '../layouts/Base.astro';
+---
+<Layout
+  title="Privacy — High Signal Podcasts"
+  description="Privacy notes and data boundaries for the public High Signal Podcasts evidence index."
+>
+  <section class="info-page">
+    <p class="eyebrow">Privacy notes</p>
+    <h1>The public index does not need a reader account.</h1>
+    <p class="lede">
+      Browsing, searching, and using the public read-only API currently require no signup. The
+      product does not ask readers to create a profile or submit private podcast material.
+    </p>
+    <div class="info-grid">
+      <article><p class="folio">Corpus / 01</p><h2>Public-source records.</h2><p>Published claims come from public podcast sources and retain attribution and source links so readers can inspect the record.</p></article>
+      <article><p class="folio">Access / 02</p><h2>No public write path.</h2><p>The public API is read-only. Administrative ingestion and review routes are protected and are not reader-facing product surfaces.</p></article>
+      <article><p class="folio">Shared surfaces / 03</p><h2>Fleet navigation and Ask AI.</h2><p>The footer loads shared SaaS Maker navigation and Ask AI components. Follow their linked surfaces before submitting information there.</p></article>
+    </div>
+    <p class="info-note">For a correction or privacy question about an indexed record, use the project’s public GitHub issue tracker.</p>
+    <div class="info-actions">
+      <a class="button button-primary" href="https://github.com/Significant-Hobbies/on-record/issues">Raise a question ↗</a>
+      <a class="button button-secondary" href="/sources">Inspect the source index</a>
+    </div>
+  </section>
+</Layout>

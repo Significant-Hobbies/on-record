@@ -1,0 +1,92 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "High Signal Podcasts public evidence API",
+    "version": "1.0.0",
+    "description": "Unauthenticated read-only access to published claims, people, sources, and source-linked recommendations. Missing evidence is returned as missing."
+  },
+  "servers": [{ "url": "https://api.podcasts.highsignal.app" }],
+  "paths": {
+    "/api/stats": {
+      "get": {
+        "operationId": "getCorpusStats",
+        "summary": "Get public corpus counts",
+        "responses": { "200": { "description": "Current counts of people, episodes, published claims, and references" } }
+      }
+    },
+    "/api/people": {
+      "get": {
+        "operationId": "listPeople",
+        "summary": "List active people with published claims",
+        "responses": { "200": { "description": "People with public evidence" } }
+      }
+    },
+    "/api/people/{slug}": {
+      "get": {
+        "operationId": "getPersonEvidence",
+        "summary": "Get one person with published claims and recommendations",
+        "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Person, claims, and recommendations" },
+          "404": { "description": "No active person found" }
+        }
+      }
+    },
+    "/api/claims/{id}": {
+      "get": {
+        "operationId": "getPublishedClaim",
+        "summary": "Get one published claim with evidence and actionable references",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Published claim, evidence, and references" },
+          "404": { "description": "No published claim found" }
+        }
+      }
+    },
+    "/api/sources": {
+      "get": {
+        "operationId": "listSources",
+        "summary": "List source episodes with published claims",
+        "responses": { "200": { "description": "Up to 100 source episodes" } }
+      }
+    },
+    "/api/sources/{id}": {
+      "get": {
+        "operationId": "getSourceEvidence",
+        "summary": "Get one source episode and its published claims",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Source and published claims" },
+          "404": { "description": "Source not found" }
+        }
+      }
+    },
+    "/api/search": {
+      "get": {
+        "operationId": "searchPublishedClaims",
+        "summary": "Search and filter published claims",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "person", "in": "query", "description": "Person slug", "schema": { "type": "string" } },
+          { "name": "type", "in": "query", "schema": { "type": "string" } },
+          { "name": "topic", "in": "query", "description": "Topic slug", "schema": { "type": "string" } },
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": { "200": { "description": "Published claims or an explicit insufficient-evidence result" } }
+      }
+    },
+    "/api/recommendations": {
+      "get": {
+        "operationId": "listPublishedRecommendations",
+        "summary": "List source-linked recommendations and uses",
+        "parameters": [
+          { "name": "person", "in": "query", "description": "Person slug", "schema": { "type": "string" } },
+          { "name": "kind", "in": "query", "description": "Reference kind such as book, tool, or product", "schema": { "type": "string" } },
+          { "name": "role", "in": "query", "description": "Actionable role such as recommends or uses", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Published references or an explicit insufficient-evidence result" } }
+      }
+    }
+  }
+}

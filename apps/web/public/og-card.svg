@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">High Signal Podcasts</title>
+  <desc id="desc">What notable people actually said, without listening to every episode.</desc>
+  <defs>
+    <radialGradient id="glow" cx="78%" cy="8%" r="75%">
+      <stop offset="0" stop-color="#dfc79e" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#f1eadb" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#352a18" flood-opacity=".14"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="#f1eadb"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <path d="M72 72H1128M72 120H1128" stroke="#181713" stroke-width="2"/>
+  <text x="72" y="52" fill="#294536" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="4">HIGH SIGNAL</text>
+  <text x="252" y="52" fill="#181713" font-family="Georgia, serif" font-size="28" font-weight="700">Podcasts</text>
+  <text x="72" y="178" fill="#294536" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="3">LIVE EVIDENCE INDEX · EARLY V1</text>
+  <text x="72" y="250" fill="#181713" font-family="Georgia, serif" font-size="61">What notable people</text>
+  <text x="72" y="319" fill="#181713" font-family="Georgia, serif" font-size="61">actually said—</text>
+  <text x="72" y="388" fill="#181713" font-family="Georgia, serif" font-size="61">without every episode.</text>
+  <text x="74" y="488" fill="#625e55" font-family="Georgia, serif" font-size="23">Attributable claims, recommendations, books, and tools.</text>
+  <text x="74" y="524" fill="#625e55" font-family="Georgia, serif" font-size="23">Every line keeps its verbatim excerpt and source trail.</text>
+  <g filter="url(#shadow)">
+    <rect x="847" y="163" width="281" height="333" fill="#f8f4ea" stroke="#cfc2aa"/>
+    <rect x="1021" y="155" width="72" height="14" fill="#b48748" fill-opacity=".35" transform="rotate(2 1021 155)"/>
+    <text x="876" y="203" fill="#294536" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="2">PUBLICATION CONTRACT / 01</text>
+    <text x="876" y="267" fill="#181713" font-family="Georgia, serif" font-size="35">“The unit is</text>
+    <text x="876" y="309" fill="#181713" font-family="Georgia, serif" font-size="35">the claim, not</text>
+    <text x="876" y="351" fill="#181713" font-family="Georgia, serif" font-size="35">the episode.”</text>
+    <path d="M876 402H1098M876 432H1098M876 462H1098" stroke="#cfc2aa"/>
+    <text x="876" y="421" fill="#625e55" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="2">SPEAKER  ·  EXACT WORDS</text>
+    <text x="876" y="451" fill="#625e55" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="2">TIMESTAMP  ·  SOURCE</text>
+  </g>
+  <circle cx="1120" cy="577" r="6" fill="#3d7353"/>
+  <text x="1098" y="584" fill="#625e55" font-family="Inter, Arial, sans-serif" font-size="13" text-anchor="end" letter-spacing="1">PODCASTS.HIGHSIGNAL.APP</text>
+</svg>

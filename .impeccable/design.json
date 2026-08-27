@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-27T16:10:38Z",
+  "title": "Design System: High Signal Podcasts",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "neutral", "displayName": "Ledger Ink", "canonical": "#181713" },
+      "paper": { "role": "neutral", "displayName": "Archive Paper", "canonical": "#f1eadb" },
+      "evidence-rust": { "role": "primary", "displayName": "Evidence Rust", "canonical": "#8d301f" },
+      "archival-green": { "role": "secondary", "displayName": "Archival Green", "canonical": "#294536" },
+      "brass": { "role": "tertiary", "displayName": "Binding Brass", "canonical": "#ad7938" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Editorial Display", "purpose": "Hero and section headlines." },
+      "body": { "displayName": "Published Text", "purpose": "Explanations and quoted records." },
+      "label": { "displayName": "Folio Label", "purpose": "Metadata, navigation, and controls." }
+    },
+    "shadows": [
+      {
+        "name": "retained-document",
+        "value": "0 24px 70px rgba(53, 42, 24, 0.12)",
+        "purpose": "Featured evidence cards only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "direct-response",
+        "value": "160ms ease",
+        "purpose": "Button hover lift and color response; removed for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      { "name": "editorial-stack", "value": "880px" },
+      { "name": "single-column", "value": "620px" }
+    ],
+    "narrative": {
+      "northStar": "The Evidence Ledger",
+      "rules": [
+        "Real proof appears before extended explanation.",
+        "Accent color signals action, provenance, or status.",
+        "Missing evidence stays visibly missing."
+      ],
+      "dos": [
+        "Keep source receipt fields adjacent to every published proof.",
+        "Use square evidence containers and restrained folio labels."
+      ],
+      "donts": [
+        "Do not imitate a podcast player or generic SaaS dashboard.",
+        "Do not use rounded cards or bright decorative gradients."
+      ]
+    }
+  }
+}

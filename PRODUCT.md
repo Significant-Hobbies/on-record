@@ -8,6 +8,8 @@ with a verbatim excerpt, speaker, date, timestamp, and source link.
 
 This is not a transcript search engine. The primary unit is the claim.
 
-V1 is a thin vertical slice: ~10 people, 4 podcasts, publisher/YouTube
-transcripts only, D1 FTS5 search, public person/claim/source pages in
-Session 2.
+The public beta begins with 166 manually accepted claims and 189 named
+references across 139 source episodes. They were selected from a 25-show,
+10,305-episode catalog using publisher and YouTube transcripts, then checked
+against the retained source text before release. D1 FTS5 powers public search;
+person, claim, source, and recommendation pages expose the evidence trail.

@@ -1,0 +1,44 @@
+# High Signal Podcasts — agent guide
+
+High Signal Podcasts, also called On the Record in the repository, is a public
+index of evidence-backed statements and recommendations from notable podcast
+guests. It is not a transcript search box, a podcast player, or a comprehensive
+record of everything a person has said.
+
+## Evidence contract
+
+- Treat the claim as the unit, not the episode.
+- A published claim has a speaker, assertion, verbatim excerpt, date, and source
+  evidence. A timestamp is present when supported by the source.
+- Recommendations are linked to a published claim and its evidence.
+- Preserve attribution and source links in derived answers.
+- If the API returns `evidence: insufficient`, say the corpus does not contain
+  enough published evidence. Do not infer an answer from absence.
+- The public-beta corpus is deliberately bounded. Coverage is not endorsement,
+  and missing coverage is not a negative claim.
+
+## Read-only API
+
+Base URL: `https://api.podcasts.highsignal.app`
+
+- `GET /api/stats` — public corpus counts.
+- `GET /api/people` — people with published claims.
+- `GET /api/people/{slug}` — one person, published claims, and recommendations.
+- `GET /api/claims/{id}` — one published claim with evidence and references.
+- `GET /api/sources` — source episodes with published claims.
+- `GET /api/sources/{id}` — one source and its published claims.
+- `GET /api/search` — published claim search; supports `q`, `person`, `type`,
+  `topic`, `from`, and `to`.
+- `GET /api/recommendations` — published source-linked references; supports
+  `person`, `kind`, and `role`.
+
+The public surfaces need no API key, user account, or checkout at present.
+Administrative routes are not public agent surfaces. No permanent pricing model
+is promised.
+
+## Links
+
+- Website: https://podcasts.highsignal.app/
+- Methodology: https://podcasts.highsignal.app/methodology
+- OpenAPI: https://podcasts.highsignal.app/openapi.json
+- Skill: https://podcasts.highsignal.app/.well-known/agent-skills/on-record-evidence/SKILL.md

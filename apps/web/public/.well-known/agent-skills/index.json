@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "on-record-evidence",
+      "type": "skill-md",
+      "description": "Use High Signal Podcasts to find and cite source-backed claims, recommendations, books, and tools from notable podcast guests.",
+      "url": "/.well-known/agent-skills/on-record-evidence/SKILL.md",
+      "digest": "sha256:6bd3115505859bd0e8adf2acf1d1221f92752d964f912ff085e544796c8a7918"
+    }
+  ]
+}

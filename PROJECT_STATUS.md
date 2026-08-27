@@ -1,6 +1,6 @@
 # on-record — PROJECT STATUS
 
-Last updated: 2026-08-25
+Last updated: 2026-08-27
 
 ## Why / What
 
@@ -13,8 +13,9 @@ Topic → Stance → Date → Evidence.
 **Users:** founders, investors, journalists, operators researching people or
 markets.
 
-**IN scope (V1):** ~10 people, 4 podcasts, captions/publisher transcripts,
-claim extraction with verbatim-quote gate, D1 FTS5 search, public API.
+**IN scope (public beta):** 25-show catalog, publisher/RSS transcripts,
+claim extraction with verbatim-quote and exact-speaker gates, manually reviewed
+recommendations, D1 FTS5 search, and public API.
 
 **OUT of scope (V1):** Whisper, position clustering, agreement graphs,
 semantic search, user accounts, public write API, editor UI beyond
@@ -45,6 +46,9 @@ review-report.
 - 2026-08-25 — High Signal Podcasts SSR site + daily cron `--focus recs`
 - 2026-08-25 — Production: `podcasts.highsignal.app` + `api.podcasts.highsignal.app`,
   GitHub Actions secrets, first published Karpathy/Dwarkesh claims
+- 2026-08-27 — Public-beta corpus qualified locally: 25 shows, 10,305 episodes,
+  3,106 transcript episodes, and 166 manually accepted recommendation claims
+  with 189 named-reference rows
 
 ## Products
 
@@ -52,13 +56,16 @@ review-report.
 - Public Astro SSR site — `https://podcasts.highsignal.app`
 - Python ingest CLI + GitHub Actions daily cron (`--focus recs`)
 
-## Features (shipped)
+## Features
 
-- Production claim index (thin V1): 10-person roster, 4 shows, published
-  Karpathy/Dwarkesh claims with verbatim excerpts
+- Public-beta claim index: 25-show catalog and a manually reviewed,
+  source-backed recommendation slice across nine shows
 - SSR site reads live D1 via the API; ingest does not rebuild the web Worker
+- Exact quotes, identified speakers, source episodes, and timestamps when the
+  publisher provides usable timing
 
 ## Todo / Planned / Deferred / Blocked
 
-Tracked in GitHub Issues. Grow the published recs/stack corpus; keep listing
-hidden until the index is worth sharing.
+Tracked in GitHub Issues. Continue transcript and speaker coverage beyond the
+verified beta slice; cataloged shows with no supported evidence remain pending
+rather than being presented as fully analyzed.

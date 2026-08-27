@@ -13,6 +13,38 @@ OVERLAP_CHARS = 200
 CUE_MAP_STRIDE = 40
 
 
+def _split_oversized_text(text: str, limit: int) -> list[str]:
+    """Bound one publisher cue without inventing timestamps inside it."""
+    remaining = text.strip()
+    out: list[str] = []
+    while len(remaining) > limit:
+        floor = limit // 2
+        sentence_breaks = [
+            remaining.rfind(marker, floor, limit + 1) + 1 for marker in (". ", "? ", "! ")
+        ]
+        split_at = max(sentence_breaks)
+        if split_at <= 0:
+            split_at = remaining.rfind(" ", 0, limit + 1)
+        if split_at <= 0:
+            split_at = limit
+        out.append(remaining[:split_at].strip())
+        remaining = remaining[split_at:].strip()
+    if remaining:
+        out.append(remaining)
+    return out
+
+
+def _bounded_cues(cues: list[Cue], target_chars: int) -> list[Cue]:
+    out: list[Cue] = []
+    for cue in cues:
+        text = str(cue.get("text") or "").strip()
+        for part in _split_oversized_text(text, target_chars):
+            bounded = dict(cue)
+            bounded["text"] = part
+            out.append(bounded)
+    return out
+
+
 def cue_time_at(cue_map: CueMap, offset: int) -> float | None:
     """Start time of the last cue anchored at or before ``offset``."""
     found: float | None = None
@@ -48,7 +80,9 @@ def _prefix_anchor(previous: dict[str, Any] | None, overlap_from: str, prefix: s
     return [] if start is None else [[0, start]]
 
 
-def cues_to_segments(cues: list[Cue], target_chars: int = TARGET_CHARS) -> list[dict[str, Any]]:
+def cues_to_segments(
+    cues: list[Cue], target_chars: int = TARGET_CHARS, speakers_resolved: bool = False
+) -> list[dict[str, Any]]:
     segments: list[dict[str, Any]] = []
     buf: list[Cue] = []
     buf_len = 0
@@ -70,16 +104,23 @@ def cues_to_segments(cues: list[Cue], target_chars: int = TARGET_CHARS) -> list[
             text = body
             shift = 0
         last = buf[-1]
+        speaker_hint = buf[0].get("speaker")
+        if speakers_resolved and not speaker_hint:
+            # The publisher supplied a name but it did not map uniquely onto
+            # our roster. Keep the segment explicitly unpublishable instead of
+            # letting extraction guess from the episode roster.
+            speaker_hint = "unknown"
         segments.append(
             {
                 "idx": len(segments),
                 "startS": float(buf[0]["start"]),
                 "endS": float(last["start"]) + float(last["duration"]),
                 "text": text,
-                "speakerHint": buf[0].get("speaker"),
-                # Kept alongside the resolved person so a voice can be named
-                # again later without transcribing the audio a second time.
-                "diarLabel": buf[0].get("speaker"),
+                "speakerHint": speaker_hint,
+                # A publisher name is already resolved. Only an anonymous
+                # diarization label should be offered to the identification
+                # model again later.
+                "diarLabel": None if speakers_resolved else buf[0].get("speaker"),
                 "cueMap": _prefix_anchor(segments[-1] if segments else None, overlap_from, prefix)
                 + _cue_map(pieces, [float(cue["start"]) for cue in buf], lead, shift),
             }
@@ -91,7 +132,7 @@ def cues_to_segments(cues: list[Cue], target_chars: int = TARGET_CHARS) -> list[
     # decided at the break and survive until that buffer is flushed — including
     # the final flush after the loop.
     pending_prefix = ""
-    for cue in cues:
+    for cue in _bounded_cues(cues, target_chars):
         piece = str(cue.get("text") or "").strip()
         if not piece:
             continue

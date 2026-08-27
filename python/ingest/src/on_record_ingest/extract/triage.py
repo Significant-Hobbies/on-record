@@ -35,9 +35,10 @@ Triage = str  # rec | claim | skip
 
 def triage_segment(text: str) -> Triage:
     body = text.strip()
-    rec = bool(REC.search(body) or NAMED.search(body))
-    if rec:
+    if REC.search(body):
         return "rec"
+    if NAMED.search(body):
+        return "claim"
     if len(body) < 80:
         return "skip"
     claim = bool(CLAIM.search(body))

@@ -1,13 +1,13 @@
 from on_record_ingest.extract.triage import triage_segment
 
 
-def test_keeps_personal_stack_and_known_apps():
+def test_keeps_personal_stack_as_a_recommendation_candidate():
     assert (
         triage_segment("Personally I use Cursor every day instead of writing every line by hand.")
         == "rec"
     )
-    assert (
-        triage_segment("Claude and Codex don't replace the job yet, they just don't work.") == "rec"
+    assert triage_segment("Claude and Codex don't replace the job yet, they just don't work.") == (
+        "claim"
     )
 
 
@@ -19,9 +19,9 @@ def test_keeps_claim_speech():
     assert triage_segment(text) == "claim"
 
 
-def test_focus_recs_would_keep_named_apps_not_pure_filler():
-    assert (
-        triage_segment("Claude and Codex don't replace the job yet, they just don't work.") == "rec"
+def test_focus_recs_does_not_promote_a_named_product_evaluation():
+    assert triage_segment("Claude and Codex don't replace the job yet, they just don't work.") == (
+        "claim"
     )
 
 

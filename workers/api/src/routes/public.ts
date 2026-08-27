@@ -5,7 +5,13 @@ import { isClaimType } from '../claim-types';
 import { db, schema } from '../db';
 import type { Env } from '../env';
 import { sanitizeFtsQuery } from '../fts';
-import { isReferenceKind, isReferenceRole } from '../references';
+import {
+  ACTIONABLE_REFERENCE_ROLES,
+  isActionableReferenceRole,
+  isReferenceKind,
+  referenceAssertion,
+  sanitizeReferences,
+} from '../references';
 
 export const publicRoute = new Hono<{ Bindings: Env }>();
 
@@ -60,10 +66,18 @@ publicRoute.get('/claims/:id', async (c) => {
     .select()
     .from(schema.claimEvidence)
     .where(eq(schema.claimEvidence.claimId, claim.id));
-  const references = await db(c.env.DB)
+  const rawReferences = await db(c.env.DB)
     .select()
     .from(schema.claimReferences)
-    .where(eq(schema.claimReferences.claimId, claim.id));
+    .where(
+      and(
+        eq(schema.claimReferences.claimId, claim.id),
+        inArray(schema.claimReferences.role, [...ACTIONABLE_REFERENCE_ROLES])
+      )
+    );
+  const references = rawReferences.flatMap((reference) =>
+    sanitizeReferences([reference], claim.quote)
+  );
   return c.json({ claim, evidence, references });
 });
 
@@ -210,34 +224,43 @@ export const recommendationFields = {
   assertion: schema.claims.assertion,
   claimId: schema.claims.id,
   deepLinkUrl: schema.claimEvidence.deepLinkUrl,
+  episodeTitle: schema.episodes.title,
   kind: schema.claimReferences.kind,
   name: schema.claimReferences.name,
   personId: schema.claims.personId,
   quote: schema.claims.quote,
   role: schema.claimReferences.role,
   saidOn: schema.claims.saidOn,
+  showName: schema.shows.name,
+  sourceUrl: schema.episodes.sourceUrl,
   timestampS: schema.claims.timestampS,
 };
 
 async function publishedReferences(
   d1: D1Database,
-  filters: { personId?: string; kind?: string; role?: string }
+  filters: { personId?: string; kind?: string; role?: string },
+  limit = 200
 ) {
   const database = db(d1);
-  const clauses: SQL[] = [eq(schema.claims.reviewStatus, 'published')];
+  const clauses: SQL[] = [
+    eq(schema.claims.reviewStatus, 'published'),
+    inArray(schema.claimReferences.role, [...ACTIONABLE_REFERENCE_ROLES]),
+  ];
   if (filters.personId) {
     clauses.push(eq(schema.claims.personId, filters.personId));
   }
-  if (filters.kind && isReferenceKind(filters.kind)) {
-    clauses.push(eq(schema.claimReferences.kind, filters.kind));
+  if (filters.kind && !isReferenceKind(filters.kind)) {
+    return [];
   }
-  if (filters.role && isReferenceRole(filters.role)) {
-    clauses.push(eq(schema.claimReferences.role, filters.role));
+  if (filters.role && !isActionableReferenceRole(filters.role)) {
+    return [];
   }
-  return database
+  const rows = await database
     .select(recommendationFields)
     .from(schema.claimReferences)
     .innerJoin(schema.claims, eq(schema.claimReferences.claimId, schema.claims.id))
+    .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
     .innerJoin(
       schema.claimEvidence,
       and(
@@ -246,8 +269,31 @@ async function publishedReferences(
       )
     )
     .where(and(...clauses))
-    .orderBy(desc(schema.claims.saidOn))
-    .limit(200);
+    .orderBy(desc(schema.claims.saidOn));
+  const seen = new Set<string>();
+  return rows
+    .flatMap((row) => {
+      const [reference] = sanitizeReferences(
+        [{ kind: row.kind, name: row.name, role: row.role }],
+        row.quote
+      );
+      if (!reference) {
+        return [];
+      }
+      if (filters.kind && reference.kind !== filters.kind) {
+        return [];
+      }
+      if (filters.role && reference.role !== filters.role) {
+        return [];
+      }
+      const key = `${row.deepLinkUrl ?? row.claimId}|${row.personId}|${reference.kind}|${reference.role}|${reference.name.toLowerCase()}`;
+      if (seen.has(key)) {
+        return [];
+      }
+      seen.add(key);
+      return [{ ...row, ...reference, assertion: referenceAssertion(reference) }];
+    })
+    .slice(0, limit);
 }
 
 publicRoute.get('/recommendations', async (c) => {
@@ -289,15 +335,11 @@ publicRoute.get('/stats', async (c) => {
     .select({ n: sql<number>`count(distinct ${schema.claims.episodeId})` })
     .from(schema.claims)
     .where(eq(schema.claims.reviewStatus, 'published'));
-  const [references] = await database
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.claimReferences)
-    .innerJoin(schema.claims, eq(schema.claimReferences.claimId, schema.claims.id))
-    .where(eq(schema.claims.reviewStatus, 'published'));
+  const references = await publishedReferences(c.env.DB, {}, Number.MAX_SAFE_INTEGER);
   return c.json({
     episodes: episodes?.n ?? 0,
     people: people?.n ?? 0,
     publishedClaims: published?.n ?? 0,
-    publishedReferences: references?.n ?? 0,
+    publishedReferences: references.length,
   });
 });

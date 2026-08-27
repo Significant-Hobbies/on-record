@@ -17,6 +17,8 @@
     "db:migrate:remote": "pnpm --filter @on-record/db migrate:remote",
     "ingest": "uv run --project python/ingest python -m on_record_ingest",
     "review:report": "node scripts/review-report.mjs",
+    "release:build-reviewed": "node scripts/build-reviewed-release.mjs",
+    "release:upload-reviewed-r2": "node scripts/upload-reviewed-r2.mjs",
     "quality:python-format": "uv run --project python/ingest --no-sync ruff format --check python/ingest/src python/ingest/tests",
     "quality:python-lint": "uv run --project python/ingest --no-sync ruff check --select E4,E7,E9,F python/ingest/src python/ingest/tests",
     "quality:unused": "node scripts/check-code-health.mjs unused",

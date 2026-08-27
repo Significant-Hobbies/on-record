@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -11,22 +12,63 @@ import httpx
 
 from .api_client import ApiClient
 from .attributions import confidence_for, judge
-from .config import Settings, settings as load_settings
-from .extract.claims import extract_segment
+from .config import Settings
+from .config import settings as load_settings
+from .extract.claims import extract_segment, is_local
 from .extract.triage import triage_segment
 from .identify import UNKNOWN, identify_speakers
-from .match import guests_from_text, merge_video, video_id_from_metadata
+from .match import guests_from_text, merge_discovery_items, merge_video, video_id_from_source_url
 from .seed.people import PEOPLE
 from .seed.shows import SHOWS
 from .seed.topics import TOPICS
 from .segment import cues_to_segments
 from .sources import podcast_index, rss_feed, youtube_api, youtube_rss
+from .transcripts.acquired import TRANSCRIPT_KIND as ACQUIRED_PUBLISHER_HTML
+from .transcripts.acquired import (
+    PublisherSourceUnavailable as AcquiredPublisherSourceUnavailable,
+)
+from .transcripts.acquired import episode_url_from_source as acquired_episode_url_from_source
+from .transcripts.acquired import fetch_cues as fetch_acquired_cues
+from .transcripts.acquired import is_acquired_site_url
+from .transcripts.conversations_with_tyler import TRANSCRIPT_KIND as CWT_PUBLISHER_HTML
+from .transcripts.conversations_with_tyler import (
+    PublisherSourceUnavailable as CwtPublisherSourceUnavailable,
+)
+from .transcripts.conversations_with_tyler import fetch_cues as fetch_cwt_cues
+from .transcripts.conversations_with_tyler import is_cwt_url
+from .transcripts.conversations_with_tyler import (
+    transcript_url_from_metadata as cwt_transcript_url_from_metadata,
+)
+from .transcripts.lennys import TRANSCRIPT_KIND as LENNYS_PUBLISHER_JSON
+from .transcripts.lennys import (
+    PublisherSourceUnavailable as LennyPublisherSourceUnavailable,
+)
+from .transcripts.lennys import fetch_cues as fetch_lennys_cues
+from .transcripts.lennys import is_lennys_url
+from .transcripts.lex_fridman import TRANSCRIPT_KIND as PUBLISHER_HTML
+from .transcripts.lex_fridman import (
+    PublisherSourceUnavailable,
+    is_lex_url,
+    transcript_url_from_metadata,
+    youtube_video_id,
+)
+from .transcripts.lex_fridman import fetch_cues as fetch_lex_cues
 from .transcripts.rss_transcript import parse_transcript
 from .transcripts.whisper_local import TranscriptionUnavailable
 from .transcripts.whisper_local import transcribe as whisper_transcribe
-from .transcripts.youtube_captions import fetch_cues
+from .transcripts.youtube_captions import CaptionSourceUnavailable, fetch_cues
 
 LOGGER = logging.getLogger("on_record_ingest")
+RESOLVED_TRANSCRIPT_KINDS = {
+    ACQUIRED_PUBLISHER_HTML,
+    CWT_PUBLISHER_HTML,
+    LENNYS_PUBLISHER_JSON,
+    PUBLISHER_HTML,
+    "rss_named_text",
+}
+# Below this, a person was judged to be merely mentioned rather than present.
+# They must not reach either speaker identification or extraction.
+GUEST_CONFIDENCE_FLOOR = 0.5
 STAGES = (
     "discover",
     "youtube-ids",
@@ -122,15 +164,13 @@ def discover_show(
         videos: list[dict[str, Any]] = []
         if show.get("youtubeChannelId"):
             videos = youtube_rss.fetch_channel(str(show["youtubeChannelId"]), since, client)
-    by_guid: dict[str, dict[str, Any]] = {}
-    for item in rss_items:
-        by_guid[str(item["guid"])] = merge_video(item, videos)
-    for video in videos:
-        guid = str(video["guid"])
-        if guid not in by_guid:
-            by_guid[guid] = video
     hosts = host_people(show)
-    for item in by_guid.values():
+    include_unmatched_videos = not rss_items or bool(show.get("includeUnmatchedYoutube"))
+    for item in merge_discovery_items(
+        rss_items,
+        videos,
+        include_unmatched_videos=include_unmatched_videos,
+    ):
         blob = json.dumps(item)
         people = remap_people(
             with_hosts(
@@ -147,7 +187,7 @@ def discover_show(
             "sourceUrl": item.get("sourceUrl"),
             "audioUrl": item.get("audioUrl"),
             "youtubeVideoId": item.get("youtubeVideoId")
-            or video_id_from_metadata(item.get("description"), item.get("sourceUrl")),
+            or video_id_from_source_url(item.get("sourceUrl")),
             "durationS": item.get("durationS"),
             "people": people,
         }
@@ -160,6 +200,178 @@ def discover_show(
     return found
 
 
+def structured_transcript_cues(
+    transcript_url: str, client: httpx.Client
+) -> tuple[str, list[dict[str, float | str]]] | None:
+    if not transcript_url or is_cwt_url(transcript_url) or is_lex_url(transcript_url):
+        return None
+    try:
+        response = client.get(transcript_url, timeout=30.0, follow_redirects=True)
+    except httpx.HTTPError as exc:
+        raise PublisherSourceUnavailable(type(exc).__name__) from exc
+    if response.status_code in {404, 410}:
+        return None
+    if response.status_code != 200:
+        raise PublisherSourceUnavailable(f"HTTP {response.status_code}")
+    if not response.text.strip():
+        raise PublisherSourceUnavailable("structured transcript was empty")
+    kind, cues = parse_transcript(response.text, response.headers.get("content-type", ""))
+    if not cues:
+        raise PublisherSourceUnavailable("structured transcript contained no usable cues")
+    return kind, cues
+
+
+def lex_transcript_cues(
+    item: dict[str, Any], client: httpx.Client
+) -> tuple[str, list[dict[str, float | str]]] | None:
+    transcript_url = str(item.get("transcriptUrl") or "")
+    source_url = str(item.get("sourceUrl") or "")
+    episode_title = str(item.get("title") or "")
+    if is_lex_url(source_url):
+        cues = fetch_lex_cues(source_url, client, episode_title)
+        if cues:
+            return PUBLISHER_HTML, cues
+    publisher_url = transcript_url_from_metadata(
+        str(item.get("publisherTranscriptUrl") or ""),
+        transcript_url,
+        str(item.get("description") or ""),
+        episode_title=episode_title,
+    )
+    if publisher_url:
+        cues = fetch_lex_cues(publisher_url, client, episode_title)
+        if cues:
+            return PUBLISHER_HTML, cues
+    return None
+
+
+def _publisher_label_key(value: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.casefold()).split())
+
+
+def _publisher_aliases(
+    detail: dict[str, Any],
+    people_by_id: dict[str, dict[str, Any]],
+    *,
+    include_first: bool = False,
+    include_initials: bool = False,
+) -> dict[str, set[str]]:
+    aliases: dict[str, set[str]] = {}
+    for row in detail.get("people") or []:
+        if float(row.get("confidence") or 1.0) < GUEST_CONFIDENCE_FLOOR:
+            continue
+        person = people_by_id.get(str(row.get("personId")))
+        if not person:
+            continue
+        slug = str(person["slug"])
+        parts = _publisher_label_key(str(person["name"])).split()
+        keys = {" ".join(parts)}
+        if len(parts) >= 2:
+            keys.add(parts[-1])
+            if include_first:
+                keys.add(parts[0])
+            if include_initials:
+                keys.add("".join(part[0] for part in parts))
+        for key in keys:
+            aliases.setdefault(key, set()).add(slug)
+    return aliases
+
+
+def cwt_speaker_map(
+    detail: dict[str, Any], people_by_id: dict[str, dict[str, Any]]
+) -> dict[str, str]:
+    """Map only unique publisher labels onto the reviewed episode roster."""
+    aliases = _publisher_aliases(detail, people_by_id)
+    if any("tyler-cowen" in slugs for slugs in aliases.values()):
+        for key in {"cowen", "t cowen", "tyler", "tyler cowen"}:
+            aliases.setdefault(key, set()).add("tyler-cowen")
+    return {key: next(iter(slugs)) for key, slugs in aliases.items() if len(slugs) == 1}
+
+
+def acquired_speaker_map(
+    detail: dict[str, Any], people_by_id: dict[str, dict[str, Any]]
+) -> dict[str, str]:
+    """Resolve full, first, and last publisher labels only when unique."""
+    aliases = _publisher_aliases(detail, people_by_id, include_first=True, include_initials=True)
+    resolved = {key: next(iter(slugs)) for key, slugs in aliases.items() if len(slugs) == 1}
+    available_slugs = {str(person["slug"]) for person in people_by_id.values()}
+    if "ben-gilbert" in available_slugs:
+        resolved["ben"] = "ben-gilbert"
+    if "david-rosenthal" in available_slugs:
+        resolved["david"] = "david-rosenthal"
+    return resolved
+
+
+def lennys_speaker_map(
+    detail: dict[str, Any], people_by_id: dict[str, dict[str, Any]]
+) -> dict[str, str]:
+    """Resolve publisher full or unique short names onto the episode roster."""
+    aliases = _publisher_aliases(detail, people_by_id, include_first=True)
+    resolved = {key: next(iter(slugs)) for key, slugs in aliases.items() if len(slugs) == 1}
+    if any("lenny-rachitsky" in slugs for slugs in aliases.values()):
+        resolved["lenny"] = "lenny-rachitsky"
+        # One approved publisher map truncates the host label to "Lenn" while
+        # also labelling other turns as "Lenny" in the same episode.
+        resolved["lenn"] = "lenny-rachitsky"
+    return resolved
+
+
+def lennys_transcript_cues(
+    item: dict[str, Any], client: httpx.Client
+) -> tuple[str, list[dict[str, float | str]]] | None:
+    source_url = str(item.get("sourceUrl") or "")
+    if not is_lennys_url(source_url):
+        return None
+    cues = fetch_lennys_cues(
+        source_url,
+        client,
+        str(item.get("title") or ""),
+        str(item.get("guid") or ""),
+        dict(item.get("lennysSpeakerMap") or {}),
+    )
+    return (LENNYS_PUBLISHER_JSON, cues) if cues else None
+
+
+def acquired_transcript_cues(
+    item: dict[str, Any], client: httpx.Client
+) -> tuple[str, list[dict[str, float | str]]] | None:
+    source_url = str(item.get("sourceUrl") or "")
+    publisher_url = acquired_episode_url_from_source(
+        source_url, str(item.get("title") or ""), client
+    )
+    if not publisher_url:
+        return None
+    cues = fetch_acquired_cues(
+        publisher_url,
+        client,
+        str(item.get("title") or ""),
+        dict(item.get("acquiredSpeakerMap") or {}),
+    )
+    return (ACQUIRED_PUBLISHER_HTML, cues) if cues else None
+
+
+def cwt_transcript_cues(
+    item: dict[str, Any], client: httpx.Client
+) -> tuple[str, list[dict[str, float | str]]] | None:
+    candidates = [
+        str(item.get("sourceUrl") or ""),
+        str(item.get("cwtPublisherTranscriptUrl") or ""),
+    ]
+    tried: set[str] = set()
+    for source_url in candidates:
+        if not is_cwt_url(source_url) or source_url in tried:
+            continue
+        tried.add(source_url)
+        cues = fetch_cwt_cues(
+            source_url,
+            client,
+            str(item.get("title") or ""),
+            dict(item.get("cwtSpeakerMap") or {}),
+        )
+        if cues:
+            return CWT_PUBLISHER_HTML, cues
+    return None
+
+
 def resolve_cues(
     item: dict[str, Any], client: httpx.Client, whisper: bool = False, speakers: int = 0
 ) -> tuple[str, list[dict[str, float | str]]]:
@@ -168,13 +380,21 @@ def resolve_cues(
     Whisper is last because it is the only step that costs real time, and it
     is opt-in because it only works where the machine can run it.
     """
-    transcript_url = str(item.get("transcriptUrl") or "")
-    if transcript_url:
-        response = client.get(transcript_url, timeout=30.0, follow_redirects=True)
-        if response.status_code == 200 and response.text.strip():
-            kind, cues = parse_transcript(response.text, response.headers.get("content-type", ""))
-            if cues:
-                return kind, cues
+    resolved = lennys_transcript_cues(item, client)
+    if resolved:
+        return resolved
+    resolved = acquired_transcript_cues(item, client)
+    if resolved:
+        return resolved
+    resolved = cwt_transcript_cues(item, client)
+    if resolved:
+        return resolved
+    resolved = lex_transcript_cues(item, client)
+    if resolved:
+        return resolved
+    resolved = structured_transcript_cues(str(item.get("transcriptUrl") or ""), client)
+    if resolved:
+        return resolved
     video_id = str(item.get("youtubeVideoId") or "")
     if video_id:
         cues = fetch_cues(video_id)
@@ -193,6 +413,8 @@ def episode_roster(api: ApiClient, episode_id: str) -> list[dict[str, str]]:
     people = {p["id"]: p for p in api.list_people()}
     out: list[dict[str, str]] = []
     for row in detail.get("people") or []:
+        if float(row.get("confidence") or 1.0) < GUEST_CONFIDENCE_FLOOR:
+            continue
         person = people.get(str(row.get("personId")))
         if person:
             out.append(
@@ -208,14 +430,18 @@ def episode_roster(api: ApiClient, episode_id: str) -> list[dict[str, str]]:
 def resolve_segment_speakers(
     api: ApiClient, cfg: Settings, episode: dict[str, Any], segments: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Turn diarized labels into people, or into nothing.
+    """Turn diarized labels into people, or explicit unknowns.
 
     speakerHint carries a label like "B" out of diarization. From here it
     carries a roster slug, so extraction reads who is talking instead of
-    guessing. A voice we cannot place is left unset and its claims stay
+    guessing. A voice we cannot place is marked unknown and its claims stay
     unpublishable.
     """
+    if episode.get("transcriptKind") in RESOLVED_TRANSCRIPT_KINDS:
+        return segments
     if not any(segment.get("diarLabel") or segment.get("speakerHint") for segment in segments):
+        for segment in segments:
+            segment["speakerHint"] = UNKNOWN
         return segments
     for segment in segments:
         segment.setdefault("diarLabel", segment.get("speakerHint"))
@@ -230,7 +456,7 @@ def resolve_segment_speakers(
     for segment in segments:
         label = segment.get("diarLabel")
         slug = mapping.get(str(label)) if label else None
-        segment["speakerHint"] = None if not slug or slug == UNKNOWN else slug
+        segment["speakerHint"] = UNKNOWN if not slug or slug == UNKNOWN else slug
     return segments
 
 
@@ -242,12 +468,149 @@ def discovery_payload(api: ApiClient, episode: dict[str, Any]) -> dict[str, Any]
         )
         return json.loads(content or "{}")
     except Exception:
-        return {"transcriptUrl": "", "youtubeVideoId": episode.get("youtubeVideoId")}
+        return {
+            "audioUrl": episode.get("audioUrl"),
+            "sourceUrl": episode.get("sourceUrl"),
+            "transcriptUrl": "",
+            "youtubeVideoId": episode.get("youtubeVideoId"),
+        }
 
 
-def expected_speakers(api: ApiClient, episode_id: str) -> int:
-    """Voices to expect: everyone attached, plus one for whoever we missed."""
-    return 1 + len(api.get_episode(episode_id).get("people") or [])
+def publisher_video_id(cues: list[dict[str, float | str]]) -> str | None:
+    for cue in cues:
+        found = youtube_video_id(str(cue.get("sourceUrl") or ""))
+        if found:
+            return found
+    return None
+
+
+def transcript_source_available(
+    raw: dict[str, Any],
+    publisher_url: Any,
+    cwt_publisher_url: Any,
+    source_url: Any,
+    video_id: Any,
+    audio_url: Any,
+    whisper: bool,
+) -> bool:
+    return any(
+        (
+            raw.get("transcriptUrl"),
+            publisher_url,
+            cwt_publisher_url,
+            is_acquired_site_url(str(source_url or "")),
+            is_cwt_url(str(source_url or "")),
+            is_lennys_url(str(source_url or "")),
+            is_lex_url(str(source_url or "")),
+            video_id,
+            whisper and audio_url,
+        )
+    )
+
+
+def transcript_request(
+    api: ApiClient,
+    episode: dict[str, Any],
+    raw: dict[str, Any],
+    people_by_id: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    publisher_url = transcript_url_from_metadata(
+        str(raw.get("description") or ""),
+        str(episode.get("description") or ""),
+        str(raw.get("transcriptUrl") or ""),
+        episode_title=str(episode.get("title") or ""),
+    )
+    cwt_publisher_url = cwt_transcript_url_from_metadata(
+        str(raw.get("description") or ""),
+        str(episode.get("description") or ""),
+        str(raw.get("transcriptUrl") or ""),
+        episode_title=str(episode.get("title") or ""),
+        allow_title_override=is_cwt_url(
+            str(episode.get("sourceUrl") or raw.get("sourceUrl") or "")
+        ),
+    )
+    detail = api.get_episode(episode["id"])
+    return {
+        "acquiredSpeakerMap": acquired_speaker_map(detail, people_by_id or {}),
+        "cwtPublisherTranscriptUrl": cwt_publisher_url,
+        "cwtSpeakerMap": cwt_speaker_map(detail, people_by_id or {}),
+        "description": raw.get("description") or episode.get("description"),
+        "guid": episode.get("guid") or raw.get("guid"),
+        "lennysSpeakerMap": lennys_speaker_map(detail, people_by_id or {}),
+        "publisherTranscriptUrl": publisher_url,
+        "sourceUrl": episode.get("sourceUrl") or raw.get("sourceUrl"),
+        "title": episode.get("title"),
+        "transcriptUrl": raw.get("transcriptUrl"),
+        "youtubeVideoId": episode.get("youtubeVideoId") or raw.get("youtubeVideoId"),
+        "audioUrl": episode.get("audioUrl") or raw.get("audioUrl"),
+        "speakers": 1 + len(detail.get("people") or []),
+    }
+
+
+def transcript_video_id(kind: str, cues: list[dict[str, float | str]], existing: Any) -> str | None:
+    publisher_id = publisher_video_id(cues)
+    if kind == PUBLISHER_HTML and publisher_id:
+        return publisher_id
+    found = existing or publisher_id
+    return str(found) if found else None
+
+
+@dataclass(frozen=True)
+class TranscriptOpts:
+    dry_run: bool
+    force: bool
+    whisper: bool
+
+
+def run_transcript_episode(
+    api: ApiClient,
+    cfg: Settings | None,
+    episode: dict[str, Any],
+    client: httpx.Client,
+    opts: TranscriptOpts,
+    people_by_id: dict[str, dict[str, Any]] | None = None,
+) -> bool:
+    if episode.get("status") == "no_transcript" and not opts.force:
+        return False
+    raw = discovery_payload(api, episode)
+    request = transcript_request(api, episode, raw, people_by_id)
+    if not transcript_source_available(
+        raw,
+        request["publisherTranscriptUrl"],
+        request["cwtPublisherTranscriptUrl"],
+        request["sourceUrl"],
+        request["youtubeVideoId"],
+        request["audioUrl"],
+        opts.whisper,
+    ):
+        # Nothing to try yet. no_transcript means "we looked and there
+        # is none", so leave this episode alone for a later pass rather
+        # than retiring it on the strength of a throttled discovery.
+        LOGGER.debug("transcripts %s no source yet", episode["id"])
+        return False
+    try:
+        kind, cues = resolve_cues(request, client, opts.whisper, int(request["speakers"]))
+    except (
+        CaptionSourceUnavailable,
+        AcquiredPublisherSourceUnavailable,
+        CwtPublisherSourceUnavailable,
+        LennyPublisherSourceUnavailable,
+        PublisherSourceUnavailable,
+        TranscriptionUnavailable,
+    ) as exc:
+        LOGGER.warning("episode %s left for a later pass: %s", episode["id"], exc)
+        return False
+    if opts.dry_run:
+        LOGGER.info("transcripts dry-run %s kind=%s cues=%s", episode["id"], kind, len(cues))
+        return True
+    if not cues:
+        # Only retire the episode when we actually looked and found nothing. A
+        # stalled download is not evidence of absence.
+        api.set_episode_status(episode["id"], status="no_transcript", transcriptKind="none")
+        return True
+    video_id = transcript_video_id(kind, cues, request["youtubeVideoId"])
+    store_transcript(api, cfg, episode, cues, kind, video_id)
+    return True
 
 
 def run_transcripts(
@@ -257,50 +620,27 @@ def run_transcripts(
     dry_run: bool,
     whisper: bool = False,
     cfg: Settings | None = None,
+    show_id: str | None = None,
 ) -> int:
-    episodes = api.list_episodes(status=None if force else "discovered")
     if episode_id:
-        episodes = [row for row in episodes if row["id"] == episode_id]
+        episode = api.get_episode(episode_id)["episode"]
+        episodes = [episode] if force or episode.get("status") == "discovered" else []
+    else:
+        list_kwargs = {"show_id": show_id} if show_id else {}
+        episodes = api.list_episodes(status=None if force else "discovered", **list_kwargs)
+    people_by_id: dict[str, dict[str, Any]] = {}
+    if any(
+        is_acquired_site_url(str(episode.get("sourceUrl") or ""))
+        or is_cwt_url(str(episode.get("sourceUrl") or ""))
+        or is_lennys_url(str(episode.get("sourceUrl") or ""))
+        for episode in episodes
+    ):
+        people_by_id = {str(person["id"]): person for person in api.list_people()}
     count = 0
+    opts = TranscriptOpts(dry_run=dry_run, force=force, whisper=whisper)
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
         for episode in episodes:
-            if episode.get("status") == "no_transcript" and not force:
-                continue
-            raw = discovery_payload(api, episode)
-            video_id = episode.get("youtubeVideoId") or raw.get("youtubeVideoId")
-            audio_url = episode.get("audioUrl") or raw.get("audioUrl")
-            if not (raw.get("transcriptUrl") or video_id or (whisper and audio_url)):
-                # Nothing to try yet. no_transcript means "we looked and there
-                # is none", so leave this episode alone for a later pass rather
-                # than retiring it on the strength of a throttled discovery.
-                LOGGER.info("transcripts %s no source yet", episode["id"])
-                continue
-            try:
-                kind, cues = resolve_cues(
-                    {
-                        "transcriptUrl": raw.get("transcriptUrl"),
-                        "youtubeVideoId": video_id,
-                        "audioUrl": audio_url,
-                    },
-                    client,
-                    whisper,
-                    expected_speakers(api, episode["id"]),
-                )
-            except TranscriptionUnavailable as exc:
-                LOGGER.warning("episode %s left for a later pass: %s", episode["id"], exc)
-                continue
-            count += 1
-            if dry_run:
-                LOGGER.info(
-                    "transcripts dry-run %s kind=%s cues=%s", episode["id"], kind, len(cues)
-                )
-                continue
-            if not cues:
-                # Only retire the episode when we actually looked and found
-                # nothing. A stalled download is not evidence of absence.
-                api.set_episode_status(episode["id"], status="no_transcript", transcriptKind="none")
-                continue
-            store_transcript(api, cfg, episode, cues, kind, video_id)
+            count += int(run_transcript_episode(api, cfg, episode, client, opts, people_by_id))
     return count
 
 
@@ -318,9 +658,18 @@ def store_transcript(
         json.dumps(cues),
         "application/json",
     )
-    segments = cues_to_segments(cues)
-    if cfg:
-        segments = resolve_segment_speakers(api, cfg, episode, segments)
+    speakers_resolved = kind in RESOLVED_TRANSCRIPT_KINDS
+    segments = cues_to_segments(cues, speakers_resolved=speakers_resolved)
+    if not speakers_resolved:
+        if cfg and (cfg.ai_api_key or is_local(cfg)):
+            segments = resolve_segment_speakers(api, cfg, episode, segments)
+        else:
+            # Generic captions and transcript labels are not identities. If
+            # no identification model is available, make every segment
+            # explicitly unpublishable instead of letting extraction guess.
+            for segment in segments:
+                segment.setdefault("diarLabel", segment.get("speakerHint"))
+                segment["speakerHint"] = UNKNOWN
     api.put_segments(episode["id"], segments, kind)
     api.set_episode_status(
         episode["id"], status="segmented", transcriptKind=kind, youtubeVideoId=video_id
@@ -355,6 +704,8 @@ def _slice_segments(
 def segment_action(segment: dict[str, Any], already: set[str], force: bool, focus: str) -> str:
     if not force and segment.get("id") in already:
         return "extracted"
+    if segment.get("speakerHint") == UNKNOWN:
+        return "skip"
     reason = triage_segment(str(segment.get("text") or ""))
     if focus == "recs" and reason != "rec":
         return "skip"
@@ -367,12 +718,13 @@ def extract_one_segment(
     segment: dict[str, Any],
     prev_tail: str,
     guests: list[str] | None = None,
+    focus: str = "all",
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
     # A diarized segment already knows whose voice it is. Offering the model
     # one name stops it choosing between several and calling the choice 0.9.
     known = segment.get("speakerHint")
     roster = [str(known)] if known else guests
-    accepted, rejected, run = extract_segment(cfg, segment["text"], prev_tail, roster)
+    accepted, rejected, run = extract_segment(cfg, segment["text"], prev_tail, roster, focus)
     if known:
         for claim in accepted:
             claim["speakerRaw"] = str(known)
@@ -391,20 +743,22 @@ def extract_one_segment(
     return attach_person_ids(accepted, people_map), run, len(accepted)
 
 
+def claims_for_focus(claims: list[dict[str, Any]], focus: str) -> list[dict[str, Any]]:
+    """A recommendations run persists only claims with surviving evidence."""
+    if focus != "recs":
+        return claims
+    return [claim for claim in claims if claim.get("references")]
+
+
 @dataclass
 class ExtractOpts:
     episode_id: str | None
     dry_run: bool
+    show_id: str | None = None
     max_segments: int = 0
     skip_segments: int = 0
     force: bool = False
     focus: str = "all"
-
-
-# Below this, a person was judged to be merely mentioned rather than present.
-# They must not reach the extractor: a name on the roster is a name it is
-# allowed to put quotes into the mouth of.
-GUEST_CONFIDENCE_FLOOR = 0.5
 
 
 def _episode_guests(detail: dict[str, Any], people_map: dict[str, str]) -> list[str]:
@@ -427,14 +781,18 @@ def _extract_episode(
     detail = api.get_episode(episode["id"])
     already = set(detail.get("extractedSegmentIds") or [])
     guests = _episode_guests(detail, people_map)
-    if not guests:
-        # Nobody identifiable is on this episode, so every claim would be
-        # attributed to "unknown" and never published. Skip before spending.
-        LOGGER.info("episode %s skipped: no identifiable speaker", episode["id"])
-        return 0, 0, 0
     segments = _slice_segments(
         list(detail.get("segments") or []), opts.skip_segments, opts.max_segments
     )
+    has_identifiable_segment = any(
+        str(segment.get("speakerHint") or "") not in {"", UNKNOWN} for segment in segments
+    )
+    if not guests and not has_identifiable_segment:
+        # Nobody identifiable is on this episode, so every claim would be
+        # attributed to "unknown" and never published. Exact publisher
+        # segment identities are sufficient even when RSS omitted the roster.
+        LOGGER.info("episode %s skipped: no identifiable speaker", episode["id"])
+        return 0, 0, 0
     extracted = 0
     llm_calls = 0
     skipped = 0
@@ -443,17 +801,30 @@ def _extract_episode(
         action = segment_action(segment, already, opts.force, opts.focus)
         if action in {"extracted", "skip"}:
             skipped += 1
-            LOGGER.info("segment %s skip %s", segment["idx"], action)
+            LOGGER.debug("segment %s skip %s", segment["idx"], action)
             continue
         llm_calls += 1
         if opts.dry_run:
             LOGGER.info("segment %s keep=%s dry-run", segment["idx"], action)
             continue
         try:
-            posted, run, n = extract_one_segment(cfg, people_map, segment, prev_tail, guests)
+            posted, run, _ = extract_one_segment(
+                cfg,
+                people_map,
+                segment,
+                prev_tail,
+                guests,
+                opts.focus,
+            )
         except httpx.HTTPError as exc:
             LOGGER.warning("segment %s extract failed: %s", segment["idx"], exc)
             continue
+        posted = claims_for_focus(posted, opts.focus)
+        n = len(posted)
+        if opts.focus == "recs":
+            run["accepted"] = bool(posted)
+            if not posted and run.get("reason") == "ok":
+                run["reason"] = "no_evidenced_reference"
         extracted += n
         prev_tail = str(segment["text"])[-300:]
         if posted or run:
@@ -474,14 +845,16 @@ def _extract_episode(
 EXTRACTABLE_STATUSES = ("segmented", "extracted", "published")
 
 
-def _extract_targets(api: ApiClient, episode_id: str | None) -> list[dict[str, Any]]:
-    episodes = [row for status in EXTRACTABLE_STATUSES for row in api.list_episodes(status=status)]
-    if not episode_id:
-        return episodes
-    matched = [row for row in episodes if row["id"] == episode_id]
-    if matched:
-        return matched
-    return [api.get_episode(episode_id)["episode"]]
+def _extract_targets(
+    api: ApiClient, episode_id: str | None, show_id: str | None = None
+) -> list[dict[str, Any]]:
+    if episode_id:
+        return [api.get_episode(episode_id)["episode"]]
+    return [
+        row
+        for status in EXTRACTABLE_STATUSES
+        for row in api.list_episodes(status=status, show_id=show_id)
+    ]
 
 
 def run_extract(
@@ -490,10 +863,10 @@ def run_extract(
     people_map: dict[str, str],
     opts: ExtractOpts,
 ) -> int:
-    if not cfg.ai_api_key and not opts.dry_run:
+    if not cfg.ai_api_key and not is_local(cfg) and not opts.dry_run:
         raise SystemExit("AI_API_KEY is required for extract")
     extracted = 0
-    for episode in _extract_targets(api, opts.episode_id):
+    for episode in _extract_targets(api, opts.episode_id, opts.show_id):
         extracted += _extract_episode(api, cfg, people_map, episode, opts)[0]
     return extracted
 
@@ -622,17 +995,17 @@ def _as_video(video: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_youtube_ids(api: ApiClient, limit: int = 0) -> int:
-    """Recover video ids already linked in metadata we hold.
+    """Recover video ids from canonical episode URLs that are YouTube.
 
-    Nothing is fetched: the links sit in descriptions and episode URLs saved at
-    discovery. They matter because a claim's deep link is built from the video
-    id, and without one a quote cannot be checked by clicking.
+    Nothing is fetched. Arbitrary description links are intentionally ignored:
+    recurring recommendations and promos are not evidence that a link is the
+    current episode. Full official-channel matching belongs to youtube-api.
     """
     found = 0
     for episode in api.list_episodes():
         if episode.get("youtubeVideoId"):
             continue
-        video_id = video_id_from_metadata(episode.get("description"), episode.get("sourceUrl"))
+        video_id = video_id_from_source_url(episode.get("sourceUrl"))
         if not video_id:
             continue
         api.set_episode_status(
@@ -746,11 +1119,12 @@ def run_retime(api: ApiClient, episode_id: str | None, dry_run: bool) -> int:
             continue
         if not cues:
             continue
-        segments = cues_to_segments(cues)
+        kind = str(episode.get("transcriptKind") or "none")
+        segments = cues_to_segments(cues, speakers_resolved=kind in RESOLVED_TRANSCRIPT_KINDS)
         if dry_run:
             LOGGER.info("retime dry-run %s segments=%s", episode["id"], len(segments))
             continue
-        api.put_segments(episode["id"], segments, str(episode.get("transcriptKind") or "none"))
+        api.put_segments(episode["id"], segments, kind)
         result = api.retime(episode["id"])
         moved += int(result.get("moved") or 0)
         LOGGER.info(
@@ -762,6 +1136,8 @@ def run_retime(api: ApiClient, episode_id: str | None, dry_run: bool) -> int:
 def seed_maps_for_stage(
     api: ApiClient, stage: str, dry_run: bool
 ) -> tuple[dict[str, str], dict[str, str]]:
+    if stage == "extract" and not dry_run:
+        return load_roster(api), {}
     if stage not in {"all", "discover", "extract"}:
         return {}, {}
     if not dry_run:
@@ -791,6 +1167,10 @@ def run_standalone_stage(api: ApiClient, cfg: Settings, args: argparse.Namespace
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    # Per-request INFO logs turn a full archive run into hundreds of thousands
+    # of lines and hide the show-level result. Pipeline warnings and summaries
+    # stay visible; HTTP failures still surface through exceptions and warnings.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     parser = argparse.ArgumentParser(prog="on-record-ingest")
     parser.add_argument("--stage", default="all", choices=["all", *STAGES])
     parser.add_argument("--show", default="")
@@ -825,10 +1205,24 @@ def main(argv: list[str] | None = None) -> int:
                     LOGGER.warning("discover %s failed: %s", show["slug"], exc)
         if run_standalone_stage(api, cfg, args):
             return 0
+        target_show_id = None
+        if args.show and args.stage in {"all", "transcripts", "extract", "publish"}:
+            target_show_id = next(
+                (row["id"] for row in api.list_shows() if row["slug"] == args.show),
+                None,
+            )
+            if target_show_id is None:
+                raise SystemExit(f"unknown show: {args.show}")
         transcribed = 0
         if args.stage in {"all", "transcripts"}:
             transcribed = run_transcripts(
-                api, args.episode or None, args.force, args.dry_run, args.whisper, cfg
+                api,
+                args.episode or None,
+                args.force,
+                args.dry_run,
+                args.whisper,
+                cfg,
+                target_show_id,
             )
         extracted = 0
         if args.stage in {"all", "extract", "publish"}:
@@ -839,6 +1233,7 @@ def main(argv: list[str] | None = None) -> int:
                 ExtractOpts(
                     dry_run=args.dry_run,
                     episode_id=args.episode or None,
+                    show_id=target_show_id,
                     focus=args.focus,
                     force=args.force,
                     max_segments=args.max_segments,

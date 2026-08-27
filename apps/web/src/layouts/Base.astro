@@ -3,16 +3,37 @@ import '../styles/global.css';
 
 const {
   title = 'High Signal Podcasts',
-  description = 'What notable people said, on the record — claims with verbatim evidence.',
+  description = 'What notable people actually said on podcasts — attributable claims, recommendations, books, and tools with verbatim evidence.',
 } = Astro.props;
+const siteUrl = 'https://podcasts.highsignal.app';
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const currentPath = Astro.url.pathname;
 const nav = [
   { href: '/', label: 'Home' },
   { href: '/people', label: 'People' },
-  { href: '/recommendations', label: 'Recs' },
+  { href: '/recommendations', label: 'Recommendations' },
   { href: '/sources', label: 'Sources' },
   { href: '/search', label: 'Search' },
-  { href: '/methodology', label: 'Method' },
+  { href: '/methodology', label: 'Methodology' },
 ];
+const structuredData = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'High Signal Podcasts',
+  alternateName: 'On the Record',
+  url: siteUrl,
+  description,
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'High Signal',
+    url: 'https://highsignal.app',
+  },
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: `${siteUrl}/search?q={search_term_string}`,
+    'query-input': 'required name=search_term_string',
+  },
+});
 ---
 <!doctype html>
 <html lang="en">
@@ -21,22 +42,82 @@ const nav = [
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <meta name="theme-color" content="#f1eadb" />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1" />
+    <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {currentPath === '/' && <link rel="alternate" type="text/markdown" href="/index.md" />}
+    <link rel="ard" type="application/json" href="/.well-known/ard.json" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="High Signal Podcasts" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={`${siteUrl}/og-card.png`} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="High Signal Podcasts — what notable people actually said" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={`${siteUrl}/og-card.png`} />
+    <script is:inline type="application/ld+json" set:html={structuredData}></script>
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to the evidence</a>
     <div class="wrap">
-      <header class="banner">
-        <a class="family" href="https://highsignal.app">High Signal</a>
-        <strong>Podcasts</strong>
+      <header class="banner" aria-label="High Signal Podcasts">
+        <a class="wordmark" href="/" aria-label="High Signal Podcasts home">
+          <span class="family">High Signal</span>
+          <strong>Podcasts</strong>
+        </a>
+        <a class="parent-link" href="https://highsignal.app">Daily Brief ↗</a>
       </header>
-      <nav>
+      <nav aria-label="Primary navigation">
         {nav.map((item) => (
-          <a href={item.href}>{item.label}</a>
+          <a
+            href={item.href}
+            aria-current={currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href)) ? 'page' : undefined}
+          >{item.label}</a>
         ))}
       </nav>
-      <main>
+      <main id="main">
         <slot />
       </main>
+      <footer class="site-footer">
+        <div>
+          <p class="footer-kicker">High Signal / Podcasts</p>
+          <p class="footer-statement">
+            A public evidence index for finding what notable people actually said,
+            recommended, and used.
+          </p>
+        </div>
+        <div class="footer-contract">
+          <p>Published claims keep the speaker, verbatim excerpt, date, and source trail attached.</p>
+          <p>The public index currently needs no account or checkout. No permanent pricing model is claimed.</p>
+        </div>
+        <div class="footer-links">
+          <a href="/methodology">Evidence policy</a>
+          <a href="/sources">Source index</a>
+          <a href="/developers">Public API</a>
+          <a href="/about">About</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/pricing.md">Access state</a>
+          <a href="https://github.com/Significant-Hobbies/on-record">Source code ↗</a>
+        </div>
+      </footer>
     </div>
+    <script
+      is:inline
+      src="https://sassmaker.com/project-strip.js"
+      data-project="on-record"
+      defer
+    ></script>
+    <script
+      is:inline
+      src="https://sassmaker.com/ai-chat-footer.js"
+      data-name="High Signal Podcasts"
+      defer
+    ></script>
   </body>
 </html>

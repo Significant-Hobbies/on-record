@@ -8,12 +8,13 @@ import { dedupeHash, newId } from '../ids';
 import { judgeClaim } from '../publish-rules';
 import { findVerbatimAnchor, normalizeWs } from '../quote';
 import { getSegmentBodies, type SegmentBody } from '../segment-store';
+import { speakerHintMatchesPerson } from '../speaker-hint';
 import { timestampForOffset } from '../timestamp';
-import { sanitizeReferences, type ClaimReference } from '../references';
+import { referenceAssertion, sanitizeReferences, type ClaimReference } from '../references';
 
 export const adminClaimsRoute = new Hono<{ Bindings: Env }>();
 
-type IncomingClaim = {
+export type IncomingClaim = {
   personId: string;
   segmentId: string;
   speakerRaw: string;
@@ -104,10 +105,12 @@ async function persistTopics(database: Database, claimId: string, slugs: string[
 async function persistReferences(
   database: Database,
   claimId: string,
-  incoming: IncomingClaim,
-  segmentText: string
+  refs: ClaimReference[]
 ): Promise<void> {
-  const refs = sanitizeReferences(incoming.references ?? [], segmentText);
+  // A duplicate re-extraction is authoritative for this exact quote. Replace
+  // the old set so references accepted by an earlier, weaker validator do not
+  // survive forever.
+  await database.delete(schema.claimReferences).where(eq(schema.claimReferences.claimId, claimId));
   for (const ref of refs) {
     await database
       .insert(schema.claimReferences)
@@ -120,6 +123,64 @@ async function persistReferences(
       })
       .onConflictDoNothing();
   }
+}
+
+function referencesForClaim(incoming: IncomingClaim, body: SegmentBody): ClaimReference[] {
+  return sanitizeReferences(incoming.references ?? [], incoming.quote, body.text);
+}
+
+export function transcriptHasPreciseTimestamps(kind: string | null): boolean {
+  return kind !== 'rss_text_coarse' && kind !== 'publisher_html_coarse';
+}
+
+export function assertionForClaim(incoming: IncomingClaim, refs: ClaimReference[]): string {
+  if (incoming.promptVersion !== 'extract-v3' || refs.length === 0) {
+    return incoming.assertion;
+  }
+  return refs.map((reference) => referenceAssertion(reference)).join(' ');
+}
+
+export function requiresEvidencedReference(
+  incoming: IncomingClaim,
+  refs: ClaimReference[]
+): boolean {
+  return (
+    incoming.promptVersion === 'extract-v3' &&
+    incoming.claimType === 'recommendation' &&
+    refs.length === 0
+  );
+}
+
+function claimTimestamp(
+  episode: typeof schema.episodes.$inferSelect,
+  segment: typeof schema.segments.$inferSelect,
+  body: SegmentBody,
+  anchor: ReturnType<typeof findVerbatimAnchor>
+): number | null {
+  if (!transcriptHasPreciseTimestamps(episode.transcriptKind)) {
+    return null;
+  }
+  return timestampForOffset(
+    { cueMap: body.cueMap, endS: segment.endS, startS: segment.startS, text: body.text },
+    anchor?.start ?? null
+  );
+}
+
+function optionalClaimFields(
+  incoming: IncomingClaim,
+  decision: ReturnType<typeof judgeClaim>,
+  anchor: ReturnType<typeof findVerbatimAnchor>,
+  now: Date
+) {
+  return {
+    model: incoming.model ?? null,
+    pipelineVersion: incoming.pipelineVersion ?? 'claims-v1',
+    promptVersion: incoming.promptVersion ?? null,
+    publishedAt: decision.reviewStatus === 'published' ? now : null,
+    quoteEndChar: anchor?.end ?? null,
+    quoteStartChar: anchor?.start ?? null,
+    stance: incoming.stance ?? null,
+  };
 }
 
 async function persistOneClaim(
@@ -139,6 +200,7 @@ async function persistOneClaim(
     speakerConfidence: incoming.speakerConfidence,
     speakerRaw: incoming.speakerRaw,
   });
+  const refs = referencesForClaim(incoming, body);
   const hash = await dedupeHash(episode.id, incoming.personId, normalizeWs(incoming.quote));
   const [existing] = await database
     .select()
@@ -146,17 +208,19 @@ async function persistOneClaim(
     .where(eq(schema.claims.dedupeHash, hash))
     .limit(1);
   if (existing) {
-    await persistReferences(database, existing.id, incoming, body.text);
+    await persistReferences(database, existing.id, refs);
     return { id: existing.id, reason: 'duplicate', reviewStatus: existing.reviewStatus };
   }
+  if (requiresEvidencedReference(incoming, refs)) {
+    return { id: '', reason: 'no_evidenced_reference', reviewStatus: 'rejected' };
+  }
+  const assertion = assertionForClaim(incoming, refs);
   const id = newId();
-  const timestampS = timestampForOffset(
-    { cueMap: body.cueMap, endS: segment.endS, startS: segment.startS, text: body.text },
-    anchor?.start ?? null
-  );
+  const timestampS = claimTimestamp(episode, segment, body, anchor);
   const now = new Date();
   await database.insert(schema.claims).values({
-    assertion: incoming.assertion,
+    ...optionalClaimFields(incoming, decision, anchor, now),
+    assertion,
     claimType: incoming.claimType as (typeof schema.claims.claimType.enumValues)[number],
     confidenceBand: decision.confidenceBand,
     createdAt: now,
@@ -164,21 +228,14 @@ async function persistOneClaim(
     episodeId: episode.id,
     extractionConfidence: incoming.extractionConfidence,
     id,
-    model: incoming.model ?? null,
     personId: incoming.personId,
-    pipelineVersion: incoming.pipelineVersion ?? 'claims-v1',
-    promptVersion: incoming.promptVersion ?? null,
-    publishedAt: decision.reviewStatus === 'published' ? now : null,
     publishReason: decision.publishReason,
     quote: incoming.quote,
-    quoteEndChar: anchor?.end ?? null,
-    quoteStartChar: anchor?.start ?? null,
     reviewStatus: decision.reviewStatus,
     saidOn: episode.publishedAt,
     segmentId: segment.id,
     speakerConfidence: incoming.speakerConfidence,
     speakerRaw: incoming.speakerRaw,
-    stance: incoming.stance ?? null,
     timestampS,
     version: 1,
   });
@@ -193,9 +250,9 @@ async function persistOneClaim(
   });
   await persistTopics(database, id, incoming.topics ?? []);
   if (decision.reviewStatus === 'published') {
-    await indexPublishedClaim(d1, id, incoming.assertion, incoming.quote);
+    await indexPublishedClaim(d1, id, assertion, incoming.quote);
   }
-  await persistReferences(database, id, incoming, body.text);
+  await persistReferences(database, id, refs);
   return { id, reason: decision.publishReason, reviewStatus: decision.reviewStatus };
 }
 
@@ -288,10 +345,12 @@ adminClaimsRoute.post('/episodes/:id/retime', async (c) => {
       continue;
     }
     const anchor = findVerbatimAnchor(body.text, claim.quote);
-    const timestampS = timestampForOffset(
-      { cueMap: body.cueMap, endS: segment.endS, startS: segment.startS, text: body.text },
-      anchor?.start ?? claim.quoteStartChar
-    );
+    const timestampS = transcriptHasPreciseTimestamps(episode.transcriptKind)
+      ? timestampForOffset(
+          { cueMap: body.cueMap, endS: segment.endS, startS: segment.startS, text: body.text },
+          anchor?.start ?? claim.quoteStartChar
+        )
+      : null;
     if (timestampS === claim.timestampS) {
       continue;
     }
@@ -355,6 +414,11 @@ adminClaimsRoute.post('/episodes/:id/reverify', async (c) => {
     .select()
     .from(schema.claims)
     .where(eq(schema.claims.episodeId, episodeId));
+  const personSlugs = new Map(
+    (
+      await database.select({ id: schema.people.id, slug: schema.people.slug }).from(schema.people)
+    ).map((person) => [person.id, person.slug])
+  );
   let quoteGone = 0;
   let speakerChanged = 0;
   let kept = 0;
@@ -369,7 +433,13 @@ adminClaimsRoute.post('/episodes/:id/reverify', async (c) => {
       await unpublish(database, c.env.DB, claim.id, 'source_changed');
       continue;
     }
-    if (segment.speakerHint && segment.speakerHint !== claim.personId) {
+    if (
+      !speakerHintMatchesPerson(
+        segment.speakerHint,
+        claim.personId,
+        personSlugs.get(claim.personId)
+      )
+    ) {
       speakerChanged += 1;
       await unpublish(database, c.env.DB, claim.id, 'speaker_reattributed');
       continue;

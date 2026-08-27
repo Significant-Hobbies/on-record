@@ -29,11 +29,90 @@ REFERENCE_KINDS = {
     "person",
     "other",
 }
-REFERENCE_ROLES = {"recommends", "uses", "built", "avoids", "mentions"}
+REFERENCE_ROLES = {"recommends", "uses", "built", "avoids"}
+REFERENCE_CLAUSE_BREAK = re.compile(
+    r"(?:[.!?;]\s+|,\s*(?:and|but|while|whereas)\s+|\s+(?:but|whereas)\s+|"
+    r"\s+and\s+(?=(?:i|we|you|they|personally|currently|actually|still|use|used|"
+    r"recommend|avoid|built|created|made|read)\b))",
+    re.IGNORECASE,
+)
+REFERENCE_GENERIC_NAME = re.compile(
+    r"^(?:it|this|that|these|those|them|ai|artificial intelligence|machine learning|"
+    r"software|hardware|books?|apps?|applications?|games?|tools?|services?|papers?|"
+    r"courses?|devices?|accounts?|podcasts?|shows?|products?|platforms?|sources?|"
+    r"(?:a|an|the|this|that|some|any|my|your|our|their)\s+"
+    r"(?:app|application|book|game|tool|service|paper|course|device|hardware|account|"
+    r"podcast|show|product|software|platform))$",
+    re.IGNORECASE,
+)
+REFERENCE_DESCRIPTIVE_NAME = re.compile(
+    r"^(?:his|her|their|my|your|our|a|an|the|this|that)\s+"
+    r"(?:(?:new|latest|recent|current|favorite|favourite)\s+)?"
+    r"(?:book|app|application|game|tool|service|paper|course|device|account|podcast|"
+    r"show|product|platform)\b",
+    re.IGNORECASE,
+)
+REFERENCE_OBJECT_PRONOUN = re.compile(r"\b(?:it|them|this|that|these|those)\b", re.IGNORECASE)
+REFERENCE_REPORTED_SPEECH = re.compile(
+    r"\b(?:he|she|they|someone|a\s+woman|a\s+man|the\s+woman|the\s+man|my\s+friend)\s+"
+    r"(?:said|told|wrote|asked)\b",
+    re.IGNORECASE,
+)
+REFERENCE_WRAPPED_PERSON = re.compile(
+    r"\b(?:conversation|interview|episode|talk|book|article|work)\s+(?:with|by|from)\b",
+    re.IGNORECASE,
+)
+REFERENCE_ADVERBS = (
+    r"(?:(?:personally|currently|actually|still|always|mostly|usually|daily|now|"
+    r"highly|strongly|really|definitely|generally|originally)\s+)*"
+)
+REFERENCE_KIND_CONFLICTS = {
+    "book": re.compile(
+        r"\b(?:game|app|application|software|tool|service|platform|device|hardware|course|"
+        r"paper|article|account|documentary|film|movie|video|channel|supplement|vitamin|"
+        r"multivitamin|drug|medication)\b",
+        re.IGNORECASE,
+    ),
+    "app": re.compile(
+        r"\b(?:book|novel|memoir|game|games|gaming|paper|course|device|hardware|chip|account)\b",
+        re.IGNORECASE,
+    ),
+    "tool": re.compile(
+        r"\b(?:book|novel|memoir|paper|course|device|hardware|chip|account)\b", re.IGNORECASE
+    ),
+    "service": re.compile(
+        r"\b(?:book|novel|memoir|paper|course|device|hardware|chip|account)\b", re.IGNORECASE
+    ),
+    "paper": re.compile(
+        r"\b(?:game|app|software|tool|service|device|hardware|course|account)\b", re.IGNORECASE
+    ),
+    "course": re.compile(
+        r"\b(?:game|app|software|tool|service|device|hardware|paper|account)\b", re.IGNORECASE
+    ),
+    "hardware": re.compile(
+        r"\b(?:book|novel|memoir|game|app|software|service|course|paper|account)\b", re.IGNORECASE
+    ),
+    "person": re.compile(
+        r"\b(?:book|novel|memoir|game|app|software|tool|service|device|course|paper|account)\b",
+        re.IGNORECASE,
+    ),
+}
 
 
 def normalize_ws(text: str) -> str:
     return " ".join(text.split())
+
+
+def is_stable_reference_name(name: str) -> bool:
+    """Reject descriptive noun phrases; references must identify a stable named thing."""
+    normalized = normalize_ws(name)
+    if REFERENCE_GENERIC_NAME.fullmatch(normalized) or REFERENCE_DESCRIPTIVE_NAME.search(
+        normalized
+    ):
+        return False
+    if " " not in normalized:
+        return True
+    return any(char.isupper() for char in normalized) or bool(re.search(r"[./+#@]", normalized))
 
 
 def find_verbatim_anchor(
@@ -146,11 +225,13 @@ def parse_claims_json(raw: str) -> list[dict[str, Any]] | None:
     return [row for row in payload if isinstance(row, dict)]
 
 
-def validate_references(row: dict[str, Any], segment_text: str) -> list[dict[str, str]]:
+def validate_references(
+    row: dict[str, Any], claim_quote: str, kind_context: str | None = None
+) -> list[dict[str, str]]:
     raw = row.get("references") or []
     if not isinstance(raw, list):
         return []
-    haystack = normalize_ws(segment_text).lower()
+    haystack = normalize_ws(claim_quote).lower()
     out: list[dict[str, str]] = []
     seen: set[tuple[str, str, str]] = set()
     for item in raw:
@@ -159,16 +240,128 @@ def validate_references(row: dict[str, Any], segment_text: str) -> list[dict[str
         kind = str(item.get("kind") or "").strip().lower()
         role = str(item.get("role") or "").strip().lower()
         name = str(item.get("name") or "").strip()
-        if kind not in REFERENCE_KINDS or role not in REFERENCE_ROLES or len(name) < 2:
+        if (
+            kind not in REFERENCE_KINDS
+            or role not in REFERENCE_ROLES
+            or len(name) < 2
+            or not is_stable_reference_name(name)
+        ):
             continue
         if normalize_ws(name).lower() not in haystack:
             continue
+        if not reference_role_supported(name, role, claim_quote, kind):
+            continue
+        kind = normalized_reference_kind(name, kind, kind_context or claim_quote)
         key = (kind, role, name.lower())
         if key in seen:
             continue
         seen.add(key)
         out.append({"kind": kind, "name": name, "role": role})
     return out
+
+
+def reference_role_supported(
+    name: str, role: str, claim_quote: str, kind: str | None = None
+) -> bool:
+    """Require a direct grammatical link between the named thing and speech act."""
+    if role not in REFERENCE_ROLES:
+        return False
+    needle = normalize_ws(name)
+    if REFERENCE_GENERIC_NAME.fullmatch(needle):
+        return False
+    name_pattern = re.escape(needle).replace(r"\ ", r"\s+")
+    clauses = REFERENCE_CLAUSE_BREAK.split(normalize_ws(claim_quote))
+    matching = [clause for clause in clauses if needle.casefold() in clause.casefold()]
+
+    def active_object(verbs: str, clause: str, distance: int = 100) -> bool:
+        pattern = re.compile(
+            rf"\b(?:i|we)\s+{REFERENCE_ADVERBS}(?:{verbs})\b"
+            rf"(?P<gap>.{{0,{distance}}}?){name_pattern}",
+            re.IGNORECASE,
+        )
+        for match in pattern.finditer(clause):
+            if REFERENCE_OBJECT_PRONOUN.search(match.group("gap")):
+                continue
+            if REFERENCE_REPORTED_SPEECH.search(clause[: match.start()]):
+                continue
+            if role == "recommends" and re.search(
+                r"\b(?:about|regarding|concerning)\b", match.group("gap"), re.IGNORECASE
+            ):
+                continue
+            if kind == "person" and (
+                REFERENCE_WRAPPED_PERSON.search(match.group("gap"))
+                or re.search(r"\b(?:with|by|from)\b", match.group("gap"), re.IGNORECASE)
+            ):
+                continue
+            return True
+        return False
+
+    if role == "recommends":
+        should = re.compile(
+            rf"\b(?:you|people|everyone|founders|engineers|teams|we)\s+(?:really\s+)?"
+            rf"should\s+(?:read|try|use|watch|listen\s+to|check\s+out|follow)\b"
+            rf".{{0,80}}?{name_pattern}",
+            re.IGNORECASE,
+        )
+        relative = re.compile(
+            rf"{name_pattern}.{{0,60}}?\b(?:that|which)\s+(?:i|we)\s+"
+            rf"{REFERENCE_ADVERBS}recommend(?:ed)?\b",
+            re.IGNORECASE,
+        )
+        worth = re.compile(
+            rf"(?:\bmust[- ](?:read|use|watch)\b.{{0,50}}?{name_pattern}|"
+            rf"{name_pattern}.{{0,40}}?\bworth\s+"
+            rf"(?:reading|trying|using|watching|listening\s+to)\b)",
+            re.IGNORECASE,
+        )
+        return any(
+            active_object(r"recommend(?:ed)?", clause)
+            or should.search(clause)
+            or (kind != "person" and relative.search(clause))
+            or worth.search(clause)
+            for clause in matching
+        )
+    if role == "uses":
+        verbs = (
+            r"use|used|rely\s+on|run|work\s+with|read|am\s+reading|are\s+reading|"
+            r"have\s+been\s+using|have\s+used|listen\s+to|wear"
+        )
+        fronted = re.compile(
+            rf"{name_pattern}\s*,\s*(?:i|we)\s+{REFERENCE_ADVERBS}(?:{verbs})\b",
+            re.IGNORECASE,
+        )
+        return any(active_object(verbs, clause) or fronted.search(clause) for clause in matching)
+    if role == "built":
+        verbs = r"built|created|made|founded|developed|launched|wrote|authored|designed"
+        return any(active_object(verbs, clause) for clause in matching)
+    if role == "avoids":
+        verbs = (
+            r"avoid|avoided|never\s+use|stopped\s+using|quit|uninstalled|"
+            r"stay\s+away\s+from|do\s+not\s+use|don['’]?t\s+use|"
+            r"would\s+not\s+use|wouldn['’]?t\s+use|cannot\s+use|can['’]?t\s+use"
+        )
+        return any(active_object(verbs, clause) for clause in matching)
+    return False
+
+
+def normalized_reference_kind(name: str, kind: str, claim_quote: str) -> str:
+    """Downgrade an explicitly contradicted model category to safe `other`."""
+    conflict = REFERENCE_KIND_CONFLICTS.get(kind)
+    if conflict is None:
+        return kind
+    needle = normalize_ws(name).casefold()
+    context = normalize_ws(claim_quote)
+    folded = context.casefold()
+    name_pattern = re.escape(normalize_ws(name)).replace(r"\ ", r"\s+")
+    if kind == "book" and re.search(rf"\bread\s+in\s+{name_pattern}", context, re.IGNORECASE):
+        return "other"
+    at = folded.find(needle)
+    while at >= 0:
+        nearby = context[max(0, at - 160) : at + len(needle) + 160]
+        if conflict.search(nearby):
+            return "other"
+        at = folded.find(needle, at + len(needle))
+    return kind
 
 
 def _confidence(row: dict[str, Any], *keys: str) -> float | None:
@@ -249,5 +442,5 @@ def _validated_body(
         "extractionConfidence": extraction,
         "speakerConfidence": speaker_conf,
         "topics": [str(slug) for slug in topic_list if str(slug) in topics],
-        "references": validate_references(row, segment_text),
+        "references": validate_references(row, quote, segment_text),
     }, None

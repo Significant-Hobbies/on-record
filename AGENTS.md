@@ -14,7 +14,7 @@ and record durable follow-up in this repository's GitHub Issues.
   transcripts, Astro SSR (Session 2), Python ingest on GitHub Actions via uv.
 - **Local dev**: `pnpm install` then `uv sync --project python/ingest --dev`.
   API: `pnpm --filter @on-record/api dev`. Web: `pnpm dev:web` (reads the API).
-  Ingest: `pnpm ingest -- --stage extract --focus recs`.
+  Ingest: `pnpm ingest --stage extract --focus recs`.
 - **Build/check**: `pnpm quality`
 - **Deploy**: dispatch-only (`.github/workflows/deploy.yml`). Never auto-deploy.
   Production D1 `on-record-db`, R2 `on-record-raw`, and GitHub Actions secrets

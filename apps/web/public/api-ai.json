@@ -1,0 +1,95 @@
+{
+  "name": "High Signal Podcasts",
+  "alternateName": "On the Record",
+  "version": "1",
+  "url": "https://podcasts.highsignal.app",
+  "description": "A public evidence index of attributable claims and recommendations from notable podcast guests.",
+  "llms": "https://podcasts.highsignal.app/llms.txt",
+  "llmsFull": "https://podcasts.highsignal.app/llms-full.txt",
+  "openapi": "https://podcasts.highsignal.app/openapi.json",
+  "sitemap": "https://podcasts.highsignal.app/sitemap.xml",
+  "robots": "https://podcasts.highsignal.app/robots.txt",
+  "markdown": {
+    "suffix": ".md",
+    "negotiation": false
+  },
+  "agentSkills": {
+    "index": "https://podcasts.highsignal.app/.well-known/agent-skills/index.json",
+    "evidence": "https://podcasts.highsignal.app/.well-known/agent-skills/on-record-evidence/SKILL.md"
+  },
+  "ard": "https://podcasts.highsignal.app/.well-known/ard.json",
+  "api": {
+    "baseUrl": "https://api.podcasts.highsignal.app",
+    "auth": "none",
+    "access": "public-read-only"
+  },
+  "surfaces": [
+    {
+      "id": "home",
+      "url": "https://podcasts.highsignal.app/",
+      "md": "https://podcasts.highsignal.app/index.md",
+      "kind": "static",
+      "description": "Product purpose, evidence contract, and current corpus"
+    },
+    {
+      "id": "people",
+      "url": "https://podcasts.highsignal.app/people",
+      "md": "https://podcasts.highsignal.app/people.md",
+      "kind": "dynamic",
+      "description": "People with published evidence"
+    },
+    {
+      "id": "recommendations",
+      "url": "https://podcasts.highsignal.app/recommendations",
+      "md": "https://podcasts.highsignal.app/recommendations.md",
+      "kind": "dynamic",
+      "description": "Source-linked recommendations and uses"
+    },
+    {
+      "id": "sources",
+      "url": "https://podcasts.highsignal.app/sources",
+      "md": "https://podcasts.highsignal.app/sources.md",
+      "kind": "dynamic",
+      "description": "Source episodes with published claims"
+    },
+    {
+      "id": "search",
+      "url": "https://podcasts.highsignal.app/search",
+      "md": "https://podcasts.highsignal.app/search.md",
+      "kind": "static",
+      "description": "Published claim search instructions"
+    },
+    {
+      "id": "methodology",
+      "url": "https://podcasts.highsignal.app/methodology",
+      "md": "https://podcasts.highsignal.app/methodology.md",
+      "kind": "static",
+      "description": "Evidence and publishing policy"
+    },
+    {
+      "id": "developers",
+      "url": "https://podcasts.highsignal.app/developers",
+      "md": "https://podcasts.highsignal.app/developers.md",
+      "kind": "static",
+      "description": "Public read-only API documentation and access boundary"
+    },
+    {
+      "id": "about",
+      "url": "https://podcasts.highsignal.app/about",
+      "md": "https://podcasts.highsignal.app/about.md",
+      "kind": "static",
+      "description": "Product purpose, ownership, and contact route"
+    },
+    {
+      "id": "privacy",
+      "url": "https://podcasts.highsignal.app/privacy",
+      "md": "https://podcasts.highsignal.app/privacy.md",
+      "kind": "static",
+      "description": "Privacy notes for the public index"
+    }
+  ],
+  "auth": {
+    "public": true,
+    "notes": "The public evidence index and read-only API currently require no account, API key, or checkout. Administrative routes are excluded."
+  }
+}

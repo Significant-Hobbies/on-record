@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { CueMap } from '@on-record/db';
 import { db, schema } from '../db';
@@ -7,6 +7,22 @@ import type { Env } from '../env';
 import { newId, sha256Hex } from '../ids';
 
 export const adminEpisodesRoute = new Hono<{ Bindings: Env }>();
+
+export function segmentIndexesAreValid(indexes: number[]): boolean {
+  return (
+    new Set(indexes).size === indexes.length &&
+    indexes.every((index) => Number.isInteger(index) && index >= 0)
+  );
+}
+
+export function staleSegmentIds(
+  existing: Array<{ id: string; idx: number }>,
+  incomingIndexes: ReadonlySet<number>
+): string[] {
+  return existing
+    .filter((segment) => !incomingIndexes.has(segment.idx))
+    .map((segment) => segment.id);
+}
 
 type EpisodeInput = {
   showId: string;
@@ -24,7 +40,7 @@ type EpisodeInput = {
   people?: Array<{
     personId: string;
     role: 'host' | 'guest';
-    attributionSource: 'show_config' | 'metadata_match' | 'llm';
+    attributionSource: 'show_config' | 'metadata_match' | 'publisher_transcript' | 'llm';
     confidence?: number;
   }>;
 };
@@ -186,46 +202,65 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
   };
   const database = db(c.env.DB);
   const incoming = body.segments ?? [];
+  const incomingIndexes = new Set(incoming.map((segment) => segment.idx));
+  if (!segmentIndexesAreValid(incoming.map((segment) => segment.idx))) {
+    return c.json({ error: 'bad_segment_indexes' }, 400);
+  }
+  const [claimed] = await database
+    .select({ id: schema.claims.id })
+    .from(schema.claims)
+    .where(eq(schema.claims.episodeId, id))
+    .limit(1);
+  if (claimed) {
+    return c.json({ error: 'segments_have_claims' }, 409);
+  }
+  await putSegmentBodies(
+    c.env.RAW,
+    id,
+    incoming.map((s) => ({
+      cueMap: s.cueMap ?? null,
+      diarLabel: s.diarLabel ?? null,
+      idx: s.idx,
+      text: s.text,
+    }))
+  );
   if (incoming.length) {
-    await putSegmentBodies(
-      c.env.RAW,
-      id,
-      incoming.map((s) => ({
-        cueMap: s.cueMap ?? null,
-        diarLabel: s.diarLabel ?? null,
-        idx: s.idx,
-        text: s.text,
-      }))
+    const statements = incoming.map((segment) =>
+      c.env.DB.prepare(
+        `INSERT INTO segments
+          (id, episode_id, idx, start_s, end_s, text, speaker_hint, cue_map)
+         VALUES (?, ?, ?, ?, ?, '', ?, NULL)
+         ON CONFLICT(episode_id, idx) DO UPDATE SET
+           start_s = excluded.start_s,
+           end_s = excluded.end_s,
+           text = '',
+           speaker_hint = excluded.speaker_hint,
+           cue_map = NULL`
+      ).bind(newId(), id, segment.idx, segment.startS, segment.endS, segment.speakerHint ?? null)
     );
+    // D1 batch is one round trip and one ordered transaction. Chunking keeps
+    // large transcripts below provider statement limits without returning to
+    // the old one-request-per-segment path.
+    for (let start = 0; start < statements.length; start += 100) {
+      await c.env.DB.batch(statements.slice(start, start + 100));
+    }
   }
   const existing = await database
-    .select()
+    .select({ id: schema.segments.id, idx: schema.segments.idx })
     .from(schema.segments)
     .where(eq(schema.segments.episodeId, id));
-  const byIdx = new Map(existing.map((row) => [row.idx, row]));
-  for (const segment of incoming) {
-    const match = byIdx.get(segment.idx);
-    if (match) {
-      await database
-        .update(schema.segments)
-        .set({
-          endS: segment.endS,
-          speakerHint: segment.speakerHint ?? null,
-          startS: segment.startS,
-          text: '',
-        })
-        .where(eq(schema.segments.id, match.id));
-    } else {
-      await database.insert(schema.segments).values({
-        endS: segment.endS,
-        episodeId: id,
-        id: newId(),
-        idx: segment.idx,
-        speakerHint: segment.speakerHint ?? null,
-        startS: segment.startS,
-        text: '',
-      });
-    }
+  const stale = staleSegmentIds(existing, incomingIndexes);
+  for (let start = 0; start < stale.length; start += 100) {
+    await c.env.DB.batch(
+      stale
+        .slice(start, start + 100)
+        .map((segmentId) =>
+          c.env.DB.prepare('DELETE FROM segments WHERE id = ? AND episode_id = ?').bind(
+            segmentId,
+            id
+          )
+        )
+    );
   }
   await database
     .update(schema.episodes)
@@ -247,23 +282,32 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
 adminEpisodesRoute.post('/episodes/:id/people', async (c) => {
   const id = c.req.param('id');
   const body = (await c.req.json()) as {
-    people?: Array<{ personId: string; confidence: number; attributionSource?: string }>;
+    people?: Array<{
+      personId: string;
+      confidence: number;
+      attributionSource?: 'show_config' | 'metadata_match' | 'publisher_transcript' | 'llm';
+      role?: 'host' | 'guest';
+    }>;
   };
   const database = db(c.env.DB);
   for (const person of body.people ?? []) {
     await database
-      .update(schema.episodePeople)
-      .set({
-        attributionSource:
-          (person.attributionSource as 'show_config' | 'metadata_match' | 'llm') ?? 'llm',
+      .insert(schema.episodePeople)
+      .values({
+        attributionSource: person.attributionSource ?? 'llm',
         confidence: person.confidence,
+        episodeId: id,
+        personId: person.personId,
+        role: person.role ?? 'guest',
       })
-      .where(
-        and(
-          eq(schema.episodePeople.episodeId, id),
-          eq(schema.episodePeople.personId, person.personId)
-        )
-      );
+      .onConflictDoUpdate({
+        set: {
+          attributionSource: person.attributionSource ?? 'llm',
+          confidence: person.confidence,
+          ...(person.role ? { role: person.role } : {}),
+        },
+        target: [schema.episodePeople.episodeId, schema.episodePeople.personId],
+      });
   }
   return c.json({ updated: (body.people ?? []).length });
 });

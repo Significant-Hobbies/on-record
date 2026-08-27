@@ -1,0 +1,27 @@
+{
+  "entries": [
+    {
+      "@context": "https://agenticresourcediscovery.org/context/v1",
+      "identifier": "urn:air:podcasts.highsignal.app:skill:evidence",
+      "displayName": "High Signal Podcasts evidence skill",
+      "type": "application/ai-skill+md",
+      "url": "https://podcasts.highsignal.app/.well-known/agent-skills/on-record-evidence/SKILL.md",
+      "description": "Instructions for finding and citing source-backed podcast claims and recommendations without exceeding the published evidence.",
+      "capabilities": ["ClaimSearch", "RecommendationLookup", "EvidenceVerification"],
+      "representativeQueries": [
+        "what did this person actually say about agents",
+        "find the source for this podcast claim",
+        "which tools has this guest said they use"
+      ]
+    },
+    {
+      "@context": "https://agenticresourcediscovery.org/context/v1",
+      "identifier": "urn:air:api.podcasts.highsignal.app:openapi:public",
+      "displayName": "High Signal Podcasts public API",
+      "type": "application/openapi+json",
+      "url": "https://podcasts.highsignal.app/openapi.json",
+      "description": "OpenAPI description of the unauthenticated read-only evidence API.",
+      "capabilities": ["People", "Claims", "Sources", "Search", "Recommendations"]
+    }
+  ]
+}

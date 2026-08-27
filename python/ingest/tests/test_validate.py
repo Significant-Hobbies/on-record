@@ -85,7 +85,7 @@ STACK = (
 )
 
 
-def test_keeps_book_and_app_named_in_segment():
+def test_keeps_book_and_app_named_in_claim_quote():
     refs = validate_references(
         {
             "references": [
@@ -100,6 +100,242 @@ def test_keeps_book_and_app_named_in_segment():
         ("book", "The Sovereign Individual", "recommends"),
         ("app", "Cursor", "uses"),
     }
+
+
+def test_drops_reference_named_elsewhere_in_segment_but_not_claim_quote():
+    row = {
+        "speaker": "andrej-karpathy",
+        "claim_type": "recommendation",
+        "assertion": "Karpathy recommends The Sovereign Individual.",
+        "quote": "I still recommend The Sovereign Individual",
+        "topics": ["books"],
+        "extraction_confidence": 0.9,
+        "speaker_confidence": 0.9,
+        "references": [
+            {"kind": "book", "name": "The Sovereign Individual", "role": "recommends"},
+            {"kind": "app", "name": "Cursor", "role": "uses"},
+        ],
+    }
+    claim, reason = validate_claim(row, STACK, ROSTER, {"books"})
+    assert reason is None
+    assert claim is not None
+    assert claim["references"] == [
+        {"kind": "book", "name": "The Sovereign Individual", "role": "recommends"}
+    ]
+
+
+def test_drops_mentions_and_roles_supported_only_by_a_different_clause():
+    refs = validate_references(
+        {
+            "references": [
+                {"kind": "book", "name": "The Sovereign Individual", "role": "mentions"},
+                {"kind": "book", "name": "The Sovereign Individual", "role": "uses"},
+                {"kind": "app", "name": "Cursor", "role": "recommends"},
+            ]
+        },
+        STACK,
+    )
+    assert refs == []
+
+
+def test_keeps_built_avoids_and_reading_speech_acts():
+    quote = (
+        "I built comma.ai from scratch. I do not use Facebook anymore. "
+        "I am reading The Beginning of Infinity this week."
+    )
+    refs = validate_references(
+        {
+            "references": [
+                {"kind": "tool", "name": "comma.ai", "role": "built"},
+                {"kind": "service", "name": "Facebook", "role": "avoids"},
+                {"kind": "book", "name": "The Beginning of Infinity", "role": "uses"},
+            ]
+        },
+        quote,
+    )
+    assert {(ref["name"], ref["role"]) for ref in refs} == {
+        ("comma.ai", "built"),
+        ("Facebook", "avoids"),
+        ("The Beginning of Infinity", "uses"),
+    }
+
+
+def test_normalizes_a_kind_that_conflicts_with_the_quoted_context():
+    quote = "Zork was a fantastic game, and I highly recommend Zork to everyone."
+    refs = validate_references(
+        {
+            "references": [
+                {"kind": "book", "name": "Zork", "role": "recommends"},
+                {"kind": "other", "name": "Zork", "role": "recommends"},
+            ]
+        },
+        quote,
+    )
+    assert refs == [{"kind": "other", "name": "Zork", "role": "recommends"}]
+
+
+def test_normalizes_an_account_mislabeled_as_an_app():
+    quote = "I recommend the FFmpeg account on Twitter/X to everybody who likes open source."
+    refs = validate_references(
+        {
+            "references": [
+                {
+                    "kind": "app",
+                    "name": "FFmpeg account on Twitter/X",
+                    "role": "recommends",
+                }
+            ]
+        },
+        quote,
+    )
+    assert refs == [
+        {
+            "kind": "other",
+            "name": "FFmpeg account on Twitter/X",
+            "role": "recommends",
+        }
+    ]
+
+
+def test_rejects_generic_objects_passive_hearsay_and_non_object_people():
+    cases = [
+        (
+            "Anybody listening should know I highly recommend this game.",
+            {"kind": "app", "name": "this game", "role": "recommends"},
+        ),
+        (
+            "I saw WSL2 recommended for certain operations.",
+            {"kind": "tool", "name": "WSL2", "role": "recommends"},
+        ),
+        (
+            "You had conversations with Nurlan, with Adam, which I highly recommend.",
+            {"kind": "person", "name": "Adam", "role": "recommends"},
+        ),
+        (
+            "I read a paper recently about modern working scientists.",
+            {"kind": "paper", "name": "a paper", "role": "uses"},
+        ),
+    ]
+    for quote, reference in cases:
+        assert validate_references({"references": [reference]}, quote) == []
+
+
+def test_rejects_pronoun_object_followed_by_an_unrelated_name():
+    quote = "I read it when they first did Crime and Punishment, and that was amazing."
+    refs = validate_references(
+        {"references": [{"kind": "book", "name": "Crime and Punishment", "role": "uses"}]},
+        quote,
+    )
+    assert refs == []
+
+
+def test_rejects_descriptive_phrases_that_are_not_named_references():
+    quote = (
+        "I used leading and suggestive questions in my research. "
+        "I recommend many sources who disagree with each other."
+    )
+    refs = validate_references(
+        {
+            "references": [
+                {
+                    "kind": "other",
+                    "name": "leading and suggestive questions",
+                    "role": "uses",
+                },
+                {
+                    "kind": "other",
+                    "name": "many sources who disagree with each other",
+                    "role": "recommends",
+                },
+            ]
+        },
+        quote,
+    )
+    assert refs == []
+
+
+def test_rejects_generic_plural_categories():
+    quote = "As you can tell, I read a lot of books."
+    refs = validate_references(
+        {"references": [{"kind": "book", "name": "books", "role": "uses"}]},
+        quote,
+    )
+    assert refs == []
+
+
+def test_rejects_a_topic_mistaken_for_the_recommended_book_title():
+    quote = "That ties in with another book I recommended to you about the origins of Trump."
+    refs = validate_references(
+        {"references": [{"kind": "book", "name": "the origins of Trump", "role": "recommends"}]},
+        quote,
+    )
+    assert refs == []
+
+
+def test_normalizes_an_author_shorthand_mislabeled_as_a_book():
+    quote = "I read in Solzhenitsyn that the authorities made hundreds of decisions a day."
+    refs = validate_references(
+        {"references": [{"kind": "book", "name": "Solzhenitsyn", "role": "uses"}]},
+        quote,
+    )
+    assert refs == [{"kind": "other", "name": "Solzhenitsyn", "role": "uses"}]
+
+
+def test_rejects_a_descriptive_book_phrase_promoted_into_a_title():
+    quote = "I highly recommend people read his new book on Elon."
+    refs = validate_references(
+        {"references": [{"kind": "book", "name": "his new book on Elon", "role": "recommends"}]},
+        quote,
+    )
+    assert refs == []
+
+
+def test_rejects_a_person_incidental_to_the_recommended_action():
+    quote = "I recommend being a POW with the Americans. That would be my choice."
+    refs = validate_references(
+        {"references": [{"kind": "person", "name": "Americans", "role": "recommends"}]},
+        quote,
+    )
+    assert refs == []
+
+
+def test_normalizes_a_documentary_mislabeled_as_a_book():
+    quote = "He created the documentary I highly recommend called This Place Rules."
+    refs = validate_references(
+        {"references": [{"kind": "book", "name": "This Place Rules", "role": "recommends"}]},
+        quote,
+    )
+    assert refs == [{"kind": "other", "name": "This Place Rules", "role": "recommends"}]
+
+
+def test_rejects_recommended_media_wrapped_around_a_person_name():
+    quote = "I recommend my conversation with Serhii Plokhy about the history of the region."
+    refs = validate_references(
+        {"references": [{"kind": "person", "name": "Serhii Plokhy", "role": "recommends"}]},
+        quote,
+    )
+    assert refs == []
+
+
+def test_rejects_a_reference_spoken_inside_someone_elses_reported_quote():
+    quote = (
+        "A woman said this to me, ‘It never occurred to me that I could be a doctor "
+        "until I read Ayn Rand.’"
+    )
+    refs = validate_references(
+        {"references": [{"kind": "book", "name": "Ayn Rand", "role": "uses"}]},
+        quote,
+    )
+    assert refs == []
+
+
+def test_kind_conflict_can_come_from_source_context_outside_the_quote():
+    refs = validate_references(
+        {"references": [{"kind": "app", "name": "Zork", "role": "recommends"}]},
+        "I highly recommend Zork.",
+        "Zork changed how I think about games. I highly recommend Zork.",
+    )
+    assert refs == [{"kind": "other", "name": "Zork", "role": "recommends"}]
 
 
 def test_claim_includes_validated_references():

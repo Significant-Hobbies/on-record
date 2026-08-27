@@ -39,12 +39,14 @@ try {
       <article class="card">
         <b>{item.name}</b>
         <div class="meta">
-          {[item.kind, item.role, whenLabel(item)].filter(Boolean).join(' · ')}
+          {[item.kind, item.role, item.showName, item.episodeTitle, whenLabel(item)]
+            .filter(Boolean)
+            .join(' · ')}
         </div>
         <p class="quote">{item.quote}</p>
-        {item.deepLinkUrl && (
+        {(item.deepLinkUrl || item.sourceUrl) && (
           <>
-            <a href={item.deepLinkUrl} rel="noreferrer" target="_blank">Source</a>
+            <a href={item.deepLinkUrl ?? item.sourceUrl} rel="noreferrer" target="_blank">Source</a>
             {' · '}
           </>
         )}

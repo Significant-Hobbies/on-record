@@ -1,0 +1,97 @@
+{
+  "$schema": "fleet.design-review.v1",
+  "version": 1,
+  "project": "on-record",
+  "target": "High Signal Podcasts public beta homepage",
+  "surfaceMode": "persuade",
+  "mode": "overhaul",
+  "register": "product",
+  "context": {
+    "product": "PRODUCT.md",
+    "design": "DESIGN.md"
+  },
+  "direction": {
+    "references": [],
+    "probes": [],
+    "selected": "evidence-led-editorial-ledger",
+    "approval": "delegated",
+    "before": "",
+    "contract": {
+      "purpose": "Help people find what notable podcast guests actually said or recommended and trace each result back to its source.",
+      "purposeSource": "site-health/docs/project-dossiers/on-record.yaml plus repository PRODUCT.md and PROJECT_STATUS.md",
+      "canonicalPurpose": "High Signal Podcasts helps people who want useful ideas from important podcasts find evidenced claims, recommendations, books, and tools without listening end to end by preserving attributable excerpts and source trails.",
+      "purposeAlignment": "repository-override",
+      "driftNote": "The repository now contains a reviewed public-beta corpus rather than the dossier's thin V1 proof state; Site Health must be refreshed after live verification.",
+      "audience": "Founders, investors, journalists, operators, and other evidence-conscious podcast readers.",
+      "job": "Explain the public beta, demonstrate a real evidence receipt, and move visitors into search, people, recommendations, or sources.",
+      "thesis": "A warm editorial evidence ledger makes provenance feel tangible without resembling a podcast player or generic SaaS landing page.",
+      "system": "Warm paper surfaces, ledger ink, evidence rust, archival green, brass accents, editorial serif display type, compact sans metadata, square evidence containers, and rule-led asymmetric grids.",
+      "signature": "A real published claim appears as a taped evidence receipt with speaker, time, episode, publisher, and exact-source link.",
+      "risk": "The oversized editorial hero could delay proof; the adjacent populated evidence receipt keeps the mechanism and credibility in the first desktop viewport."
+    }
+  },
+  "evidence": {
+    "screenshots": [
+      {
+        "width": 390,
+        "path": "artifacts/design/after-390.png"
+      },
+      {
+        "width": 768,
+        "path": "artifacts/design/after-768.png"
+      },
+      {
+        "width": 1440,
+        "path": "artifacts/design/after-1440.png"
+      }
+    ],
+    "projectCheck": {
+      "command": "pnpm ready",
+      "status": "pass"
+    },
+    "critique": {
+      "score": 35,
+      "maximum": 40
+    },
+    "audit": {
+      "score": 18,
+      "maximum": 20
+    },
+    "unresolved": {
+      "p0": 0,
+      "p1": 0
+    },
+    "detector": {
+      "posture": "advisory",
+      "findings": [
+        "The detector returned no findings. Two advisory P3 items remain: light-only raw theme values and two deferred global project-family scripts."
+      ]
+    },
+    "comprehension": {
+      "status": "pass",
+      "reviewer": "independent design reviewer",
+      "answers": {
+        "product": "A searchable evidence index of attributable podcast claims and recommendations.",
+        "audience": "Founders, investors, journalists, operators, and people who need useful podcast ideas without listening end to end.",
+        "value": "Find the useful line quickly and verify the exact wording.",
+        "mechanism": "Claim-level extraction retains the verbatim excerpt, speaker, date, timestamp, episode, publisher, and source link.",
+        "proof": "A populated evidence receipt and source-linked proof cards use real reviewed corpus entries.",
+        "nextAction": "Search published claims or browse the people index in the public beta."
+      },
+      "purposeScore": {
+        "product": 25,
+        "audience": 15,
+        "value": 15,
+        "mechanism": 15,
+        "proof": 15,
+        "nextAction": 14,
+        "total": 99
+      },
+      "mismatches": []
+    }
+  },
+  "ownerFeedback": {
+    "decision": "delegated",
+    "note": "The owner delegated release judgment and asked for the website to be fully sorted and released."
+  }
+}

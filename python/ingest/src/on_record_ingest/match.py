@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from .seed.people import PEOPLE
 
@@ -33,6 +34,30 @@ def merge_video(episode: dict[str, Any], videos: list[dict[str, Any]]) -> dict[s
     return episode
 
 
+def merge_discovery_items(
+    rss_items: list[dict[str, Any]],
+    videos: list[dict[str, Any]],
+    *,
+    include_unmatched_videos: bool,
+) -> list[dict[str, Any]]:
+    """Attach matching uploads and optionally admit channel-only episodes."""
+    merged_items: list[dict[str, Any]] = []
+    matched_video_ids: set[str] = set()
+    for item in rss_items:
+        merged = merge_video(item, videos)
+        merged_items.append(merged)
+        video_id = str(merged.get("youtubeVideoId") or "")
+        if video_id:
+            matched_video_ids.add(video_id)
+    if include_unmatched_videos:
+        merged_items.extend(
+            video
+            for video in videos
+            if str(video.get("youtubeVideoId") or "") not in matched_video_ids
+        )
+    return merged_items
+
+
 def names_text(text: str, names: list[str]) -> bool:
     """Whole-word match, so "Sam" does not match "same" and "Gil" not "Gilbert"."""
     lowered = text.lower()
@@ -62,18 +87,28 @@ def guests_from_text(text: str) -> list[dict[str, Any]]:
     return guests
 
 
-# Shows link their own video in the episode blurb or on the episode page.
-# The channel feed only ever returns its latest 15 videos, so this is where
-# most ids actually come from.
-YOUTUBE_URL = re.compile(
-    r"(?:youtube\.com/(?:watch\?v=|embed/|live/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})"
-)
+YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "youtu.be", "www.youtu.be"}
+YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
-def video_id_from_metadata(*fields: str | None) -> str | None:
-    """A YouTube id linked anywhere in the text we already hold."""
-    for field in fields:
-        found = YOUTUBE_URL.search(field or "")
-        if found:
-            return found.group(1)
-    return None
+def video_id_from_source_url(source_url: str | None) -> str | None:
+    """A video id only when the episode's canonical URL is itself YouTube.
+
+    Descriptions routinely contain links to prior interviews, sponsors, and
+    recurring promotional videos. Mining an arbitrary link from that prose
+    assigned one TWiST promo to 200 unrelated episodes. Channel uploads are
+    matched separately by title and date; this helper therefore fails closed
+    unless the source URL itself identifies the video.
+    """
+    parsed = urlparse(str(source_url or "").strip())
+    host = (parsed.hostname or "").casefold()
+    if parsed.scheme not in {"http", "https"} or host not in YOUTUBE_HOSTS:
+        return None
+    if host in {"youtu.be", "www.youtu.be"}:
+        candidate = parsed.path.strip("/").split("/", 1)[0]
+    elif parsed.path.rstrip("/") == "/watch":
+        candidate = (parse_qs(parsed.query).get("v") or [""])[0]
+    else:
+        parts = parsed.path.strip("/").split("/")
+        candidate = parts[1] if len(parts) > 1 and parts[0] in {"embed", "live", "shorts"} else ""
+    return candidate if YOUTUBE_ID.fullmatch(candidate) else None

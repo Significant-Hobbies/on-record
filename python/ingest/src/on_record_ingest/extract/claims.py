@@ -12,9 +12,32 @@ from .validate import parse_claims_json, validate_claim
 
 SYSTEM_PROMPT = """Extract claims from one transcript segment. JSON only: {"claims":[...]}.
 Each claim: speaker (roster slug, guest name, or unknown), claim_type (belief|prediction|recommendation|evaluation|observation|preference|commitment|disagreement|uncertainty), assertion (third-person), stance, quote (verbatim substring >=40 chars), topics (from list), extraction_confidence, speaker_confidence, references [{kind,name,role}].
-kind=book|app|tool|service|paper|course|hardware|person|other. role=recommends|uses|built|avoids|mentions.
-name must be words from the quote. Prefer I use / I recommend / I built. Empty claims array if none.
+kind=book|app|tool|service|paper|course|hardware|person|other. role=recommends|uses|built|avoids.
+Only emit a reference when the quote itself explicitly says the speaker recommends it, uses or reads it, built it, or avoids it. Never emit a mere mention. name must be words from the quote. Empty claims array if none.
+The reference name must be the exact object of that speech act, not a platform, source, or company merely used to describe it. If someone recommends following an account on Twitter/X, name the account, not Twitter/X.
 """
+
+RECOMMENDATIONS_PROMPT = """Extract only evidenced named recommendations or personal-stack actions from one transcript segment. JSON only: {"claims":[...]}.
+Every claim must contain at least one reference in the JSON key references (plural): [{kind,name,role}]. references is always an array, even for one item. Include a third-person assertion and a verbatim quote of at least 40 characters. Empty claims array if there is no qualifying named thing.
+kind=book|app|tool|service|paper|course|hardware|person|other. role=recommends|uses|built|avoids.
+Qualifying speech acts are explicit: the speaker recommends or endorses the named thing, says they use or read it, says they built it, or says they avoid it. A product description, passing mention, or statement that software is popular is not personal use or a recommendation.
+The reference name must be the exact words naming the object of the speech act. Do not return a hosting platform or source used only to describe that object. Example: for "the FFmpeg account on Twitter/X that I recommend everybody follow", name="FFmpeg account on Twitter/X", not "Twitter/X".
+Kinds must match the quoted context. Never label a game as a book; use app or other for a game, and other for an account when no narrower kind is exact.
+Each claim also includes speaker, speaker_confidence, claim_type, assertion, stance, topics, and extraction_confidence.
+"""
+
+REFERENCE_KINDS_LIST = [
+    "book",
+    "app",
+    "tool",
+    "service",
+    "paper",
+    "course",
+    "hardware",
+    "person",
+    "other",
+]
+REFERENCE_ROLES_LIST = ["recommends", "uses", "built", "avoids"]
 
 
 def roster_slugs() -> set[str]:
@@ -75,9 +98,9 @@ CLAIMS_SCHEMA: dict[str, Any] = {
                         "items": {
                             "type": "object",
                             "properties": {
-                                "kind": {"type": "string"},
+                                "kind": {"type": "string", "enum": REFERENCE_KINDS_LIST},
                                 "name": {"type": "string"},
-                                "role": {"type": "string"},
+                                "role": {"type": "string", "enum": REFERENCE_ROLES_LIST},
                             },
                             "required": ["kind", "name", "role"],
                         },
@@ -115,7 +138,10 @@ def build_body(settings: Settings, system_prompt: str, user_prompt: str) -> dict
         return {
             "model": settings.force_model or settings.extract_model,
             "temperature": 0,
-            "max_tokens": 8000,
+            # A bounded segment should yield a handful of compact objects.
+            # An 8k allowance let malformed local generations occupy the
+            # model for several minutes before the HTTP timeout could recover.
+            "max_tokens": 2048,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": "claims", "strict": True, "schema": CLAIMS_SCHEMA},
@@ -148,10 +174,11 @@ def _chat(
     settings: Settings, user_prompt: str, system_prompt: str = SYSTEM_PROMPT
 ) -> tuple[str, dict[str, Any], int]:
     started = time.perf_counter()
-    headers = {
-        "Authorization": f"Bearer {settings.ai_api_key}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if settings.ai_api_key:
+        headers["Authorization"] = f"Bearer {settings.ai_api_key}"
+    elif not is_local(settings):
+        raise RuntimeError("AI_API_KEY is required for remote inference")
     if not is_local(settings):
         headers["X-Gateway-Project-Id"] = settings.ai_project_id
         if settings.force_model:
@@ -161,8 +188,10 @@ def _chat(
     body = build_body(settings, system_prompt, user_prompt)
     last_error: Exception | None = None
     payload: dict[str, Any] = {}
-    with httpx.Client(timeout=90.0) as client:
-        for attempt in range(3):
+    local = is_local(settings)
+    attempts = 1 if local else 3
+    with httpx.Client(timeout=45.0 if local else 90.0) as client:
+        for attempt in range(attempts):
             try:
                 response = client.post(
                     f"{settings.ai_base_url}/chat/completions", headers=headers, json=body
@@ -200,6 +229,7 @@ def extract_segment(
     segment_text: str,
     prev_tail: str,
     guests: list[str] | None = None,
+    focus: str = "all",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     # Only the people who could plausibly be talking in this episode: its host
     # and whoever its metadata names. Pasting the whole roster in was 329
@@ -213,12 +243,17 @@ def extract_segment(
         sorted(topic_slugs()),
         guests,
     )
-    raw, response_json, latency_ms = _chat(settings, user_prompt)
+    system_prompt = RECOMMENDATIONS_PROMPT if focus == "recs" else SYSTEM_PROMPT
+    raw, response_json, latency_ms = _chat(settings, user_prompt, system_prompt)
     parsed = parse_claims_json(raw)
     retry_used = False
     if parsed is None:
         retry_used = True
-        raw, response_json, latency_ms = _chat(settings, user_prompt + "\nRespond with JSON only.")
+        raw, response_json, latency_ms = _chat(
+            settings,
+            user_prompt + "\nRespond with JSON only.",
+            system_prompt,
+        )
         parsed = parse_claims_json(raw)
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -235,7 +270,7 @@ def extract_segment(
         "promptVersion": settings.prompt_version,
         "accepted": bool(accepted),
         "reason": "ok" if parsed is not None else "json_parse_failed",
-        "requestJson": {"prompt": user_prompt, "retry": retry_used},
+        "requestJson": {"focus": focus, "prompt": user_prompt, "retry": retry_used},
         "responseJson": response_json,
         "latencyMs": latency_ms,
     }

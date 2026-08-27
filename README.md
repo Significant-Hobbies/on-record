@@ -35,9 +35,12 @@ Production D1 `on-record-db` and R2 `on-record-raw` already exist. Deploys
 are dispatch-only (`.github/workflows/deploy.yml`). New remote migrations
 still need operator approval.
 
-## Seed corpus (V1)
+## Public-beta corpus
 
-Shows: Dwarkesh Podcast, Lex Fridman, No Priors, Latent Space.
+The catalog currently covers 25 shows and 10,305 episodes. The verified public
+recommendation slice contains 166 manually accepted claims and 189 named
+reference rows across nine shows. Coverage is explicit: cataloged episodes
+without supported transcripts or exact speaker evidence remain pending.
 
-People: Karpathy, Dario Amodei, Altman, Hassabis, LeCun, Nadella, Brockman,
-Collison, Sutskever, Jensen Huang.
+Build the reviewed production bundle from the locally verified v9 snapshot with
+`pnpm release:build-reviewed`. Production deployment remains dispatch-only.
