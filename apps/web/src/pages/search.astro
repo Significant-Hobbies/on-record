@@ -3,31 +3,93 @@ import ClaimCard from '../components/ClaimCard.astro';
 import Layout from '../layouts/Base.astro';
 import { apiGet, runtimeEnvFromLocals, type Claim } from '../lib/api';
 
-const q = Astro.url.searchParams.get('q') ?? '';
+const claimTypes = [
+  ['evaluation', 'Evaluations'],
+  ['recommendation', 'Recommendations'],
+  ['prediction', 'Predictions'],
+  ['preference', 'Preferences'],
+  ['belief', 'Beliefs'],
+  ['observation', 'Observations'],
+  ['commitment', 'Commitments'],
+  ['disagreement', 'Disagreements'],
+  ['uncertainty', 'Uncertainty'],
+] as const;
+const q = (Astro.url.searchParams.get('q') ?? '').trim();
+const type = Astro.url.searchParams.get('type') ?? '';
+const params = new URLSearchParams();
+if (q) params.set('q', q);
+if (type) params.set('type', type);
+
 let claims: Claim[] = [];
-let insufficient = !q;
-if (q) {
-  try {
-    const payload = await apiGet<{ claims: Claim[]; evidence?: string }>(
-      `/api/search?q=${encodeURIComponent(q)}`,
-      runtimeEnvFromLocals(Astro.locals)
-    );
-    claims = payload.claims ?? [];
-    insufficient = claims.length === 0;
-  } catch {
-    insufficient = true;
-  }
+let unavailable = false;
+try {
+  const payload = await apiGet<{ claims: Claim[]; evidence?: string }>(
+    `/api/search${params.size ? `?${params}` : ''}`,
+    runtimeEnvFromLocals(Astro.locals)
+  );
+  claims = payload.claims ?? [];
+} catch {
+  unavailable = true;
 }
+
 ---
-<Layout title="Search: High Signal Podcasts">
-  <h1>Search published claims</h1>
-  <form method="get">
-    <input type="search" name="q" value={q} placeholder="agents, decade, Claude" />
-    <button type="submit">Search</button>
-  </form>
-  {insufficient ? (
-    <p class="empty">Insufficient evidence.</p>
-  ) : (
-    claims.map((claim) => <ClaimCard claim={claim} />)
-  )}
+<Layout
+  title="Search podcast ideas — High Signal Podcasts"
+  description="Search exact, attributable podcast claims by idea or claim type, then open the original episode and timestamp."
+>
+  <header class="collection-header search-header">
+    <p class="eyebrow">Research desk / claim search</p>
+    <h1>Search what people actually said.</h1>
+    <p class="lede">
+      Search the exact-quote claim ledger—not a generated answer. Each result identifies the speaker,
+      episode, publisher, and source.
+    </p>
+    <form method="get" class="research-search">
+      <div class="research-query">
+        <label for="claim-query">Idea, phrase, person, book, or tool</label>
+        <input id="claim-query" type="search" name="q" value={q} placeholder="e.g. product-market fit, AI agents, pricing" />
+      </div>
+      <div class="research-type">
+        <label for="claim-type">Claim type</label>
+        <select id="claim-type" name="type">
+          <option value="">Every type</option>
+          {claimTypes.map(([value, label]) => <option value={value} selected={type === value}>{label}</option>)}
+        </select>
+      </div>
+      <button type="submit">Search evidence</button>
+    </form>
+    <div class="search-suggestions" aria-label="Example searches">
+      <span>Try</span>
+      <a href="/search?q=product-market+fit">product-market fit</a>
+      <a href="/search?q=pricing">pricing</a>
+      <a href="/search?q=Claude">Claude</a>
+      <a href="/search?type=prediction">predictions</a>
+    </div>
+  </header>
+
+  <section class="search-results" aria-labelledby="results-heading">
+    <div class="results-heading">
+      <div>
+        <p class="eyebrow">Published evidence</p>
+        <h2 id="results-heading">
+          {q ? `Results for “${q}”` : type ? claimTypes.find(([value]) => value === type)?.[1] : 'Recently published claims'}
+        </h2>
+      </div>
+      <p>{claims.length} {claims.length === 1 ? 'result' : 'results'}</p>
+    </div>
+    {unavailable ? (
+      <p class="empty">Search is temporarily unavailable. No unverified fallback results are shown.</p>
+    ) : claims.length === 0 ? (
+      <div class="empty-state">
+        <p class="eyebrow">No published match</p>
+        <h2>Try fewer or broader words.</h2>
+        <p>The index only returns exact, attributable claims. Unsupported matches stay absent.</p>
+        <a class="button button-secondary" href="/search">Browse recent evidence</a>
+      </div>
+    ) : (
+      <div class="claim-list search-claim-list">
+        {claims.map((claim, index) => <ClaimCard claim={claim} index={index} />)}
+      </div>
+    )}
+  </section>
 </Layout>

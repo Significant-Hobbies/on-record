@@ -578,7 +578,7 @@ def test_unknown_publisher_name_cannot_fall_back_to_roster_guessing():
     )
     segment = api.segments[0]
     assert segment["speakerHint"] == pipeline.UNKNOWN
-    assert pipeline.segment_action(segment, set(), force=False, focus="all") == "skip"
+    assert pipeline.segment_action(segment, set(), set(), False, "all", "extract-v4") == "skip"
 
 
 def test_generic_transcript_without_identification_is_explicitly_unknown():
@@ -593,7 +593,17 @@ def test_generic_transcript_without_identification_is_explicitly_unknown():
     )
     segment = api.segments[0]
     assert segment["speakerHint"] == pipeline.UNKNOWN
-    assert pipeline.segment_action(segment, set(), force=False, focus="all") == "skip"
+    assert pipeline.segment_action(segment, set(), set(), False, "all", "extract-v4") == "skip"
+
+
+def test_matching_zero_result_attempt_is_a_checkpoint_unless_forced():
+    segment = {"id": "segment-1", "speakerHint": "known", "text": "I love Cursor."}
+    attempted = {("segment-1", "extract-v4", "recs")}
+    assert (
+        pipeline.segment_action(segment, set(), attempted, False, "recs", "extract-v4")
+        == "attempted"
+    )
+    assert pipeline.segment_action(segment, set(), attempted, True, "recs", "extract-v4") == "rec"
 
 
 def test_unlabelled_generic_transcript_with_identification_config_stays_unknown():
@@ -679,6 +689,129 @@ def test_exact_segment_speaker_allows_extraction_without_episode_roster():
     assert pipeline._extract_episode(Api(), object(), {}, {"id": "episode-1"}, opts) == (0, 1, 0)
 
 
+def test_batch_extraction_posts_one_checkpoint_per_candidate(monkeypatch):
+    class Api:
+        def __init__(self):
+            self.posts = []
+
+        def get_episode(self, episode_id):
+            return {
+                "episode": {"id": episode_id},
+                "people": [],
+                "segments": [
+                    {
+                        "id": "segment-1",
+                        "idx": 0,
+                        "speakerHint": "guest-one",
+                        "text": (
+                            "I think direct customer contact is the strongest way to keep "
+                            "product priorities tied to real problems."
+                        ),
+                    },
+                    {
+                        "id": "segment-2",
+                        "idx": 1,
+                        "speakerHint": "guest-one",
+                        "text": (
+                            "The lesson is that teams should shorten the distance between "
+                            "a customer problem and the person making the decision."
+                        ),
+                    },
+                ],
+                "extractedSegmentIds": [],
+                "extractionAttempts": [],
+            }
+
+        def post_claims(self, episode_id, claims, llm_runs):
+            self.posts.append((episode_id, claims, llm_runs))
+            return {
+                "results": [
+                    {"id": f"claim-{index}", "reviewStatus": "published"}
+                    for index, _claim in enumerate(claims)
+                ]
+            }
+
+    monkeypatch.setattr(
+        pipeline,
+        "extract_one_batch",
+        lambda cfg, people_map, segments: (
+            [
+                {
+                    "segmentId": "segment-1",
+                    "personId": "person-1",
+                    "assertion": "The speaker values direct customer contact.",
+                }
+            ],
+            {
+                "latencyMs": 20,
+                "model": "local-test",
+                "promptVersion": "extract-v4",
+                "reason": "ok",
+                "requestJson": {"segmentIds": ["segment-1", "segment-2"]},
+                "responseJson": {"model": "local-test"},
+            },
+        ),
+    )
+    api = Api()
+    cfg = replace(load_settings(), ai_base_url="http://127.0.0.1:1234/v1")
+    opts = pipeline.ExtractOpts(episode_id="episode-1", dry_run=False, batch_size=2)
+    result = pipeline._extract_episode(
+        api,
+        cfg,
+        {"guest-one": "person-1"},
+        {"id": "episode-1"},
+        opts,
+    )
+    assert result == (1, 1, 0)
+    assert len(api.posts) == 1
+    _, claims, runs = api.posts[0]
+    assert claims[0]["segmentId"] == "segment-1"
+    assert [run["segmentId"] for run in runs] == ["segment-1", "segment-2"]
+    assert [run["accepted"] for run in runs] == [True, False]
+    assert runs[1]["reason"] == "batch_no_quality_claim"
+
+
+def test_batch_target_counts_existing_published_claims(monkeypatch):
+    class Api:
+        def get_episode(self, episode_id):
+            return {
+                "episode": {"id": episode_id},
+                "people": [],
+                "segments": [
+                    {
+                        "id": "segment-1",
+                        "idx": 0,
+                        "speakerHint": "guest-one",
+                        "text": "I think durable products solve a recurring customer problem.",
+                    }
+                ],
+                "extractedSegmentIds": [],
+                "extractionAttempts": [],
+                "publishedClaimCount": 10,
+            }
+
+    monkeypatch.setattr(
+        pipeline,
+        "extract_one_batch",
+        lambda *args: (_ for _ in ()).throw(AssertionError("target already met")),
+    )
+    cfg = replace(load_settings(), ai_base_url="http://127.0.0.1:1234/v1")
+    opts = pipeline.ExtractOpts(episode_id="episode-1", dry_run=False, batch_size=8)
+    assert pipeline._extract_episode(Api(), cfg, {}, {"id": "episode-1"}, opts) == (0, 0, 0)
+
+
+def test_near_duplicate_claims_require_substantial_word_overlap():
+    original = {
+        "quote": "Founders should define their ambition through the eyes of their customers."
+    }
+    repeated = {
+        "quote": "Founders should define their ambition through the eyes of their customers!"
+    }
+    distinct = {"quote": "Teams learn faster when they speak to customers every week."}
+    assert pipeline.claims_are_near_duplicates(original, repeated)
+    assert not pipeline.claims_are_near_duplicates(original, distinct)
+
+
 def test_extract_only_loads_the_existing_roster_without_reseeding(monkeypatch):
     monkeypatch.setattr(pipeline, "load_roster", lambda api: {"person": "uuid"})
     monkeypatch.setattr(
@@ -700,3 +833,22 @@ def test_extract_targets_apply_the_show_filter():
 
     rows = pipeline._extract_targets(Api(), episode_id=None, show_id="show-1")
     assert len(rows) == len(pipeline.EXTRACTABLE_STATUSES)
+
+
+def test_extract_limit_caps_episode_work(monkeypatch):
+    cfg = replace(load_settings(), ai_base_url="http://127.0.0.1:1234/v1")
+    monkeypatch.setattr(
+        pipeline,
+        "_extract_targets",
+        lambda api, episode_id, show_id: [{"id": "one"}, {"id": "two"}],
+    )
+    visited = []
+
+    def extract(api, settings, people, episode, opts):
+        visited.append(episode["id"])
+        return 0, 0, 0
+
+    monkeypatch.setattr(pipeline, "_extract_episode", extract)
+    opts = pipeline.ExtractOpts(episode_id=None, dry_run=False, limit=1)
+    assert pipeline.run_extract(object(), cfg, {}, opts) == 0
+    assert visited == ["one"]

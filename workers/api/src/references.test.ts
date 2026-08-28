@@ -63,6 +63,24 @@ describe('sanitizeReferences', () => {
     ]);
   });
 
+  it('keeps preferences and ownership distinct from recommendations', () => {
+    const quote =
+      "I love Linear for planning, and I bought The Staff Engineer's Path last week. These are personal choices, not blanket recommendations.";
+    expect(
+      sanitizeReferences(
+        [
+          { kind: 'app', name: 'Linear', role: 'likes' },
+          { kind: 'book', name: "The Staff Engineer's Path", role: 'owns' },
+          { kind: 'app', name: 'Linear', role: 'recommends' },
+        ],
+        quote
+      )
+    ).toEqual([
+      { kind: 'app', name: 'Linear', role: 'likes' },
+      { kind: 'book', name: "The Staff Engineer's Path", role: 'owns' },
+    ]);
+  });
+
   it('normalizes a kind that conflicts with the quoted context', () => {
     const refs = sanitizeReferences(
       [

@@ -281,7 +281,7 @@ export const claimReferences = sqliteTable(
     }).notNull(),
     name: text('name').notNull(),
     role: text('role', {
-      enum: ['recommends', 'uses', 'built', 'avoids', 'mentions'],
+      enum: ['recommends', 'uses', 'likes', 'owns', 'built', 'avoids', 'mentions'],
     }).notNull(),
   },
   (t) => [
@@ -300,6 +300,7 @@ export const llmRuns = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date()),
     episodeId: text('episode_id'),
+    focus: text('focus'),
     id: text('id').primaryKey(),
     latencyMs: integer('latency_ms'),
     model: text('model').notNull(),
@@ -307,12 +308,14 @@ export const llmRuns = sqliteTable(
     reason: text('reason'),
     requestJson: text('request_json', { mode: 'json' }).notNull(),
     responseJson: text('response_json', { mode: 'json' }),
+    segmentId: text('segment_id').references(() => segments.id),
     tokensIn: integer('tokens_in'),
     tokensOut: integer('tokens_out'),
   },
   (t) => [
     index('llm_runs_episode_idx').on(t.episodeId),
     index('llm_runs_created_idx').on(t.createdAt),
+    index('llm_runs_segment_prompt_focus_idx').on(t.segmentId, t.promptVersion, t.focus),
   ]
 );
 

@@ -9,12 +9,10 @@ const siteUrl = 'https://podcasts.highsignal.app';
 const canonical = new URL(Astro.url.pathname, siteUrl).toString();
 const currentPath = Astro.url.pathname;
 const nav = [
-  { href: '/', label: 'Home' },
-  { href: '/people', label: 'People' },
-  { href: '/recommendations', label: 'Recommendations' },
-  { href: '/sources', label: 'Sources' },
-  { href: '/search', label: 'Search' },
-  { href: '/methodology', label: 'Methodology' },
+  { href: '/search', label: 'Search claims', note: 'Ideas & opinions' },
+  { href: '/people', label: 'People', note: 'Who said what' },
+  { href: '/recommendations', label: 'Books & tools', note: 'Repeated named items' },
+  { href: '/sources', label: 'Episodes', note: 'Source intelligence' },
 ];
 const structuredData = JSON.stringify({
   '@context': 'https://schema.org',
@@ -106,21 +104,48 @@ const structuredData = JSON.stringify({
   <body>
     <a class="skip-link" href="#main">Skip to the evidence</a>
     <div class="wrap">
-      <header class="banner" aria-label="High Signal Podcasts">
-        <a class="wordmark" href="/" aria-label="High Signal Podcasts home">
-          <span class="family">High Signal</span>
-          <strong>Podcasts</strong>
-        </a>
-        <a class="parent-link" href="https://highsignal.app">Daily Brief ↗</a>
-      </header>
-      <nav aria-label="Primary navigation">
-        {nav.map((item) => (
+      <header class="masthead" aria-label="High Signal Podcasts">
+        <div class="masthead-brand">
           <a
-            href={item.href}
-            aria-current={currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href)) ? 'page' : undefined}
-          >{item.label}</a>
-        ))}
-      </nav>
+            class="wordmark"
+            href="/"
+            aria-label="High Signal Podcasts home"
+            aria-current={currentPath === '/' ? 'page' : undefined}
+          >
+            <span class="family">High Signal</span>
+            <strong>Podcasts</strong>
+          </a>
+          <span class="masthead-edition"><span class="status-dot"></span> Evidence ledger</span>
+        </div>
+        <nav class="desktop-nav" aria-label="Primary navigation">
+          {nav.map((item) => (
+            <a
+              href={item.href}
+              aria-current={currentPath.startsWith(item.href) ? 'page' : undefined}
+            >{item.label}</a>
+          ))}
+        </nav>
+        <a class="masthead-utility" href="/methodology">Method <span aria-hidden="true">→</span></a>
+        <details class="mobile-nav">
+          <summary>Browse <span class="menu-glyph" aria-hidden="true">+</span></summary>
+          <div class="mobile-nav-panel">
+            <nav class="mobile-nav-links" aria-label="Mobile navigation">
+              {nav.map((item) => (
+                <a
+                  href={item.href}
+                  aria-current={currentPath.startsWith(item.href) ? 'page' : undefined}
+                >
+                  <span>{item.label}</span>
+                  <small>{item.note}</small>
+                </a>
+              ))}
+            </nav>
+            <div class="mobile-nav-meta">
+              <a href="/methodology">How the evidence works</a>
+            </div>
+          </div>
+        </details>
+      </header>
       <main id="main">
         <slot />
       </main>
@@ -137,13 +162,16 @@ const structuredData = JSON.stringify({
           <p>The public index currently needs no account or checkout. No permanent pricing model is claimed.</p>
         </div>
         <div class="footer-links">
+          <a href="/search">Search evidence</a>
+          <a href="/people">People index</a>
+          <a href="/recommendations">Books & tools</a>
           <a href="/methodology">Evidence policy</a>
-          <a href="/sources">Source index</a>
           <a href="/developers">Public API</a>
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
           <a href="/pricing">Access state</a>
           <a href="/contact">Contact</a>
+          <a href="https://highsignal.app">High Signal Daily Brief ↗</a>
           <a href="https://github.com/Significant-Hobbies/on-record">Source code ↗</a>
         </div>
       </footer>

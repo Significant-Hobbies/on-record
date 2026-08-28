@@ -1,123 +1,253 @@
 ---
+import ClaimCard from '../components/ClaimCard.astro';
 import Layout from '../layouts/Base.astro';
 import {
   apiGet,
   runtimeEnvFromLocals,
+  type Claim,
   type Person,
-  type Recommendation,
+  type RecommendationGroup,
+  type Source,
   type Stats,
 } from '../lib/api';
-import { whenLabel } from '../lib/time';
+import { formatClock, formatSaidOn } from '../lib/time';
 
 const env = runtimeEnvFromLocals(Astro.locals);
+const landingApiOptions = { timeoutMs: 1200 };
 let stats: Stats = { people: 0, episodes: 0, publishedClaims: 0, publishedReferences: 0 };
 let people: Person[] = [];
-let featured: Recommendation[] = [];
+let claims: Claim[] = [];
+let groups: RecommendationGroup[] = [];
+let sources: Source[] = [];
 let error = '';
-let peopleError = '';
-const [statsResult, peopleResult, recommendationsResult] = await Promise.allSettled([
-  apiGet<Stats>('/api/stats', env),
-  apiGet<{ people: Person[] }>('/api/people', env),
-  apiGet<{ recommendations: Recommendation[] }>('/api/recommendations?role=uses', env),
-]);
-if (statsResult.status === 'fulfilled') {
-  stats = statsResult.value;
-} else {
-  error = 'The live evidence count is temporarily unavailable. The public index remains readable.';
-}
-if (peopleResult.status === 'fulfilled') {
-  people = peopleResult.value.people ?? [];
-} else {
-  peopleError = 'The people index is temporarily unavailable. Search and source pages remain available.';
-}
-if (recommendationsResult.status === 'fulfilled') {
-  featured = (recommendationsResult.value.recommendations ?? [])
-    .filter((item) => item.deepLinkUrl || item.sourceUrl)
-    .slice(0, 3);
-}
+let statsAvailable = false;
 
-const peopleById = new Map(people.map((person) => [person.id, person]));
-const heroProof = featured[0];
-const heroPerson = heroProof?.personId ? peopleById.get(heroProof.personId) : undefined;
+const results = await Promise.allSettled([
+  apiGet<Stats>('/api/stats', env, landingApiOptions),
+  apiGet<{ people: Person[] }>('/api/people?limit=8', env, landingApiOptions),
+  apiGet<{ claims: Claim[] }>('/api/search', env, landingApiOptions),
+  apiGet<{ groups: RecommendationGroup[] }>('/api/recommendation-groups?limit=8', env, landingApiOptions),
+  apiGet<{ sources: Source[] }>('/api/sources?limit=5', env, landingApiOptions),
+]);
+
+if (results[0].status === 'fulfilled') {
+  stats = results[0].value;
+  statsAvailable = true;
+}
+else error = 'The live corpus is temporarily unavailable. Please try again shortly.';
+if (results[1].status === 'fulfilled') people = results[1].value.people ?? [];
+if (results[2].status === 'fulfilled') claims = results[2].value.claims ?? [];
+if (results[3].status === 'fulfilled') groups = results[3].value.groups ?? [];
+if (results[4].status === 'fulfilled') sources = results[4].value.sources ?? [];
+
+const heroClaim = claims.find((claim) => claim.deepLinkUrl || claim.sourceUrl) ?? claims[0];
+const heroWhen = heroClaim
+  ? [formatSaidOn(heroClaim.saidOn), formatClock(heroClaim.timestampS)].filter(Boolean).join(' · ') ||
+    'Source timing unavailable'
+  : '';
+const latestClaims = claims.filter((claim) => claim.id !== heroClaim?.id).slice(0, 4);
+const researchPaths = [
+  {
+    href: '/search',
+    index: '01',
+    label: 'Ideas & opinions',
+    title: 'Find the useful line, not the whole episode.',
+    description: 'Search beliefs, evaluations, predictions, decisions, and disagreements across the trusted corpus.',
+    action: 'Search every claim',
+  },
+  {
+    href: '/people',
+    index: '02',
+    label: 'People',
+    title: 'Read a person’s public record in one place.',
+    description: 'See what each speaker believes, recommends, uses, and changes their mind about—with receipts.',
+    action: 'Browse people',
+  },
+  {
+    href: '/recommendations',
+    index: '03',
+    label: 'Books, apps & tools',
+    title: 'See what keeps coming up across conversations.',
+    description: 'Group named items by distinct people, then inspect every quote behind the count.',
+    action: 'Open the stack index',
+  },
+];
+const corpusStats = [
+  { value: stats.publishedClaims, label: 'published claims' },
+  { value: stats.people, label: 'attributable people' },
+  { value: stats.episodes, label: 'episodes with evidence' },
+  { value: stats.publishedReferences ?? 0, label: 'named references' },
+];
 const heroSearchAgentAttributes = {
-  tooldescription:
-    'Search published, source-backed podcast claims in the High Signal Podcasts evidence corpus.',
+  tooldescription: 'Search attributable, source-backed claims from the High Signal Podcasts corpus.',
   toolname: 'search_published_podcast_claims',
 };
-const corpusStats = [
-  { value: stats.people, label: 'people indexed' },
-  { value: stats.publishedClaims, label: 'published claims' },
-  { value: stats.publishedReferences ?? 0, label: 'named references' },
-  { value: stats.episodes, label: 'source episodes' },
-];
 ---
 <Layout
-  title="High Signal Podcasts: What notable people actually said"
-  description="Find attributable claims, recommendations, books, and tools from important podcasts without listening to every episode end to end."
+  title="High Signal Podcasts — Search claims with receipts"
+  description="Search attributable ideas, recommendations, books, apps, and tools from important podcasts, with the exact quote and source attached."
 >
-  <section class="hero">
+  <section class="hero research-hero">
     <div class="hero-copy">
-      <p class="eyebrow"><span class="status-dot"></span> Live evidence index · public beta</p>
-      <h1>What notable people actually said, without listening to every episode.</h1>
+      <p class="eyebrow"><span class="status-dot"></span> Trusted podcast intelligence</p>
+      <h1>Search the ideas. Verify the exact words.</h1>
       <p class="lede hero-lede">
-        For founders, investors, journalists, and operators, High Signal Podcasts turns public
-        conversations into attributable claims, recommendations, books, tools, and technology
-        signals. Every published line keeps its verbatim excerpt and source trail attached.
+        High Signal turns long podcast conversations into attributable claims, recommendations,
+        books, apps, and tools. Every result keeps the speaker, exact quote, episode, and source
+        attached.
       </p>
-      <form
-        class="hero-search"
-        method="get"
-        action="/search"
-        {...heroSearchAgentAttributes}
-      >
-        <label class="visually-hidden" for="hero-search">Search published podcast claims</label>
-        <input id="hero-search" type="search" name="q" placeholder="Search a person, idea, book, or tool" />
-        <button type="submit">Search evidence</button>
+      <form class="hero-search" method="get" action="/search" {...heroSearchAgentAttributes}>
+        <label class="visually-hidden" for="hero-search">Search people, ideas, books, and tools</label>
+        <input
+          id="hero-search"
+          type="search"
+          name="q"
+          placeholder="Try “product-market fit”, “Claude”, or a person"
+          autocomplete="off"
+        />
+        <button type="submit">Search the archive</button>
       </form>
-      <div class="hero-actions">
-        <a class="button button-secondary" href="/people">Browse the people index</a>
+      <div class="search-suggestions" aria-label="Example searches">
+        <span>Start with</span>
+        <a href="/search?q=product-market+fit">product-market fit</a>
+        <a href="/search?q=AI+agents">AI agents</a>
+        <a href="/recommendations?kind=book">books</a>
       </div>
-      <p class="hero-note">Browse without an account or checkout. Missing evidence stays missing.</p>
+      {statsAvailable && (
+        <div class="hero-proofline">
+          <strong>{(stats.publishedClaims ?? 0).toLocaleString('en-US')}</strong>
+          <span>published claims from {(stats.episodes ?? 0).toLocaleString('en-US')} source episodes</span>
+        </div>
+      )}
     </div>
-    <aside class="evidence-card" aria-label="Published evidence example">
-      {heroProof ? (
+
+    <aside class="evidence-card hero-evidence" aria-label="Example evidence receipt">
+      {heroClaim ? (
         <>
-          <p class="folio">Published evidence / 01</p>
-          <blockquote>“{heroProof.quote}”</blockquote>
-          <div class="evidence-path" aria-label="Evidence receipt">
-            <span><b>Speaker</b>{heroPerson?.name ?? 'Published speaker'}</span>
-            <span><b>When</b>{whenLabel(heroProof) || 'Recorded source'}</span>
-            <span><b>Episode</b>{heroProof.episodeTitle ?? 'Source episode'}</span>
-            <span><b>Publisher</b>{heroProof.showName ?? 'Podcast publisher'}</span>
+          <div class="evidence-card-topline">
+            <p class="folio">Evidence receipt / live</p>
+            <span>{heroClaim.claimType}</span>
           </div>
-          <a href={heroProof.deepLinkUrl ?? heroProof.sourceUrl ?? `/claims/${heroProof.claimId}`} rel="noreferrer" target="_blank">Open the exact source ↗</a>
+          <blockquote>“{heroClaim.quote}”</blockquote>
+          <div class="evidence-path">
+            <span><b>Speaker</b>{heroClaim.personName ?? 'Verified speaker'}</span>
+            <span><b>When</b>{heroWhen}</span>
+            <span><b>Episode</b>{heroClaim.episodeTitle ?? 'Source episode'}</span>
+            <span><b>Publisher</b>{heroClaim.showName ?? 'Podcast publisher'}</span>
+          </div>
+          <div class="evidence-card-actions">
+            <a href={`/claims/${heroClaim.id}`}>Inspect receipt</a>
+            {(heroClaim.deepLinkUrl || heroClaim.sourceUrl) && (
+              <a href={heroClaim.deepLinkUrl ?? heroClaim.sourceUrl} rel="noreferrer" target="_blank">
+                {heroClaim.timestampS != null ? `Open at ${formatClock(heroClaim.timestampS)}` : 'Open source'} ↗
+              </a>
+            )}
+          </div>
         </>
       ) : (
         <>
           <p class="folio">Publication contract / 01</p>
-          <blockquote>“The unit is the claim, not the episode.”</blockquote>
-          <p>Unknown speakers and low-confidence excerpts remain draft. Missing evidence stays missing.</p>
+          <blockquote>“Missing evidence stays missing.”</blockquote>
+          <p>Unknown speakers and unsupported interpretations never enter the public index.</p>
           <a href="/methodology">Read the evidence policy →</a>
         </>
       )}
     </aside>
   </section>
 
+  <section class="trust-band" aria-label="Trusted corpus policy">
+    {statsAvailable ? (
+      <>
+        <p>
+          <strong>{(stats.trustedShows ?? 0).toLocaleString('en-US')} trusted shows</strong>
+          <span>{(stats.catalogEpisodes ?? 0).toLocaleString('en-US')} episodes catalogued</span>
+          <span>{(stats.transcriptEpisodes ?? 0).toLocaleString('en-US')} with supported transcripts</span>
+        </p>
+        <p>{stats.trustPolicy?.wording ?? 'Unresolved speakers are withheld from every public count.'}</p>
+      </>
+    ) : (
+      <p><strong>Trusted corpus counts are temporarily unavailable.</strong></p>
+    )}
+  </section>
+
+  <section class="path-section" aria-labelledby="path-heading">
+    <div class="section-heading compact-heading">
+      <div>
+        <p class="eyebrow">Three ways in</p>
+        <h2 id="path-heading">Use the archive like a research tool.</h2>
+      </div>
+      <p>Start with a question, a person, or something people repeatedly recommend.</p>
+    </div>
+    <div class="path-grid">
+      {researchPaths.map((path) => (
+        <a class="path-card" href={path.href}>
+          <span class="path-index">{path.index}</span>
+          <p class="folio">{path.label}</p>
+          <h3>{path.title}</h3>
+          <p>{path.description}</p>
+          <strong>{path.action} →</strong>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section class="evidence-stream" aria-labelledby="evidence-heading">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Recently added evidence</p>
+        <h2 id="evidence-heading">Claims worth opening.</h2>
+      </div>
+      <a class="text-link" href="/search">Search all claims →</a>
+    </div>
+    {latestClaims.length ? (
+      <div class="claim-grid">
+        {latestClaims.map((claim, index) => <ClaimCard claim={claim} index={index} compact />)}
+      </div>
+    ) : (
+      <p class="empty">The trusted claim stream is temporarily unavailable.</p>
+    )}
+  </section>
+
+  <section class="stack-section" aria-labelledby="stack-heading">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">The stack index</p>
+        <h2 id="stack-heading">What multiple people keep naming.</h2>
+      </div>
+      <a class="text-link" href="/recommendations">Browse every named item →</a>
+    </div>
+    {groups.length ? (
+      <div class="stack-grid">
+        {groups.slice(0, 6).map((group, index) => (
+          <a class="stack-card" href={`/recommendations?kind=${group.kind}&item=${encodeURIComponent(group.name)}`}>
+            <span class="stack-rank">{String(index + 1).padStart(2, '0')}</span>
+            <p class="folio">{group.kind}</p>
+            <h3>{group.name}</h3>
+            <div class="stack-counts">
+              <span><strong>{group.peopleCount}</strong> {group.peopleCount === 1 ? 'person' : 'people'}</span>
+              <span>{group.occurrenceCount} evidence {group.occurrenceCount === 1 ? 'row' : 'rows'}</span>
+            </div>
+          </a>
+        ))}
+      </div>
+    ) : (
+      <p class="empty">No grouped recommendations are available in this view yet.</p>
+    )}
+  </section>
+
   <section class="corpus" aria-labelledby="corpus-heading">
     <div class="section-heading compact-heading">
       <div>
-        <p class="eyebrow">Current public corpus</p>
-        <h2 id="corpus-heading">A focused corpus you can audit and browse.</h2>
+        <p class="eyebrow">Current trusted corpus</p>
+        <h2 id="corpus-heading">Useful volume, visible provenance.</h2>
       </div>
-      <p>
-        This public beta publishes traceable evidence instead of chasing volume.
-      </p>
+      <p>The counts below exclude shows whose speaker attribution is not yet safe.</p>
     </div>
     {error ? <p class="empty">{error}</p> : (
       <div class="stats">
         {corpusStats.map((item, index) => (
           <div class="stat">
-            <span>0{index + 1}</span>
+            <span>{String(index + 1).padStart(2, '0')}</span>
             <b>{item.value.toLocaleString('en-US')}</b>
             <small>{item.label}</small>
           </div>
@@ -126,94 +256,69 @@ const corpusStats = [
     )}
   </section>
 
-  <section class="proof-section" aria-labelledby="proof-heading">
-    <div class="section-heading">
-      <div>
-        <p class="eyebrow">From the stack index</p>
-        <h2 id="proof-heading">Useful details, each with its source receipt.</h2>
-      </div>
-      <a class="text-link" href="/recommendations">Browse books, apps, and tools →</a>
-    </div>
-    {featured.length === 0 ? (
-      <p class="empty">No source-linked stack entries are available in this view yet.</p>
-    ) : (
-      <div class="proof-grid">
-        {featured.map((item, index) => {
-          const person = item.personId ? peopleById.get(item.personId) : undefined;
-          const sourceHref = item.deepLinkUrl ?? item.sourceUrl;
-          return (
-            <article class="proof-card">
-              <div class="proof-meta">
-                <span>0{index + 1}</span>
-                <span>{item.kind} · {item.role}</span>
-              </div>
-              <h3>{item.name}</h3>
-              <p class="assertion">{item.assertion}</p>
-              <blockquote>“{item.quote}”</blockquote>
-              <dl class="proof-receipt">
-                <div><dt>When</dt><dd>{whenLabel(item) || 'Recorded source'}</dd></div>
-                <div><dt>Episode</dt><dd>{item.episodeTitle ?? 'Source episode'}</dd></div>
-                <div><dt>Publisher</dt><dd>{item.showName ?? 'Podcast publisher'}</dd></div>
-              </dl>
-              <div class="proof-footer">
-                <span>{person?.name ?? 'Published speaker record'}</span>
-                <span>
-                  <a href={`/claims/${item.claimId}`}>Claim</a>
-                  {sourceHref && <> · <a href={sourceHref} rel="noreferrer" target="_blank">Source ↗</a></>}
-                </span>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    )}
-  </section>
-
   <section class="people-section" aria-labelledby="people-heading">
     <div class="section-heading">
       <div>
         <p class="eyebrow">People, not feeds</p>
-        <h2 id="people-heading">Browse each person’s published record.</h2>
+        <h2 id="people-heading">Follow the public record of a person.</h2>
       </div>
-      <p>Browse their published claims and evidenced references without scrubbing a timeline.</p>
+      <a class="text-link" href="/people">Browse all {stats.people.toLocaleString('en-US')} people →</a>
     </div>
-    {people.length === 0 ? (
-      <p class="empty">{peopleError || 'No published people are available in this view yet.'}</p>
-    ) : (
+    {people.length ? (
       <div class="people-grid">
         {people.slice(0, 8).map((person) => (
           <a class="person-card" href={`/people/${person.slug}`}>
-            <span class="person-monogram" aria-hidden="true">{person.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span>
+            <span class="person-monogram" aria-hidden="true">
+              {person.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}
+            </span>
             <span>
               <strong>{person.name}</strong>
               <small>{[person.title, person.org].filter(Boolean).join(' · ') || 'Published speaker'}</small>
             </span>
-            <span aria-hidden="true">↗</span>
+            <span class="person-card-count">
+              <b>{person.claimCount ?? 0}</b>
+              <small>claims</small>
+            </span>
           </a>
         ))}
       </div>
+    ) : (
+      <p class="empty">The trusted people index is temporarily unavailable.</p>
     )}
   </section>
 
-  <section class="method-strip" aria-labelledby="method-heading">
-    <div class="method-intro">
-      <p class="eyebrow">How the index is made</p>
-      <h2 id="method-heading">A shorter path to the claim, with the source attached.</h2>
+  <section class="source-preview" aria-labelledby="source-heading">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Episode intelligence</p>
+        <h2 id="source-heading">Skip the timeline. Open the evidence.</h2>
+      </div>
+      <a class="text-link" href="/sources">Browse source episodes →</a>
     </div>
-    <ol class="method-list">
-      <li><span>01</span><div><strong>Ingest the public record.</strong><p>Publisher transcripts and available captions become bounded source segments.</p></div></li>
-      <li><span>02</span><div><strong>Extract attributable claims.</strong><p>Names, ideas, books, apps, and tools stay tied to the exact words that support them.</p></div></li>
-      <li><span>03</span><div><strong>Publish only the auditable rows.</strong><p>Low-confidence speakers and unsupported interpretations remain out of the public index.</p></div></li>
-    </ol>
+    <div class="source-preview-list">
+      {sources.slice(0, 5).map((source, index) => (
+        <a class="source-preview-row" href={`/sources/${source.id}`}>
+          <span>{String(index + 1).padStart(2, '0')}</span>
+          <div>
+            <p class="folio">{source.showName ?? 'Podcast'} · {formatSaidOn(source.publishedAt) || 'Recorded source'}</p>
+            <h3>{source.title}</h3>
+          </div>
+          <p><strong>{source.claimCount ?? 0}</strong> claims</p>
+        </a>
+      ))}
+    </div>
   </section>
 
   <section class="closing-cta">
-    <p class="eyebrow">Start with a person or a question</p>
-    <h2>Spend less time listening for the one useful line.</h2>
-    <p>Search the current corpus, then jump back to the source when the evidence matters.</p>
+    <p class="eyebrow">Evidence first, summaries second</p>
+    <h2>Know what was said—and where it came from.</h2>
+    <p>
+      Search the trusted corpus, compare recurring recommendations, and jump back to the exact
+      source whenever context matters.
+    </p>
     <div class="hero-actions">
       <a class="button button-primary" href="/search">Search the evidence</a>
-      <a class="button button-secondary" href="/sources">See every source</a>
+      <a class="button button-secondary" href="/methodology">How publication works</a>
     </div>
   </section>
 </Layout>

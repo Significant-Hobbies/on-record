@@ -20,31 +20,86 @@ try {
 } catch {
   missing = true;
 }
-const link = evidence[0]?.deepLinkUrl;
+const link = claim?.deepLinkUrl ?? evidence[0]?.deepLinkUrl ?? claim?.sourceUrl;
+const assertionAddsContext = Boolean(
+  claim && claim.assertion.trim().toLocaleLowerCase('en-US') !== claim.quote.trim().toLocaleLowerCase('en-US')
+);
 ---
-<Layout title={claim?.assertion ?? 'Claim'}>
+<Layout
+  title={claim ? `${claim.personName ?? 'Published speaker'}: ${claim.assertion}` : 'Claim receipt'}
+  description={claim ? `Exact podcast quote from ${claim.personName ?? 'a verified speaker'}, linked to ${claim.episodeTitle ?? 'the source episode'}.` : 'Published claim receipt.'}
+>
   {missing || !claim ? (
-    <p class="empty">Insufficient evidence. This claim is unpublished or missing.</p>
+    <div class="empty-state page-empty">
+      <p class="eyebrow">No trusted public record</p>
+      <h1>This claim is unpublished or unavailable.</h1>
+      <p>Claims from unresolved speakers are withheld rather than shown with a weak attribution.</p>
+      <a class="button button-secondary" href="/search">Search published evidence</a>
+    </div>
   ) : (
-    <>
-      <p class="meta">
-        {[claim.claimType, whenLabel(claim)].filter(Boolean).join(' · ')}
-      </p>
-      <h1>{claim.assertion}</h1>
-      <p class="quote">{claim.quote}</p>
-      {link && (
-        <p>
-          <a href={link}>Watch at {formatClock(claim.timestampS) ?? 'timestamp'}</a>
+    <article class="claim-page">
+      <header class="claim-page-header">
+        <a class="back-link" href={claim.personSlug ? `/people/${claim.personSlug}` : '/search'}>← Back to evidence</a>
+        <div class="claim-page-kicker">
+          <p class="eyebrow">Evidence receipt / {claim.claimType}</p>
+          <span>Published · exact quote</span>
+        </div>
+        <h1>{assertionAddsContext ? claim.assertion : `${claim.personName ?? 'Published speaker'}: ${claim.claimType}`}</h1>
+        <p class="claim-source-summary">
+          <span>{whenLabel(claim) || 'Source date unavailable'}</span>
+          <span>{claim.showName ?? 'Podcast publisher'}</span>
+          {claim.episodeId ? <a href={`/sources/${claim.episodeId}`}>{claim.episodeTitle}</a> : <span>{claim.episodeTitle ?? 'Source episode'}</span>}
         </p>
-      )}
+        <blockquote>“{claim.quote}”</blockquote>
+        <p class="claim-speaker">
+          — {claim.personSlug ? <a href={`/people/${claim.personSlug}`}>{claim.personName}</a> : claim.personName ?? 'Verified speaker'}
+        </p>
+      </header>
+
+      <section class="receipt-sheet" aria-labelledby="receipt-heading">
+        <div class="receipt-title">
+          <p class="eyebrow">Source trail</p>
+          <h2 id="receipt-heading">Everything needed to verify it.</h2>
+        </div>
+        <dl class="receipt-grid">
+          <div><dt>Speaker</dt><dd>{claim.personName ?? 'Verified speaker'}</dd></div>
+          <div><dt>Claim type</dt><dd>{claim.claimType}</dd></div>
+          <div><dt>Recorded</dt><dd>{whenLabel(claim) || 'Source date unavailable'}</dd></div>
+          <div><dt>Publisher</dt><dd>{claim.showName ?? 'Podcast publisher'}</dd></div>
+          <div class="receipt-wide">
+            <dt>Episode</dt>
+            <dd>{claim.episodeId ? <a href={`/sources/${claim.episodeId}`}>{claim.episodeTitle}</a> : claim.episodeTitle ?? 'Source episode'}</dd>
+          </div>
+        </dl>
+        <div class="receipt-actions">
+          {link && (
+            <a class="button button-primary" href={link} rel="noreferrer" target="_blank">
+              {claim.timestampS != null ? `Open source at ${formatClock(claim.timestampS)}` : 'Open original source'} ↗
+            </a>
+          )}
+          {claim.episodeId && <a class="button button-secondary" href={`/sources/${claim.episodeId}`}>See episode intelligence</a>}
+        </div>
+      </section>
+
       {references.length > 0 && (
-        <section>
-          <h2>Named things</h2>
-          {references.map((item) => (
-            <div class="card">{item.name} · {item.kind} · {item.role}</div>
-          ))}
+        <section class="claim-references" aria-labelledby="references-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Named in this claim</p>
+              <h2 id="references-heading">Books, apps, tools, and people.</h2>
+            </div>
+          </div>
+          <div class="reference-grid">
+            {references.map((item) => (
+              <a class="reference-card" href={`/recommendations?kind=${item.kind}&item=${encodeURIComponent(item.name)}`}>
+                <p class="folio">{item.kind} / {item.role}</p>
+                <h3>{item.name}</h3>
+                <span>See grouped evidence →</span>
+              </a>
+            ))}
+          </div>
         </section>
       )}
-    </>
+    </article>
   )}
 </Layout>

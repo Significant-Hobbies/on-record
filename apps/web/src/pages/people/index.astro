@@ -2,27 +2,96 @@
 import Layout from '../../layouts/Base.astro';
 import { apiGet, runtimeEnvFromLocals, type Person } from '../../lib/api';
 
+const q = (Astro.url.searchParams.get('q') ?? '').trim();
+const page = Math.max(Number(Astro.url.searchParams.get('page') ?? 1) || 1, 1);
+const pageSize = 60;
 let people: Person[] = [];
+let total = 0;
+let unavailable = false;
 try {
-  const payload = await apiGet<{ people: Person[] }>(
-    '/api/people',
+  const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
+  if (q) params.set('q', q);
+  const payload = await apiGet<{ people: Person[]; total: number }>(
+    `/api/people?${params}`,
     runtimeEnvFromLocals(Astro.locals)
   );
   people = payload.people ?? [];
+  total = payload.total ?? people.length;
 } catch {
-  people = [];
+  unavailable = true;
+}
+
+const totalClaims = people.reduce((sum, person) => sum + (person.claimCount ?? 0), 0);
+function pageHref(nextPage: number) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (nextPage > 1) params.set('page', String(nextPage));
+  return `/people${params.size ? `?${params}` : ''}`;
 }
 ---
-<Layout title="People: High Signal Podcasts">
-  <h1>People</h1>
-  {people.length === 0 ? (
-    <p class="empty">Insufficient evidence. No people in the published index yet.</p>
+<Layout
+  title="People index — High Signal Podcasts"
+  description="Browse attributable podcast claims and recommendations by speaker, with every quote linked to its episode and source."
+>
+  <header class="collection-header people-header">
+    <p class="eyebrow">Trusted corpus / people</p>
+    <h1>People, through what they actually said.</h1>
+    <p class="lede">
+      Open a speaker’s evidence record to see their claims, recommendations, books, apps, and tools—without scrubbing through every episode.
+    </p>
+    <div class="collection-totals people-totals">
+      <p><strong>{total.toLocaleString('en-US')}</strong><span>{q ? 'matching people' : 'published people'}</span></p>
+      <p><strong>{totalClaims.toLocaleString('en-US')}</strong><span>claims on this page</span></p>
+      <p><strong>{people.filter((person) => (person.sourceCount ?? 0) > 1).length.toLocaleString('en-US')}</strong><span>multi-episode people on this page</span></p>
+    </div>
+  </header>
+
+  <section class="index-toolbar" aria-label="Filter people">
+    <form method="get" class="index-search">
+      <label for="people-query">Find a person or organization</label>
+      <div>
+        <input id="people-query" type="search" name="q" value={q} placeholder="Lenny Rachitsky, Figma, OpenAI…" />
+        <button type="submit">Find person</button>
+      </div>
+    </form>
+    <p>{q ? `${total} matches for “${q}”` : `${total} people, ranked by published evidence`}</p>
+  </section>
+
+  {unavailable ? (
+    <p class="empty">The trusted people index is temporarily unavailable.</p>
+  ) : people.length === 0 ? (
+    <div class="empty-state">
+      <p class="eyebrow">No published match</p>
+      <h2>Try a broader name or organization.</h2>
+      <p>People only appear after at least one exact-speaker claim passes the evidence gate.</p>
+      <a class="button button-secondary" href="/people">Clear search</a>
+    </div>
   ) : (
-    people.map((person) => (
-      <article class="card">
-        <a href={`/people/${person.slug}`}>{person.name}</a>
-        <div class="meta">{[person.title, person.org].filter(Boolean).join(' · ')}</div>
-      </article>
-    ))
+    <>
+      <section class="people-directory" aria-label="Published people">
+        {people.map((person, index) => (
+          <a class="directory-person" href={`/people/${person.slug}`}>
+            <span class="directory-rank">{String((page - 1) * pageSize + index + 1).padStart(3, '0')}</span>
+            <span class="person-monogram" aria-hidden="true">
+              {person.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}
+            </span>
+            <span class="directory-identity">
+              <strong>{person.name}</strong>
+              <small>{[person.title, person.org].filter(Boolean).join(' · ') || 'Published speaker'}</small>
+            </span>
+            <span class="directory-count directory-claims"><b>{person.claimCount ?? 0}</b><small>claims</small></span>
+            <span class="directory-count directory-sources"><b>{person.sourceCount ?? 0}</b><small>episodes</small></span>
+            <span class="directory-arrow" aria-hidden="true">↗</span>
+          </a>
+        ))}
+      </section>
+      {total > pageSize && (
+        <nav class="pagination" aria-label="People pages">
+          {page > 1 ? <a href={pageHref(page - 1)}>← Previous</a> : <span></span>}
+          <span>Page {page} of {Math.ceil(total / pageSize)}</span>
+          {page * pageSize < total ? <a href={pageHref(page + 1)}>Next →</a> : <span></span>}
+        </nav>
+      )}
+    </>
   )}
 </Layout>

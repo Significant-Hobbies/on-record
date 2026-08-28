@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -14,14 +15,17 @@ from .api_client import ApiClient
 from .attributions import confidence_for, judge
 from .config import Settings
 from .config import settings as load_settings
-from .extract.claims import extract_segment, is_local
-from .extract.triage import triage_segment
+from .extract.claims import BATCH_PROMPT_VERSION, extract_segment, extract_segments_batch, is_local
+from .extract.triage import claim_candidate_score, triage_segment
+from .guest_recovery import explicit_guest_names
 from .identify import UNKNOWN, identify_speakers
 from .match import guests_from_text, merge_discovery_items, merge_video, video_id_from_source_url
+from .roster import slugify
 from .seed.people import PEOPLE
 from .seed.shows import SHOWS
 from .seed.topics import TOPICS
 from .segment import cues_to_segments
+from .speaker_recovery import recover_self_identified_speakers
 from .sources import podcast_index, rss_feed, youtube_api, youtube_rss
 from .transcripts.acquired import TRANSCRIPT_KIND as ACQUIRED_PUBLISHER_HTML
 from .transcripts.acquired import (
@@ -80,6 +84,7 @@ STAGES = (
     "retime",
     "identify",
     "attributions",
+    "recover-speakers",
 )
 
 
@@ -701,9 +706,19 @@ def _slice_segments(
     return out
 
 
-def segment_action(segment: dict[str, Any], already: set[str], force: bool, focus: str) -> str:
+def segment_action(
+    segment: dict[str, Any],
+    already: set[str],
+    attempted: set[tuple[str, str, str]],
+    force: bool,
+    focus: str,
+    prompt_version: str,
+) -> str:
     if not force and segment.get("id") in already:
         return "extracted"
+    attempt = (str(segment.get("id") or ""), prompt_version, focus)
+    if not force and attempt in attempted:
+        return "attempted"
     if segment.get("speakerHint") == UNKNOWN:
         return "skip"
     reason = triage_segment(str(segment.get("text") or ""))
@@ -734,6 +749,8 @@ def extract_one_segment(
         # The model that answered, not the one we asked for.
         claim["model"] = run.get("model") or cfg.extract_model
         claim["promptVersion"] = cfg.prompt_version
+    run["focus"] = focus
+    run["segmentId"] = segment["id"]
     LOGGER.info(
         "segment %s accepted=%s rejected=%s",
         segment["idx"],
@@ -759,6 +776,23 @@ class ExtractOpts:
     skip_segments: int = 0
     force: bool = False
     focus: str = "all"
+    limit: int = 0
+    batch_size: int = 0
+    target_claims: int = 10
+
+
+@dataclass
+class EpisodeExtractContext:
+    api: ApiClient
+    cfg: Settings
+    people_map: dict[str, str]
+    episode: dict[str, Any]
+    opts: ExtractOpts
+    prompt_version: str
+    already: set[str]
+    attempted: set[tuple[str, str, str]]
+    guests: list[str]
+    published_claims: int
 
 
 def _episode_guests(detail: dict[str, Any], people_map: dict[str, str]) -> list[str]:
@@ -771,6 +805,248 @@ def _episode_guests(detail: dict[str, Any], people_map: dict[str, str]) -> list[
     ]
 
 
+def extract_one_batch(
+    cfg: Settings,
+    people_map: dict[str, str],
+    segments: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    accepted, rejected, run = extract_segments_batch(cfg, segments)
+    for claim in accepted:
+        claim["pipelineVersion"] = cfg.pipeline_version
+        claim["model"] = run.get("model") or cfg.extract_model
+        claim["promptVersion"] = BATCH_PROMPT_VERSION
+    LOGGER.info(
+        "batch segments=%s accepted=%s rejected=%s",
+        len(segments),
+        len(accepted),
+        len(rejected),
+    )
+    return attach_person_ids(accepted, people_map), run
+
+
+def claims_are_near_duplicates(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    def words(claim: dict[str, Any]) -> set[str]:
+        return {
+            word
+            for word in re.findall(r"[a-z0-9]+", str(claim.get("quote") or "").lower())
+            if len(word) > 2
+        }
+
+    left_words = words(left)
+    right_words = words(right)
+    if not left_words or not right_words:
+        return False
+    return len(left_words & right_words) / len(left_words | right_words) >= 0.8
+
+
+def _segment_action(context: EpisodeExtractContext, segment: dict[str, Any]) -> str:
+    return segment_action(
+        segment,
+        context.already,
+        context.attempted,
+        context.opts.force,
+        context.opts.focus,
+        context.prompt_version,
+    )
+
+
+def _batch_candidates(
+    context: EpisodeExtractContext, segments: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], int]:
+    candidates: list[dict[str, Any]] = []
+    skipped = 0
+    for segment in segments:
+        action = _segment_action(context, segment)
+        if action in {"attempted", "extracted", "skip"}:
+            skipped += 1
+            continue
+        candidates.append(segment)
+    candidates.sort(
+        key=lambda segment: (
+            -claim_candidate_score(str(segment.get("text") or "")),
+            int(segment.get("idx") or 0),
+        )
+    )
+    return candidates, skipped
+
+
+def _claims_within_target(
+    posted: list[dict[str, Any]],
+    accepted_claims: list[dict[str, Any]],
+    published: int,
+    target: int,
+) -> tuple[list[dict[str, Any]], set[str]]:
+    unique = [
+        claim
+        for claim in posted
+        if not any(claims_are_near_duplicates(claim, kept) for kept in accepted_claims)
+    ]
+    if target <= 0:
+        return unique, set()
+    remaining = max(target - published, 0)
+    ranked = sorted(
+        unique,
+        key=lambda claim: float(claim.get("extractionConfidence") or 0),
+        reverse=True,
+    )
+    deferred = {str(claim.get("segmentId") or "") for claim in ranked[remaining:]}
+    return ranked[:remaining], deferred
+
+
+def _batch_runs(
+    context: EpisodeExtractContext,
+    batch: list[dict[str, Any]],
+    posted: list[dict[str, Any]],
+    deferred: set[str],
+    run: dict[str, Any],
+) -> list[dict[str, Any]]:
+    accepted_segments = {str(claim.get("segmentId") or "") for claim in posted}
+    batch_ids = [str(segment["id"]) for segment in batch]
+    runs = []
+    for index, segment in enumerate(batch):
+        segment_id = str(segment["id"])
+        # A quality claim deferred only because this episode hit its current
+        # target remains eligible if the target is raised later.
+        if segment_id in deferred:
+            continue
+        accepted = segment_id in accepted_segments
+        runs.append(
+            {
+                "accepted": accepted,
+                "focus": context.opts.focus,
+                "latencyMs": run.get("latencyMs") if index == 0 else None,
+                "model": run.get("model") or context.cfg.extract_model,
+                "promptVersion": BATCH_PROMPT_VERSION,
+                "reason": (
+                    "ok"
+                    if accepted
+                    else (
+                        str(run.get("reason"))
+                        if run.get("reason") != "ok"
+                        else "batch_no_quality_claim"
+                    )
+                ),
+                "requestJson": (
+                    run.get("requestJson")
+                    if index == 0
+                    else {"batchSegmentIds": batch_ids, "checkpoint": True}
+                ),
+                "responseJson": run.get("responseJson") if index == 0 else None,
+                "segmentId": segment_id,
+            }
+        )
+    return runs
+
+
+def _extract_one_candidate_batch(
+    context: EpisodeExtractContext,
+    batch: list[dict[str, Any]],
+    accepted_claims: list[dict[str, Any]],
+    published: int,
+) -> tuple[list[dict[str, Any]], int] | None:
+    try:
+        raw, run = extract_one_batch(context.cfg, context.people_map, batch)
+    except httpx.HTTPError as exc:
+        LOGGER.warning("batch extract failed: %s", exc)
+        return None
+    posted, deferred = _claims_within_target(
+        raw, accepted_claims, published, context.opts.target_claims
+    )
+    runs = _batch_runs(context, batch, posted, deferred, run)
+    result = context.api.post_claims(context.episode["id"], posted, runs)
+    outcomes = list(result.get("results") or [])
+    saved = [
+        claim
+        for claim, outcome in zip(posted, outcomes, strict=False)
+        if outcome.get("id") and outcome.get("reviewStatus") != "rejected"
+    ]
+    newly_published = sum(1 for outcome in outcomes if outcome.get("reviewStatus") == "published")
+    return saved, newly_published
+
+
+def _extract_episode_batches(
+    context: EpisodeExtractContext, segments: list[dict[str, Any]]
+) -> tuple[int, int, int]:
+    candidates, skipped = _batch_candidates(context, segments)
+    batch_size = max(2, min(context.opts.batch_size, 20))
+    extracted = 0
+    published = context.published_claims
+    llm_calls = 0
+    accepted_claims: list[dict[str, Any]] = []
+    for start in range(0, len(candidates), batch_size):
+        if context.opts.target_claims > 0 and published >= context.opts.target_claims:
+            break
+        batch = candidates[start : start + batch_size]
+        llm_calls += 1
+        if context.opts.dry_run:
+            continue
+        result = _extract_one_candidate_batch(context, batch, accepted_claims, published)
+        if result is None:
+            continue
+        saved, newly_published = result
+        accepted_claims.extend(saved)
+        extracted += len(saved)
+        published += newly_published
+    LOGGER.info(
+        "episode %s batch_calls=%s candidates=%s skipped=%s new_claims=%s published_total=%s",
+        context.episode["id"],
+        llm_calls,
+        len(candidates),
+        skipped,
+        extracted,
+        published,
+    )
+    return extracted, llm_calls, skipped
+
+
+def _extract_episode_segments(
+    context: EpisodeExtractContext, segments: list[dict[str, Any]]
+) -> tuple[int, int, int]:
+    extracted = 0
+    llm_calls = 0
+    skipped = 0
+    prev_tail = ""
+    for segment in segments:
+        action = _segment_action(context, segment)
+        if action in {"attempted", "extracted", "skip"}:
+            skipped += 1
+            LOGGER.debug("segment %s skip %s", segment["idx"], action)
+            continue
+        llm_calls += 1
+        if context.opts.dry_run:
+            LOGGER.info("segment %s keep=%s dry-run", segment["idx"], action)
+            continue
+        try:
+            posted, run, _ = extract_one_segment(
+                context.cfg,
+                context.people_map,
+                segment,
+                prev_tail,
+                context.guests,
+                context.opts.focus,
+            )
+        except httpx.HTTPError as exc:
+            LOGGER.warning("segment %s extract failed: %s", segment["idx"], exc)
+            continue
+        posted = claims_for_focus(posted, context.opts.focus)
+        if context.opts.focus == "recs":
+            run["accepted"] = bool(posted)
+            if not posted and run.get("reason") == "ok":
+                run["reason"] = "no_evidenced_reference"
+        extracted += len(posted)
+        prev_tail = str(segment["text"])[-300:]
+        if posted or run:
+            context.api.post_claims(context.episode["id"], posted, [run])
+    LOGGER.info(
+        "episode %s llm_calls=%s skipped=%s claims=%s",
+        context.episode["id"],
+        llm_calls,
+        skipped,
+        extracted,
+    )
+    return extracted, llm_calls, skipped
+
+
 def _extract_episode(
     api: ApiClient,
     cfg: Settings,
@@ -779,7 +1055,20 @@ def _extract_episode(
     opts: ExtractOpts,
 ) -> tuple[int, int, int]:
     detail = api.get_episode(episode["id"])
+    prompt_version = (
+        BATCH_PROMPT_VERSION
+        if opts.batch_size > 1 and opts.focus == "all"
+        else str(getattr(cfg, "prompt_version", "extract-v4"))
+    )
     already = set(detail.get("extractedSegmentIds") or [])
+    attempted = {
+        (
+            str(row.get("segmentId") or ""),
+            str(row.get("promptVersion") or ""),
+            str(row.get("focus") or ""),
+        )
+        for row in detail.get("extractionAttempts") or []
+    }
     guests = _episode_guests(detail, people_map)
     segments = _slice_segments(
         list(detail.get("segments") or []), opts.skip_segments, opts.max_segments
@@ -793,50 +1082,21 @@ def _extract_episode(
         # segment identities are sufficient even when RSS omitted the roster.
         LOGGER.info("episode %s skipped: no identifiable speaker", episode["id"])
         return 0, 0, 0
-    extracted = 0
-    llm_calls = 0
-    skipped = 0
-    prev_tail = ""
-    for segment in segments:
-        action = segment_action(segment, already, opts.force, opts.focus)
-        if action in {"extracted", "skip"}:
-            skipped += 1
-            LOGGER.debug("segment %s skip %s", segment["idx"], action)
-            continue
-        llm_calls += 1
-        if opts.dry_run:
-            LOGGER.info("segment %s keep=%s dry-run", segment["idx"], action)
-            continue
-        try:
-            posted, run, _ = extract_one_segment(
-                cfg,
-                people_map,
-                segment,
-                prev_tail,
-                guests,
-                opts.focus,
-            )
-        except httpx.HTTPError as exc:
-            LOGGER.warning("segment %s extract failed: %s", segment["idx"], exc)
-            continue
-        posted = claims_for_focus(posted, opts.focus)
-        n = len(posted)
-        if opts.focus == "recs":
-            run["accepted"] = bool(posted)
-            if not posted and run.get("reason") == "ok":
-                run["reason"] = "no_evidenced_reference"
-        extracted += n
-        prev_tail = str(segment["text"])[-300:]
-        if posted or run:
-            api.post_claims(episode["id"], posted, [run])
-    LOGGER.info(
-        "episode %s llm_calls=%s skipped=%s claims=%s",
-        episode["id"],
-        llm_calls,
-        skipped,
-        extracted,
+    context = EpisodeExtractContext(
+        api=api,
+        cfg=cfg,
+        people_map=people_map,
+        episode=episode,
+        opts=opts,
+        prompt_version=prompt_version,
+        already=already,
+        attempted=attempted,
+        guests=guests,
+        published_claims=int(detail.get("publishedClaimCount") or 0),
     )
-    return extracted, llm_calls, skipped
+    if opts.batch_size > 1 and opts.focus == "all":
+        return _extract_episode_batches(context, segments)
+    return _extract_episode_segments(context, segments)
 
 
 # An episode is only finished when its segments are, not when it first
@@ -866,7 +1126,10 @@ def run_extract(
     if not cfg.ai_api_key and not is_local(cfg) and not opts.dry_run:
         raise SystemExit("AI_API_KEY is required for extract")
     extracted = 0
-    for episode in _extract_targets(api, opts.episode_id, opts.show_id):
+    targets = _extract_targets(api, opts.episode_id, opts.show_id)
+    if opts.limit > 0:
+        targets = targets[: opts.limit]
+    for episode in targets:
         extracted += _extract_episode(api, cfg, people_map, episode, opts)[0]
     return extracted
 
@@ -1098,6 +1361,166 @@ def run_identify(api: ApiClient, cfg: Settings, episode_id: str | None) -> int:
     return named
 
 
+def _recovery_episodes(api: ApiClient, episode_id: str | None, limit: int) -> list[dict[str, Any]]:
+    episodes = (
+        [api.get_episode(episode_id)["episode"]]
+        if episode_id
+        else [row for status in RETIME_STATUSES for row in api.list_episodes(status=status)]
+    )
+    return episodes[:limit] if limit else episodes
+
+
+def _guest_recovery_index(
+    episodes: list[dict[str, Any]],
+) -> tuple[dict[str, str], dict[str, list[str]]]:
+    names_by_slug: dict[str, set[str]] = defaultdict(set)
+    episode_guest_slugs: dict[str, list[str]] = {}
+    for episode in episodes:
+        names = explicit_guest_names(
+            str(episode.get("description") or ""), str(episode.get("title") or "")
+        )
+        slugs = []
+        for name in names:
+            slug = slugify(name)
+            names_by_slug[slug].add(name)
+            slugs.append(slug)
+        if slugs:
+            episode_guest_slugs[str(episode["id"])] = slugs
+    safe_names = {
+        slug: next(iter(names)) for slug, names in names_by_slug.items() if len(names) == 1
+    }
+    return safe_names, episode_guest_slugs
+
+
+def _ensure_recovery_people(
+    api: ApiClient,
+    dry_run: bool,
+    safe_names: dict[str, str],
+    people_by_id: dict[str, dict[str, Any]],
+    people_by_slug: dict[str, dict[str, Any]],
+) -> None:
+    new_people = [
+        {"aliases": [], "name": name, "slug": slug}
+        for slug, name in safe_names.items()
+        if slug not in people_by_slug
+    ]
+    if dry_run:
+        stored_people = [{**person, "id": f"dry-run:{person['slug']}"} for person in new_people]
+    elif new_people:
+        ids = api.upsert_people(new_people)
+        stored_people = [
+            {**person, "id": person_id} for person, person_id in zip(new_people, ids, strict=True)
+        ]
+    else:
+        stored_people = []
+    for person in stored_people:
+        people_by_id[str(person["id"])] = person
+        people_by_slug[str(person["slug"])] = person
+
+
+def _guest_roster_additions(
+    detail: dict[str, Any],
+    guest_slugs: list[str],
+    safe_names: dict[str, str],
+    people_by_slug: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    current_ids = {str(row.get("personId") or "") for row in detail.get("people") or []}
+    additions = []
+    for slug in guest_slugs:
+        person = people_by_slug.get(slug)
+        expected_name = safe_names.get(slug)
+        if not person or not expected_name or str(person["id"]) in current_ids:
+            continue
+        if str(person["name"]).casefold() != expected_name.casefold():
+            LOGGER.warning(
+                "recover-speakers skipped slug collision slug=%s existing=%s candidate=%s",
+                slug,
+                person["name"],
+                expected_name,
+            )
+            continue
+        additions.append(
+            {
+                "attributionSource": "metadata_match",
+                "confidence": 1.0,
+                "personId": str(person["id"]),
+                "role": "guest",
+            }
+        )
+    return additions
+
+
+def _recover_episode_speakers(
+    api: ApiClient,
+    episode: dict[str, Any],
+    guest_slugs: list[str],
+    safe_names: dict[str, str],
+    people_by_slug: dict[str, dict[str, Any]],
+    people_by_id: dict[str, dict[str, Any]],
+    dry_run: bool,
+) -> tuple[int, int]:
+    detail = api.get_episode(episode["id"])
+    additions = _guest_roster_additions(detail, guest_slugs, safe_names, people_by_slug)
+    if additions:
+        if not dry_run:
+            api.set_episode_people(str(episode["id"]), additions)
+        detail = {**detail, "people": [*(detail.get("people") or []), *additions]}
+    repairs = recover_self_identified_speakers(detail, people_by_id)
+    if not repairs:
+        return len(additions), 0
+    speakers = sorted({str(repair["speakerHint"]) for repair in repairs})
+    if dry_run:
+        LOGGER.info(
+            "recover-speakers dry-run %s speakers=%s repairs=%s",
+            episode["id"],
+            speakers,
+            len(repairs),
+        )
+        return len(additions), len(repairs)
+    result = api.repair_speakers(episode["id"], repairs)
+    LOGGER.info(
+        "recover-speakers %s speakers=%s requested=%s updated=%s skipped=%s",
+        episode["id"],
+        speakers,
+        len(repairs),
+        result.get("updated"),
+        len(result.get("skipped") or []),
+    )
+    return len(additions), int(result.get("updated") or 0)
+
+
+def run_recover_speakers(
+    api: ApiClient, episode_id: str | None, dry_run: bool, limit: int = 0
+) -> int:
+    """Recover explicit metadata guests and uniquely evidenced diarized voices."""
+    episodes = _recovery_episodes(api, episode_id, limit)
+    people_by_id = {str(person["id"]): person for person in api.list_people()}
+    people_by_slug = {str(person["slug"]): person for person in people_by_id.values()}
+    safe_names, episode_guest_slugs = _guest_recovery_index(episodes)
+    _ensure_recovery_people(api, dry_run, safe_names, people_by_id, people_by_slug)
+    roster_additions = 0
+    repaired = 0
+    for episode in episodes:
+        added, updated = _recover_episode_speakers(
+            api,
+            episode,
+            episode_guest_slugs.get(str(episode["id"]), []),
+            safe_names,
+            people_by_slug,
+            people_by_id,
+            dry_run,
+        )
+        roster_additions += added
+        repaired += updated
+    LOGGER.info(
+        "recover-speakers scanned=%s roster_additions=%s repaired=%s",
+        len(episodes),
+        roster_additions,
+        repaired,
+    )
+    return repaired
+
+
 def run_retime(api: ApiClient, episode_id: str | None, dry_run: bool) -> int:
     """Re-derive cue maps from stored captions and re-time existing claims.
 
@@ -1157,6 +1580,9 @@ def run_standalone_stage(api: ApiClient, cfg: Settings, args: argparse.Namespace
         "attributions": lambda: run_attributions(api, cfg, args.episode or None, args.limit),
         "identify": lambda: run_identify(api, cfg, args.episode or None),
         "retime": lambda: run_retime(api, args.episode or None, args.dry_run),
+        "recover-speakers": lambda: run_recover_speakers(
+            api, args.episode or None, args.dry_run, args.limit
+        ),
     }
     handler = handlers.get(args.stage)
     if handler is None:
@@ -1165,12 +1591,7 @@ def run_standalone_stage(api: ApiClient, cfg: Settings, args: argparse.Namespace
     return True
 
 
-def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    # Per-request INFO logs turn a full archive run into hundreds of thousands
-    # of lines and hide the show-level result. Pipeline warnings and summaries
-    # stay visible; HTTP failures still surface through exceptions and warnings.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="on-record-ingest")
     parser.add_argument("--stage", default="all", choices=["all", *STAGES])
     parser.add_argument("--show", default="")
@@ -1183,11 +1604,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=0, help="cap how many items a stage handles")
     parser.add_argument("--focus", choices=["all", "recs"], default="all")
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=0,
+        help="extract broad claims from 2-20 attributed candidate segments per local model call",
+    )
+    parser.add_argument(
+        "--target-claims",
+        type=int,
+        default=10,
+        help="stop broad batch extraction after reaching this many new claims per episode",
+    )
+    parser.add_argument(
         "--whisper",
         action="store_true",
         help="transcribe audio locally when no caption source exists",
     )
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    # Per-request INFO logs turn a full archive run into hundreds of thousands
+    # of lines and hide the show-level result. Pipeline warnings and summaries
+    # stay visible; HTTP failures still surface through exceptions and warnings.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    args = _argument_parser().parse_args(argv)
     cfg = load_settings()
     api = ApiClient(cfg)
     try:
@@ -1238,6 +1680,9 @@ def main(argv: list[str] | None = None) -> int:
                     force=args.force,
                     max_segments=args.max_segments,
                     skip_segments=args.skip_segments,
+                    limit=args.limit,
+                    batch_size=args.batch_size,
+                    target_claims=args.target_claims,
                 ),
             )
         if not args.dry_run:

@@ -34,6 +34,8 @@ export type IncomingClaim = {
 type LlmRunInput = {
   model: string;
   promptVersion?: string;
+  segmentId?: string;
+  focus?: string;
   accepted: boolean;
   reason?: string;
   requestJson: unknown;
@@ -129,12 +131,16 @@ function referencesForClaim(incoming: IncomingClaim, body: SegmentBody): ClaimRe
   return sanitizeReferences(incoming.references ?? [], incoming.quote, body.text);
 }
 
+function usesEvidencedReferencePrompt(promptVersion?: string): boolean {
+  return promptVersion === 'extract-v3' || promptVersion === 'extract-v4';
+}
+
 export function transcriptHasPreciseTimestamps(kind: string | null): boolean {
   return kind !== 'rss_text_coarse' && kind !== 'publisher_html_coarse';
 }
 
 export function assertionForClaim(incoming: IncomingClaim, refs: ClaimReference[]): string {
-  if (incoming.promptVersion !== 'extract-v3' || refs.length === 0) {
+  if (!usesEvidencedReferencePrompt(incoming.promptVersion) || refs.length === 0) {
     return incoming.assertion;
   }
   return refs.map((reference) => referenceAssertion(reference)).join(' ');
@@ -145,7 +151,7 @@ export function requiresEvidencedReference(
   refs: ClaimReference[]
 ): boolean {
   return (
-    incoming.promptVersion === 'extract-v3' &&
+    usesEvidencedReferencePrompt(incoming.promptVersion) &&
     incoming.claimType === 'recommendation' &&
     refs.length === 0
   );
@@ -301,6 +307,7 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
       accepted: run.accepted,
       createdAt: new Date(),
       episodeId,
+      focus: run.focus ?? null,
       id: newId(),
       latencyMs: run.latencyMs ?? null,
       model: run.model,
@@ -308,6 +315,7 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
       reason: run.reason ?? null,
       requestJson: run.requestJson,
       responseJson: run.responseJson ?? null,
+      segmentId: run.segmentId && segments.has(run.segmentId) ? run.segmentId : null,
       tokensIn: run.tokensIn ?? null,
       tokensOut: run.tokensOut ?? null,
     });

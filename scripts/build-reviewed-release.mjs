@@ -3,6 +3,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import {
+  createValidationDatabase,
+  insertStatements,
+  invariant,
+  rowsFor,
+  stableReferenceId,
+} from './release-sql.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const auditRoot = join(root, 'workers/api/.wrangler/audits');
@@ -19,65 +26,8 @@ const finalDir = join(auditRoot, '2026-08-27-insights-v5/analysis/final-v9');
 const reviewedPath = join(finalDir, 'recommendations-sorted.json');
 const outDir = join(root, 'workers/api/.wrangler/releases/2026-08-27-reviewed-v9');
 
-function invariant(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
 function quoteIdentifier(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
-}
-
-function sqlValue(value) {
-  if (value === null || value === undefined) {
-    return 'NULL';
-  }
-  if (typeof value === 'number') {
-    invariant(Number.isFinite(value), `non-finite SQL number: ${value}`);
-    return String(value);
-  }
-  if (typeof value === 'bigint') {
-    return String(value);
-  }
-  if (value instanceof Uint8Array) {
-    return `X'${Buffer.from(value).toString('hex')}'`;
-  }
-  return `'${String(value).replaceAll("'", "''")}'`;
-}
-
-function rowsFor(db, table, where = '', params = []) {
-  const suffix = where ? ` WHERE ${where}` : '';
-  return db.prepare(`SELECT * FROM ${quoteIdentifier(table)}${suffix}`).all(...params);
-}
-
-function insertStatements(table, rows, chunkSize = 100) {
-  if (rows.length === 0) {
-    return [];
-  }
-  const columns = Object.keys(rows[0]);
-  const head = `INSERT INTO ${quoteIdentifier(table)} (${columns
-    .map(quoteIdentifier)
-    .join(', ')}) VALUES\n`;
-  const statements = [];
-  for (let offset = 0; offset < rows.length; offset += chunkSize) {
-    const values = rows.slice(offset, offset + chunkSize).map((row) => {
-      invariant(
-        Object.keys(row).join('\0') === columns.join('\0'),
-        `${table} rows have inconsistent columns`
-      );
-      return `  (${columns.map((column) => sqlValue(row[column])).join(', ')})`;
-    });
-    statements.push(`${head}${values.join(',\n')};`);
-  }
-  return statements;
-}
-
-function stableReferenceId(row) {
-  return createHash('sha256')
-    .update(`${row.claim_id}\0${row.kind}\0${row.role}\0${row.name}`)
-    .digest('hex')
-    .slice(0, 32);
 }
 
 for (const required of [sourceDb, r2Index, reviewedPath]) {
@@ -216,22 +166,7 @@ const sqlPath = join(outDir, 'release.sql');
 writeFileSync(sqlPath, sql);
 writeFileSync(join(outDir, 'r2-uploads.json'), `${JSON.stringify(r2Uploads, null, 2)}\n`);
 
-const validationDb = new DatabaseSync(':memory:');
-for (const migration of [
-  '0000_init.sql',
-  '0001_fts.sql',
-  '0002_references.sql',
-  '0003_segment_cue_map.sql',
-  '0004_segments_to_r2.sql',
-  '0005_claim_corrected_at.sql',
-]) {
-  const migrationSql = readFileSync(join(root, 'packages/db/migrations', migration), 'utf8');
-  for (const statement of migrationSql.split('--> statement-breakpoint')) {
-    if (statement.trim()) {
-      validationDb.exec(statement);
-    }
-  }
-}
+const validationDb = createValidationDatabase(root);
 validationDb.exec(sql);
 const validatedCounts = {
   episodes: validationDb.prepare('SELECT count(*) AS n FROM episodes').get().n,

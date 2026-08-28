@@ -119,6 +119,14 @@ Primary buttons use ink on light paper; secondary buttons remain transparent wit
 an ink border. Hover lifts by two pixels. Keyboard focus uses a three-pixel opaque
 evidence-rust outline with a three-pixel offset.
 
+### Masthead navigation
+
+Desktop uses one quiet editorial masthead: the wordmark returns home, four links
+name the actual research paths, and Method is the only utility. Active state is a
+thin evidence-rust ledger mark, never a filled navigation pill. At compact widths,
+the links move into a native Browse disclosure with plain-language descriptions;
+the closed masthead stays one row and every target remains at least 44px tall.
+
 ### Cards
 
 Cards use square corners, paper-toned backgrounds, a single rule border, and tight

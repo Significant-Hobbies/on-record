@@ -1,57 +1,241 @@
 ---
 import Layout from '../layouts/Base.astro';
-import { apiGet, runtimeEnvFromLocals, type Recommendation } from '../lib/api';
+import {
+  apiGet,
+  runtimeEnvFromLocals,
+  type Recommendation,
+  type RecommendationGroup,
+} from '../lib/api';
 import { whenLabel } from '../lib/time';
+
+const kinds = [
+  ['book', 'Books'],
+  ['app', 'Apps'],
+  ['tool', 'Tools'],
+  ['service', 'Services'],
+  ['hardware', 'Hardware'],
+  ['person', 'People'],
+  ['course', 'Courses'],
+  ['paper', 'Papers'],
+  ['other', 'Other'],
+] as const;
+const roles = [
+  ['recommends', 'Recommends'],
+  ['uses', 'Uses'],
+  ['likes', 'Likes'],
+  ['owns', 'Owns'],
+  ['built', 'Built'],
+  ['avoids', 'Avoids'],
+] as const;
+const rolePhrases: Record<string, string> = {
+  avoids: 'avoid',
+  built: 'built',
+  likes: 'like',
+  owns: 'own',
+  recommends: 'recommend',
+  uses: 'use',
+};
 
 const kind = Astro.url.searchParams.get('kind') ?? '';
 const role = Astro.url.searchParams.get('role') ?? '';
-const query = new URLSearchParams();
-if (kind) query.set('kind', kind);
-if (role) query.set('role', role);
-const suffix = query.toString() ? `?${query}` : '';
+const item = Astro.url.searchParams.get('item') ?? '';
+const q = (Astro.url.searchParams.get('q') ?? '').trim();
+const page = Math.max(Number(Astro.url.searchParams.get('page') ?? 1) || 1, 1);
+const pageSize = 60;
+
+function searchParams(overrides: Record<string, string | number | null>) {
+  const params = new URLSearchParams();
+  if (kind) params.set('kind', kind);
+  if (role) params.set('role', role);
+  if (item) params.set('item', item);
+  if (q) params.set('q', q);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null || value === '') params.delete(key);
+    else params.set(key, String(value));
+  }
+  const query = params.toString();
+  return query ? `/recommendations?${query}` : '/recommendations';
+}
+
+const groupQuery = new URLSearchParams({
+  limit: String(pageSize),
+  offset: String((page - 1) * pageSize),
+});
+if (kind) groupQuery.set('kind', kind);
+if (role) groupQuery.set('role', role);
+if (q) groupQuery.set('q', q);
+
+let groups: RecommendationGroup[] = [];
+let total = 0;
 let items: Recommendation[] = [];
 let empty = false;
+let unavailable = false;
 try {
-  const payload = await apiGet<{ recommendations: Recommendation[]; evidence?: string }>(
-    `/api/recommendations${suffix}`,
-    runtimeEnvFromLocals(Astro.locals)
-  );
-  items = payload.recommendations ?? [];
-  empty = items.length === 0;
+  const payload = await apiGet<{
+    groups: RecommendationGroup[];
+    total: number;
+    evidence?: string;
+  }>(`/api/recommendation-groups?${groupQuery}`, runtimeEnvFromLocals(Astro.locals));
+  groups = payload.groups ?? [];
+  total = payload.total ?? groups.length;
+  empty = total === 0;
+  if (item) {
+    const occurrenceQuery = new URLSearchParams({ name: item });
+    if (kind) occurrenceQuery.set('kind', kind);
+    if (role) occurrenceQuery.set('role', role);
+    const occurrences = await apiGet<{
+      recommendations: Recommendation[];
+      evidence?: string;
+    }>(`/api/recommendations?${occurrenceQuery}`, runtimeEnvFromLocals(Astro.locals));
+    items = occurrences.recommendations ?? [];
+  }
 } catch {
+  unavailable = true;
   empty = true;
 }
+
+const occurrenceTotal = groups.reduce((sum, group) => sum + group.occurrenceCount, 0);
+const selectedGroup = item ? groups.find((group) => group.name === item) : undefined;
 ---
-<Layout title="Recommendations: High Signal Podcasts">
-  <h1>Books, apps, and personal stack</h1>
-  <p class="lede">Only names that appear in a published excerpt.</p>
-  <p class="meta">
-    <a href="/recommendations">all</a> ·
-    <a href="/recommendations?kind=book">books</a> ·
-    <a href="/recommendations?kind=app">apps</a> ·
-    <a href="/recommendations?role=uses">uses</a> ·
-    <a href="/recommendations?role=recommends">recommends</a>
-  </p>
-  {empty ? (
+<Layout
+  title="Grouped recommendations: High Signal Podcasts"
+  description="Books, apps, tools, and other named podcast references grouped by distinct attributable people, with every count linked to source evidence."
+>
+  <header class="collection-header">
+    <p class="eyebrow">Evidence index / named items</p>
+    <h1>Books, apps, and tools people actually name.</h1>
+    <p class="lede">
+      Compare how many distinct people recommended, used, liked, owned, built, or avoided the
+      same item—then inspect every exact quote behind the count.
+    </p>
+    <div class="collection-totals" aria-label="Current filtered totals">
+      <p><strong>{total.toLocaleString()}</strong><span>named items</span></p>
+      <p><strong>{occurrenceTotal.toLocaleString()}</strong><span>evidence rows on this page</span></p>
+      <p><strong>Exact</strong><span>speaker + quote required</span></p>
+    </div>
+  </header>
+
+  {!item && (
+    <form class="named-item-search" method="get">
+      {kind && <input type="hidden" name="kind" value={kind} />}
+      {role && <input type="hidden" name="role" value={role} />}
+      <label for="named-item-query">Find a named book, app, tool, service, or person</label>
+      <div>
+        <input id="named-item-query" type="search" name="q" value={q} placeholder="Claude, Anki, The Mom Test…" />
+        <button type="submit">Find item</button>
+      </div>
+    </form>
+  )}
+
+  <section class="filter-stack" aria-label="Recommendation filters">
+    <div class="filter-row">
+      <span>Kind</span>
+      <a href={searchParams({ item: null, kind: null, page: null })} aria-current={!kind ? 'page' : undefined}>All</a>
+      {kinds.map(([value, label]) => (
+        <a
+          href={searchParams({ item: null, kind: value, page: null })}
+          aria-current={kind === value ? 'page' : undefined}
+        >{label}</a>
+      ))}
+    </div>
+    <div class="filter-row">
+      <span>Action</span>
+      <a href={searchParams({ item: null, role: null, page: null })} aria-current={!role ? 'page' : undefined}>All</a>
+      {roles.map(([value, label]) => (
+        <a
+          href={searchParams({ item: null, role: value, page: null })}
+          aria-current={role === value ? 'page' : undefined}
+        >{label}</a>
+      ))}
+    </div>
+  </section>
+
+  {unavailable ? (
+    <p class="empty">The named-item index is temporarily unavailable. No evidence result is inferred from this outage.</p>
+  ) : item ? (
+    <section class="occurrence-section" aria-labelledby="occurrence-heading">
+      <a class="back-link" href={searchParams({ item: null })}>← Back to grouped items</a>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">{kind || selectedGroup?.kind || 'Named item'} / evidence rows</p>
+          <h2 id="occurrence-heading">{item}</h2>
+        </div>
+        {selectedGroup && (
+          <p class="section-count">
+            <strong>{selectedGroup.peopleCount}</strong>
+            distinct {selectedGroup.peopleCount === 1 ? 'person' : 'people'}
+          </p>
+        )}
+      </div>
+      {items.length === 0 ? (
+        <p class="empty">Insufficient evidence for this item and filter.</p>
+      ) : (
+        <div class="occurrence-list">
+          {items.map((recommendation) => (
+            <article class="card">
+              <p class="folio">{recommendation.role} / {recommendation.kind}</p>
+              <p class="quote">“{recommendation.quote}”</p>
+              <div class="meta">
+                {[
+                  recommendation.personName,
+                  recommendation.showName,
+                  recommendation.episodeTitle,
+                  whenLabel(recommendation),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+              <p>
+                {(recommendation.deepLinkUrl || recommendation.sourceUrl) && (
+                  <>
+                    <a href={recommendation.deepLinkUrl ?? recommendation.sourceUrl} rel="noreferrer" target="_blank">Source</a>
+                    {' · '}
+                  </>
+                )}
+                <a href={`/claims/${recommendation.claimId}`}>Claim receipt</a>
+              </p>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  ) : empty ? (
     <p class="empty">Insufficient evidence for this filter.</p>
   ) : (
-    items.map((item) => (
-      <article class="card">
-        <b>{item.name}</b>
-        <div class="meta">
-          {[item.kind, item.role, item.showName, item.episodeTitle, whenLabel(item)]
-            .filter(Boolean)
-            .join(' · ')}
-        </div>
-        <p class="quote">{item.quote}</p>
-        {(item.deepLinkUrl || item.sourceUrl) && (
-          <>
-            <a href={item.deepLinkUrl ?? item.sourceUrl} rel="noreferrer" target="_blank">Source</a>
-            {' · '}
-          </>
-        )}
-        <a href={`/claims/${item.claimId}`}>Claim</a>
-      </article>
-    ))
+    <>
+      <section class="group-list" aria-label="Grouped named items">
+        {groups.map((group, index) => {
+          const roleCounts = Object.entries(group.roleCounts).filter(([, count]) => count > 0);
+          return (
+            <article class="group-row">
+              <p class="group-rank" aria-hidden="true">{String((page - 1) * pageSize + index + 1).padStart(3, '0')}</p>
+              <div class="group-name">
+                <p class="folio">{group.kind}</p>
+                <h2>
+                  <a href={searchParams({ item: group.name, kind: group.kind, page: null })}>{group.name}</a>
+                </h2>
+                <p class="role-breakdown">
+                  {roleCounts.map(([action, count]) => `${count} ${rolePhrases[action] ?? action}`).join(' · ')}
+                </p>
+              </div>
+              <p class="people-count">
+                <strong>{group.peopleCount}</strong>
+                <span>{group.peopleCount === 1 ? 'person' : 'people'}</span>
+              </p>
+              <p class="occurrence-count">
+                {group.occurrenceCount} {group.occurrenceCount === 1 ? 'evidence row' : 'evidence rows'}
+              </p>
+            </article>
+          );
+        })}
+      </section>
+      {total > pageSize && (
+        <nav class="pagination" aria-label="Recommendation pages">
+          {page > 1 && <a href={searchParams({ page: page - 1 })}>← Previous</a>}
+          <span>Page {page} of {Math.ceil(total / pageSize)}</span>
+          {page * pageSize < total && <a href={searchParams({ page: page + 1 })}>Next →</a>}
+        </nav>
+      )}
+    </>
   )}
 </Layout>

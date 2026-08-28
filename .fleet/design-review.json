@@ -2,9 +2,9 @@
   "$schema": "fleet.design-review.v1",
   "version": 1,
   "project": "on-record",
-  "target": "High Signal Podcasts public beta homepage",
+  "target": "High Signal Podcasts public landing and evidence-ledger entry",
   "surfaceMode": "persuade",
-  "mode": "overhaul",
+  "mode": "preserve",
   "register": "product",
   "context": {
     "product": "PRODUCT.md",
@@ -13,40 +13,51 @@
   "direction": {
     "references": [],
     "probes": [],
-    "selected": "evidence-led-editorial-ledger",
+    "selected": "single-row-editorial-masthead",
     "approval": "delegated",
-    "before": "",
+    "before": "artifacts/design/before-product-1440.png",
+    "library": {
+      "strategy": "upstream-first",
+      "primary": "existing-project-system",
+      "sources": [],
+      "runtime": "existing",
+      "customReplacement": {
+        "used": false,
+        "authorization": "not-required",
+        "reason": ""
+      }
+    },
     "contract": {
-      "purpose": "Help people find what notable podcast guests actually said or recommended and trace each result back to its source.",
-      "purposeSource": "site-health/docs/project-dossiers/on-record.yaml plus repository PRODUCT.md and PROJECT_STATUS.md",
+      "purpose": "Help people search useful podcast ideas, people, recurring books and tools, and verify every result against the exact words and source.",
+      "purposeSource": "site-health purposeContract for on-record plus repository PRODUCT.md and DESIGN.md",
       "canonicalPurpose": "High Signal Podcasts helps people who want useful ideas from important podcasts find evidenced claims, recommendations, books, and tools without listening end to end by preserving attributable excerpts and source trails.",
-      "purposeAlignment": "repository-override",
-      "driftNote": "The repository now contains a reviewed public-beta corpus rather than the dossier's thin V1 proof state; Site Health must be refreshed after live verification.",
-      "audience": "Founders, investors, journalists, operators, and other evidence-conscious podcast readers.",
-      "job": "Explain the public beta, demonstrate a real evidence receipt, and move visitors into search, people, recommendations, or sources.",
-      "thesis": "A warm editorial evidence ledger makes provenance feel tangible without resembling a podcast player or generic SaaS landing page.",
-      "system": "Warm paper surfaces, ledger ink, evidence rust, archival green, brass accents, editorial serif display type, compact sans metadata, square evidence containers, and rule-led asymmetric grids.",
-      "signature": "A real published claim appears as a taped evidence receipt with speaker, time, episode, publisher, and exact-source link.",
-      "risk": "The oversized editorial hero could delay proof; the adjacent populated evidence receipt keeps the mechanism and credibility in the first desktop viewport."
+      "purposeAlignment": "match",
+      "driftNote": "",
+      "audience": "Founders, investors, journalists, operators, and other evidence-conscious podcast researchers.",
+      "job": "Move directly between claim search, people, recurring books and tools, and source episodes without the navigation competing with the evidence.",
+      "thesis": "The shared header should read like an editorial masthead: one quiet line, product-specific route names, and an exact active ledger mark instead of a generic tab strip.",
+      "system": "Preserve the warm paper, serif wordmark, compact sans metadata, one-pixel rules, evidence-rust action color, archival-green status, square geometry, and 44px interaction floor.",
+      "signature": "Desktop uses a single evidence-ledger masthead with a rust active rule; compact widths transform it into a native Browse disclosure with plain-language route descriptions.",
+      "risk": "Hiding desktop links behind a compact menu would slow research, while compressing every link onto mobile would recreate the rejected clutter; the breakpoint deliberately changes the navigation model."
     }
   },
   "evidence": {
     "screenshots": [
       {
         "width": 390,
-        "path": "artifacts/design/after-390.png"
+        "path": "artifacts/design/landing-current/after-390.png"
       },
       {
         "width": 768,
-        "path": "artifacts/design/after-768.png"
+        "path": "artifacts/design/landing-current/after-768.png"
       },
       {
         "width": 1440,
-        "path": "artifacts/design/after-1440.png"
+        "path": "artifacts/design/landing-current/after-1440.png"
       }
     ],
     "projectCheck": {
-      "command": "pnpm ready",
+      "command": "pnpm --dir apps/web typecheck && pnpm --dir apps/web build",
       "status": "pass"
     },
     "critique": {
@@ -54,7 +65,7 @@
       "maximum": 40
     },
     "audit": {
-      "score": 18,
+      "score": 19,
       "maximum": 20
     },
     "unresolved": {
@@ -64,34 +75,50 @@
     "detector": {
       "posture": "advisory",
       "findings": [
-        "The detector returned no findings. Two advisory P3 items remain: light-only raw theme values and two deferred global project-family scripts."
+        "The deterministic detector returned no findings. Independent landing review found no P0 or P1 issue across purpose, hierarchy, active navigation, evidence semantics, responsive layout, or the shared Ask AI and project-strip footer.",
+        "The production-mode homepage now bounds upstream API work at 1.2 seconds and falls back to the truthful evidence-policy state when the live corpus is slow."
       ]
     },
     "comprehension": {
       "status": "pass",
-      "reviewer": "independent design reviewer",
+      "reviewer": "independent design review A2",
       "answers": {
-        "product": "A searchable evidence index of attributable podcast claims and recommendations.",
-        "audience": "Founders, investors, journalists, operators, and people who need useful podcast ideas without listening end to end.",
-        "value": "Find the useful line quickly and verify the exact wording.",
-        "mechanism": "Claim-level extraction retains the verbatim excerpt, speaker, date, timestamp, episode, publisher, and source link.",
-        "proof": "A populated evidence receipt and source-linked proof cards use real reviewed corpus entries.",
-        "nextAction": "Search published claims or browse the people index in the public beta."
+        "product": "A research archive of useful podcast claims, people, books, apps, tools, and source episodes.",
+        "audience": "Founders, investors, journalists, operators, and researchers who need attributable podcast evidence.",
+        "value": "It finds the useful line without requiring the full episode and keeps the exact words verifiable.",
+        "mechanism": "Search and browsable indexes lead to claim cards and receipts containing speaker, quote, date, episode, publisher, and source.",
+        "proof": "The first view shows a real published claim receipt and current trusted-corpus counts.",
+        "nextAction": "Open Search claims, People, Books and tools, or Episodes; the wordmark returns home."
       },
       "purposeScore": {
         "product": 25,
-        "audience": 15,
+        "audience": 14,
         "value": 15,
         "mechanism": 15,
         "proof": 15,
         "nextAction": 14,
-        "total": 99
+        "total": 98
       },
       "mismatches": []
+    },
+    "performance": {
+      "report": ".fleet/evidence/landing-audit/performance.html",
+      "validRuns": 20,
+      "attemptedRuns": 20,
+      "slowMobileP75LcpMs": 1510,
+      "mobileMidP75LcpMs": 759,
+      "mobileMidP75TtfbMs": 1210,
+      "cls": 0,
+      "tbtMs": 0
+    },
+    "visualQuality": {
+      "priority": "P2",
+      "score": 89,
+      "minimum": 85
     }
   },
   "ownerFeedback": {
     "decision": "delegated",
-    "note": "The owner delegated release judgment and asked for the website to be fully sorted and released."
+    "note": "The owner explicitly rejected the previous navbar and delegated a focused local replacement. The new masthead removes the two-row pill navigation and duplicate actions; production release remains a separate approval boundary."
   }
 }

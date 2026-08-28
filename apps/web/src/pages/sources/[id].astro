@@ -1,34 +1,95 @@
 ---
 import ClaimCard from '../../components/ClaimCard.astro';
 import Layout from '../../layouts/Base.astro';
-import { apiGet, runtimeEnvFromLocals, type Claim } from '../../lib/api';
+import { apiGet, runtimeEnvFromLocals, type Claim, type Source } from '../../lib/api';
+import { formatSaidOn } from '../../lib/time';
 
 const { id } = Astro.params;
-let title = 'Source';
+let source: Source | null = null;
 let claims: Claim[] = [];
 let missing = false;
 try {
-  const payload = await apiGet<{ source: { title: string }; claims: Claim[] }>(
+  const payload = await apiGet<{ source: Source; claims: Claim[] }>(
     `/api/sources/${id}`,
     runtimeEnvFromLocals(Astro.locals)
   );
-  title = payload.source?.title ?? title;
+  source = payload.source;
   claims = payload.claims ?? [];
 } catch {
   missing = true;
 }
+
+const people = [...new Map(claims.filter((claim) => claim.personSlug).map((claim) => [claim.personSlug, claim.personName])).entries()];
+const claimTypes = claims.reduce<Record<string, number>>((counts, claim) => {
+  counts[claim.claimType] = (counts[claim.claimType] ?? 0) + 1;
+  return counts;
+}, {});
 ---
-<Layout title={`${title}: High Signal Podcasts`}>
-  {missing ? (
-    <p class="empty">Insufficient evidence.</p>
+<Layout
+  title={`${source?.title ?? 'Episode'} — High Signal Podcasts`}
+  description={source ? `Attributable claims and exact quotes from ${source.title}, with links to the original source.` : 'Episode evidence record.'}
+>
+  {missing || !source ? (
+    <div class="empty-state page-empty">
+      <p class="eyebrow">No trusted public record</p>
+      <h1>This episode is not in the public evidence index.</h1>
+      <p>It may have no published claims or unresolved speaker attribution.</p>
+      <a class="button button-secondary" href="/sources">Back to episodes</a>
+    </div>
   ) : (
     <>
-      <h1>{title}</h1>
-      {claims.length === 0 ? (
-        <p class="empty">No published claims from this source yet.</p>
-      ) : (
-        claims.map((claim) => <ClaimCard claim={claim} />)
-      )}
+      <header class="source-profile">
+        <a class="back-link" href="/sources">← All source episodes</a>
+        <p class="eyebrow">{source.showName ?? 'Podcast'} / episode intelligence</p>
+        <h1>{source.title}</h1>
+        <div class="source-profile-meta">
+          <span>{formatSaidOn(source.publishedAt) || 'Recorded source'}</span>
+          <span>{claims.length} published {claims.length === 1 ? 'claim' : 'claims'}</span>
+          <span>{people.length} attributable {people.length === 1 ? 'person' : 'people'}</span>
+        </div>
+        <div class="source-profile-actions">
+          {source.sourceUrl && <a class="button button-primary" href={source.sourceUrl} rel="noreferrer" target="_blank">Open original episode ↗</a>}
+          <a class="button button-secondary" href="#claims">Read the evidence</a>
+        </div>
+      </header>
+
+      <section class="episode-brief" aria-label="Episode evidence summary">
+        <div>
+          <p class="eyebrow">Speakers in the public record</p>
+          <div class="speaker-links">
+            {people.map(([personSlug, personName]) => <a href={`/people/${personSlug}`}>{personName}</a>)}
+          </div>
+        </div>
+        <div>
+          <p class="eyebrow">Claim mix</p>
+          <div class="claim-mix">
+            {Object.entries(claimTypes).sort(([, a], [, b]) => b - a).map(([type, count]) => (
+              <span>{type} <b>{count}</b></span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p class="eyebrow">Evidence policy</p>
+          <p>Every row below preserves an exact excerpt and an identified speaker. Unresolved voices remain absent.</p>
+        </div>
+      </section>
+
+      <section id="claims" class="episode-claims" aria-labelledby="episode-claims-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Claim ledger</p>
+            <h2 id="episode-claims-heading">The useful parts, with receipts.</h2>
+          </div>
+          <p>{claims.length} published records</p>
+        </div>
+        {claims.length === 0 ? (
+          <p class="empty">No published claims from this source yet.</p>
+        ) : (
+          <div class="claim-list">
+            {claims.map((claim, index) => <ClaimCard claim={claim} index={index} />)}
+          </div>
+        )}
+      </section>
     </>
   )}
 </Layout>

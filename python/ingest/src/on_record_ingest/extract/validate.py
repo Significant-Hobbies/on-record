@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from ..seed.people import PEOPLE
@@ -29,11 +30,11 @@ REFERENCE_KINDS = {
     "person",
     "other",
 }
-REFERENCE_ROLES = {"recommends", "uses", "built", "avoids"}
+REFERENCE_ROLES = {"recommends", "uses", "likes", "owns", "built", "avoids"}
 REFERENCE_CLAUSE_BREAK = re.compile(
     r"(?:[.!?;]\s+|,\s*(?:and|but|while|whereas)\s+|\s+(?:but|whereas)\s+|"
     r"\s+and\s+(?=(?:i|we|you|they|personally|currently|actually|still|use|used|"
-    r"recommend|avoid|built|created|made|read)\b))",
+    r"recommend|avoid|built|created|made|read|love|like|prefer|own|bought)\b))",
     re.IGNORECASE,
 )
 REFERENCE_GENERIC_NAME = re.compile(
@@ -260,6 +261,110 @@ def validate_references(
     return out
 
 
+@dataclass(frozen=True)
+class ReferenceMatch:
+    role: str
+    kind: str | None
+    name_pattern: str
+    matching: list[str]
+
+
+def _active_reference_object(
+    context: ReferenceMatch, verbs: str, clause: str, distance: int = 100
+) -> bool:
+    pattern = re.compile(
+        rf"\b(?:i|we)\s+{REFERENCE_ADVERBS}(?:{verbs})\b"
+        rf"(?P<gap>.{{0,{distance}}}?){context.name_pattern}",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(clause):
+        gap = match.group("gap")
+        if REFERENCE_OBJECT_PRONOUN.search(gap):
+            continue
+        if REFERENCE_REPORTED_SPEECH.search(clause[: match.start()]):
+            continue
+        if context.role == "recommends" and re.search(
+            r"\b(?:about|regarding|concerning)\b", gap, re.IGNORECASE
+        ):
+            continue
+        if context.kind == "person" and (
+            REFERENCE_WRAPPED_PERSON.search(gap)
+            or re.search(r"\b(?:with|by|from)\b", gap, re.IGNORECASE)
+        ):
+            continue
+        return True
+    return False
+
+
+def _recommendation_supported(context: ReferenceMatch) -> bool:
+    should = re.compile(
+        rf"\b(?:you|people|everyone|founders|engineers|teams|we)\s+(?:really\s+)?"
+        rf"should\s+(?:read|try|use|watch|listen\s+to|check\s+out|follow)\b"
+        rf".{{0,80}}?{context.name_pattern}",
+        re.IGNORECASE,
+    )
+    relative = re.compile(
+        rf"{context.name_pattern}.{{0,60}}?\b(?:that|which)\s+(?:i|we)\s+"
+        rf"{REFERENCE_ADVERBS}recommend(?:ed)?\b",
+        re.IGNORECASE,
+    )
+    worth = re.compile(
+        rf"(?:\bmust[- ](?:read|use|watch)\b.{{0,50}}?{context.name_pattern}|"
+        rf"{context.name_pattern}.{{0,40}}?\bworth\s+"
+        rf"(?:reading|trying|using|watching|listening\s+to)\b)",
+        re.IGNORECASE,
+    )
+    return any(
+        _active_reference_object(context, r"recommend(?:ed)?", clause)
+        or should.search(clause)
+        or (context.kind != "person" and relative.search(clause))
+        or worth.search(clause)
+        for clause in context.matching
+    )
+
+
+def _use_supported(context: ReferenceMatch) -> bool:
+    verbs = (
+        r"use|used|rely\s+on|run|work\s+with|read|am\s+reading|are\s+reading|"
+        r"have\s+been\s+using|have\s+used|listen\s+to|listened\s+to|watch|watched|"
+        r"subscribe\s+to|subscribed\s+to|wear|drive|play"
+    )
+    fronted = re.compile(
+        rf"{context.name_pattern}\s*,\s*(?:i|we)\s+{REFERENCE_ADVERBS}(?:{verbs})\b",
+        re.IGNORECASE,
+    )
+    return any(
+        _active_reference_object(context, verbs, clause) or fronted.search(clause)
+        for clause in context.matching
+    )
+
+
+def _preference_supported(context: ReferenceMatch) -> bool:
+    verbs = r"love|like|prefer|enjoy|adore|swear\s+by"
+    fan = re.compile(
+        rf"\b(?:i|we)(?:['’]m|\s+am|['’]re|\s+are)\s+(?:a\s+)?"
+        rf"(?:(?:big|huge)\s+)?fan\s+of\s+.{{0,80}}?{context.name_pattern}",
+        re.IGNORECASE,
+    )
+    favorite = re.compile(
+        rf"(?:\bmy\s+favou?rite(?:\s+\w+){{0,3}}\s+is\s+{context.name_pattern}|"
+        rf"{context.name_pattern}.{{0,40}}?\bis\s+my\s+favou?rite\b)",
+        re.IGNORECASE,
+    )
+    obsessed = re.compile(
+        rf"\b(?:i|we)(?:['’]m|\s+am|['’]re|\s+are)\s+obsessed\s+with\s+"
+        rf".{{0,60}}?{context.name_pattern}",
+        re.IGNORECASE,
+    )
+    return any(
+        _active_reference_object(context, verbs, clause)
+        or fan.search(clause)
+        or favorite.search(clause)
+        or obsessed.search(clause)
+        for clause in context.matching
+    )
+
+
 def reference_role_supported(
     name: str, role: str, claim_quote: str, kind: str | None = None
 ) -> bool:
@@ -269,79 +374,35 @@ def reference_role_supported(
     needle = normalize_ws(name)
     if REFERENCE_GENERIC_NAME.fullmatch(needle):
         return False
-    name_pattern = re.escape(needle).replace(r"\ ", r"\s+")
     clauses = REFERENCE_CLAUSE_BREAK.split(normalize_ws(claim_quote))
-    matching = [clause for clause in clauses if needle.casefold() in clause.casefold()]
-
-    def active_object(verbs: str, clause: str, distance: int = 100) -> bool:
-        pattern = re.compile(
-            rf"\b(?:i|we)\s+{REFERENCE_ADVERBS}(?:{verbs})\b"
-            rf"(?P<gap>.{{0,{distance}}}?){name_pattern}",
-            re.IGNORECASE,
-        )
-        for match in pattern.finditer(clause):
-            if REFERENCE_OBJECT_PRONOUN.search(match.group("gap")):
-                continue
-            if REFERENCE_REPORTED_SPEECH.search(clause[: match.start()]):
-                continue
-            if role == "recommends" and re.search(
-                r"\b(?:about|regarding|concerning)\b", match.group("gap"), re.IGNORECASE
-            ):
-                continue
-            if kind == "person" and (
-                REFERENCE_WRAPPED_PERSON.search(match.group("gap"))
-                or re.search(r"\b(?:with|by|from)\b", match.group("gap"), re.IGNORECASE)
-            ):
-                continue
-            return True
-        return False
-
+    context = ReferenceMatch(
+        role=role,
+        kind=kind,
+        name_pattern=re.escape(needle).replace(r"\ ", r"\s+"),
+        matching=[clause for clause in clauses if needle.casefold() in clause.casefold()],
+    )
     if role == "recommends":
-        should = re.compile(
-            rf"\b(?:you|people|everyone|founders|engineers|teams|we)\s+(?:really\s+)?"
-            rf"should\s+(?:read|try|use|watch|listen\s+to|check\s+out|follow)\b"
-            rf".{{0,80}}?{name_pattern}",
-            re.IGNORECASE,
-        )
-        relative = re.compile(
-            rf"{name_pattern}.{{0,60}}?\b(?:that|which)\s+(?:i|we)\s+"
-            rf"{REFERENCE_ADVERBS}recommend(?:ed)?\b",
-            re.IGNORECASE,
-        )
-        worth = re.compile(
-            rf"(?:\bmust[- ](?:read|use|watch)\b.{{0,50}}?{name_pattern}|"
-            rf"{name_pattern}.{{0,40}}?\bworth\s+"
-            rf"(?:reading|trying|using|watching|listening\s+to)\b)",
-            re.IGNORECASE,
-        )
-        return any(
-            active_object(r"recommend(?:ed)?", clause)
-            or should.search(clause)
-            or (kind != "person" and relative.search(clause))
-            or worth.search(clause)
-            for clause in matching
-        )
+        return _recommendation_supported(context)
     if role == "uses":
-        verbs = (
-            r"use|used|rely\s+on|run|work\s+with|read|am\s+reading|are\s+reading|"
-            r"have\s+been\s+using|have\s+used|listen\s+to|wear"
-        )
-        fronted = re.compile(
-            rf"{name_pattern}\s*,\s*(?:i|we)\s+{REFERENCE_ADVERBS}(?:{verbs})\b",
-            re.IGNORECASE,
-        )
-        return any(active_object(verbs, clause) or fronted.search(clause) for clause in matching)
-    if role == "built":
-        verbs = r"built|created|made|founded|developed|launched|wrote|authored|designed"
-        return any(active_object(verbs, clause) for clause in matching)
-    if role == "avoids":
-        verbs = (
+        return _use_supported(context)
+    if role == "likes":
+        return _preference_supported(context)
+    verbs_by_role = {
+        "owns": r"own|bought|purchased|have\s+purchased|have\s+bought",
+        "built": (
+            r"built|created|made|founded|developed|launched|wrote|authored|designed|"
+            r"shipped|started"
+        ),
+        "avoids": (
             r"avoid|avoided|never\s+use|stopped\s+using|quit|uninstalled|"
             r"stay\s+away\s+from|do\s+not\s+use|don['’]?t\s+use|"
             r"would\s+not\s+use|wouldn['’]?t\s+use|cannot\s+use|can['’]?t\s+use"
-        )
-        return any(active_object(verbs, clause) for clause in matching)
-    return False
+        ),
+    }
+    verbs = verbs_by_role.get(role)
+    return bool(verbs) and any(
+        _active_reference_object(context, verbs, clause) for clause in context.matching
+    )
 
 
 def normalized_reference_kind(name: str, kind: str, claim_quote: str) -> str:

@@ -1,11 +1,30 @@
 # on-record — correctness handoff
 
-Updated 2026-08-27. This document describes the isolated local correctness
+Updated 2026-08-28. This document describes the isolated local correctness
 snapshot, not production. The previous 2026-08-26 figures were contaminated by
 bad RSS/YouTube associations, a wrong Peel feed, seven adjacent Lex transcripts,
 and one synthetic canary. Do not reuse those figures.
 
 ## Executive truth
+
+- The finished local research product uses the v10 working store and exposes a
+  trusted 23-show boundary: 8,395 catalog episodes, 1,208 transcript episodes,
+  11,624 published claims from 935 people across 1,190 source episodes, and 300
+  named-reference rows. Of all trusted transcript episodes, 1,092 (90.4%) have
+  at least 10 published claims; only 18 have no published claim.
+- TBPN and Odd Lots are retained intact in the raw corpus but withheld from
+  public claims, people, sources, recommendations, search, and statistics. Their
+  diarized labels are not mapped to named people confidently enough for public
+  attribution.
+- The local website is now a complete evidence-ledger research flow across
+  home, search, people, grouped books/apps/tools, episodes, and exact claim
+  receipts. Production is unchanged.
+- The grouped named-item slice contains 300 evidence rows across 286 canonical
+  item groups: 57 apps, 63 tools, 54 books, 51 other items, 22 services, 17
+  hardware items, 16 people, 3 courses, and 3 papers. Counts use distinct
+  attributable people, not raw mentions. Grouping depth is still modest:
+  ChatGPT has four distinct people, Claude-as-app has three, and no book yet has
+  more than one under the current evidence gate.
 
 - The clean local catalog contains 25 configured shows and 10,305 unique
   episode rows covering 2015–2026.
@@ -35,12 +54,115 @@ and one synthetic canary. Do not reuse those figures.
   candidate tail, so it is verified local evidence rather than a complete
   corpus answer.
 
+## 2026-08-28 broad-claim working expansion
+
+The product target is now explicit: every trusted transcribed episode should
+yield at least 10 defensible recommendations, ideas, predictions, opinions,
+explanations, decisions, or commitments. Every item still needs an identified
+speaker and an exact transcript excerpt. This is broader than the named-object
+recommendation catalog; books/apps/tools remain a separately grouped slice.
+
+- The current trusted transcript target is **12,080 published items** across
+  1,208 episodes. The trusted all-catalog target is **83,950**, but 7,187
+  episode rows first need transcripts. The raw 25-show figures remain preserved
+  below for provenance and are not the public product boundary.
+- The working store is
+  `workers/api/.wrangler/audits/2026-08-27-recommendations-v10/`. The immutable
+  correctness-v9 snapshot and reviewed release bundle remain unchanged.
+- The production-ready overlay is
+  `workers/api/.wrangler/releases/2026-08-28-trusted-v10/`. It preserves all
+  28 manual v9 rejections, replaces the 166 accepted v3 claims' raw reference
+  forms with their 189 reviewed rows, and adds 111 evidence-gated v4/v5
+  reference rows. This is why the release has 300 named-reference rows while
+  the underlying working D1 has 295; never import the working database directly.
+- Deterministic speaker recovery assigned 18,932 formerly unknown segments
+  without model guessing. This includes 460 explicit publisher-metadata guest
+  links plus one verified spelling correction, direct self-introductions,
+  host welcomes followed by guest acceptance, and a narrow single-guest
+  dominance rule. Exact-speaker coverage is now 264,363 segments; 481,374
+  remain unknown.
+- The final repair pass deliberately rejects publisher pre-roll, multi-party
+  RSS transcripts above 300 segments, ambiguous labels, and any segment that
+  already anchors a claim. The unsafe broad dry run proposed 4,319 changes;
+  after sampling and tightening, the applied pass contained 1,489 changes
+  across 50 episodes, with zero Worker rejections.
+- The post-repair audit finds 78,890 high-recall candidate segments. Under the
+  current exact-speaker boundary, 1,386 transcript episodes have at least 10
+  high-recall candidates and the theoretical ten-per-episode capacity is
+  14,618. The remaining gap is predominantly speaker/transcript evidence, not
+  a lack of things being said.
+- `extract-v5` batches eight prefiltered excerpts per local call. The model only
+  classifies keep/type/stance/topics/references; it cannot regenerate the
+  assertion or quote. The exact excerpt is stored as both, then revalidated by
+  the Worker. Existing published claims count toward `--target-claims 10`, and
+  per-segment attempt checkpoints make interruption safe.
+- A 25-episode Lenny qualification plus calibration brought 32 Lenny episodes
+  to at least 10 published claims before the resumable continuation started.
+  The continuation is now corpus-wide: every episode already at the target is
+  skipped, and every attempted segment remains checkpointed. At the switch to
+  the corpus-wide run, 51 transcript episodes were at the target and the local
+  API contained 734 published claims.
+- The completed trusted saturation pass contains 11,624 published claims from
+  1,190 source episodes. It reached 96.2% of the nominal 12,080-item target;
+  1,092 of 1,208 episodes reached 10, while 116 remain below target with a total
+  shortfall of 456 claims.
+- The residual is evidence-bound and must not be padded. A high-recall audit
+  found capacity for at most 11,868 claims under the current exact-speaker and
+  evidence rules; 30 episodes have fewer than 10 eligible candidates. At least
+  212 of the nominal shortfall is therefore structurally unavailable, while the
+  rest consists of candidates the model or Worker correctly did not publish.
+- The final review reconciliation rejected 37 rows without deleting their
+  evidence: 28 previously documented manual v9 rejections, six repeated
+  OneSchema sponsor-insert claims across Lenny episodes, and three duplicate
+  Zuckerberg excerpts from the Chase Center compilation that already have a
+  canonical dedicated-interview source. Trusted published claims now have zero
+  exact-quote duplicate groups, zero missing people, and zero broken
+  claim-evidence pairs or R2 transcript quote anchors. Two same-segment groups
+  remain and are legitimate multi-item recommendations with distinct quotes
+  and objects.
+- The local model intermittently returned a temporary "model unloaded" 400.
+  Local extraction now retries the same batch up to four times, so a reload no
+  longer silently skips otherwise eligible evidence.
+- No production database, deployment, migration, or reviewed release artifact
+  has been changed by this expansion.
+
+Final trusted coverage by show:
+
+| Show | Transcript episodes | Claims | Episodes at 10+ | Below 10 | Gap to 10 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Conversations with Tyler | 295 | 2,932 | 287 | 8 | 18 |
+| Lenny's Podcast | 328 | 3,258 | 316 | 12 | 22 |
+| Acquired | 170 | 1,615 | 146 | 24 | 85 |
+| Lex Fridman Podcast | 113 | 1,092 | 108 | 5 | 38 |
+| Latent Space | 116 | 1,051 | 81 | 35 | 109 |
+| Dwarkesh Podcast | 89 | 886 | 85 | 4 | 4 |
+| Machine Learning Street Talk | 39 | 356 | 30 | 9 | 34 |
+| The Cognitive Revolution | 35 | 318 | 30 | 5 | 32 |
+| Cheeky Pint | 21 | 116 | 9 | 12 | 94 |
+| The Logan Bartlett Show | 2 | 0 | 0 | 2 | 20 |
+| **Total** | **1,208** | **11,624** | **1,092** | **116** | **456** |
+
+Optional targeted rerun command (explicitly local; never point this at
+production by accident):
+
+```bash
+API_BASE=http://127.0.0.1:8787 \
+ADMIN_TOKEN=local-audit \
+AI_BASE_URL=http://127.0.0.1:1234/v1 \
+ON_RECORD_FORCE_MODEL=qwen/qwen3.5-4b \
+AI_MODEL=qwen/qwen3.5-4b \
+uv run --project python/ingest python -m on_record_ingest \
+  --stage extract --batch-size 8 --target-claims 10
+```
+
 During the correctness pass itself, no commit, push, deploy, production ingest,
 migration, or release was performed.
-The final local `pnpm ready` run passed 45 TypeScript tests, 167 Python tests,
-formatting, lint, typecheck, unused-code, complexity, duplication, cycle,
-suppression, and hygiene gates. The exact final verification receipt is
-recorded below.
+The final local `pnpm quality` run passed 57 API tests, 199 Python tests,
+formatting, lint, all TypeScript checks, unused-code, complexity, zero-clone
+duplication, cycle, suppression, and hygiene gates. The Astro server build and
+the Fleet design-review check also pass; browser qualification covers the core
+routes at 390, 768, and 1440 pixels with no console errors or horizontal page
+overflow. The exact historical correctness receipt remains recorded below.
 
 ## Local snapshot
 

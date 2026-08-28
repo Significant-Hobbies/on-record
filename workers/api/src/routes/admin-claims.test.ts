@@ -38,6 +38,30 @@ describe('general claim persistence', () => {
     );
   });
 
+  it('also evidence-gates the expanded extract-v4 action contract', () => {
+    expect(
+      requiresEvidencedReference(
+        { ...baseClaim, claimType: 'recommendation', promptVersion: 'extract-v4' },
+        []
+      )
+    ).toBe(true);
+    expect(
+      assertionForClaim({ ...baseClaim, promptVersion: 'extract-v4' }, [
+        { kind: 'app', name: 'Linear', role: 'likes' },
+      ])
+    ).toBe('Likes Linear.');
+  });
+
+  it('allows broad extract-v5 behavioral advice without inventing a named reference', () => {
+    const advice = {
+      ...baseClaim,
+      claimType: 'recommendation',
+      promptVersion: 'extract-v5',
+    };
+    expect(requiresEvidencedReference(advice, [])).toBe(false);
+    expect(assertionForClaim(advice, [])).toBe(baseClaim.assertion);
+  });
+
   it('keeps deterministic reference assertions for recommendation rows', () => {
     const refs = [{ kind: 'book', name: 'The Beginning of Infinity', role: 'recommends' }] as const;
     expect(assertionForClaim({ ...baseClaim, claimType: 'recommendation' }, [...refs])).toBe(

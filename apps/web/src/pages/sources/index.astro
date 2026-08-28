@@ -1,32 +1,114 @@
 ---
 import Layout from '../../layouts/Base.astro';
-import { apiGet, runtimeEnvFromLocals } from '../../lib/api';
+import { apiGet, runtimeEnvFromLocals, type Source } from '../../lib/api';
 import { formatSaidOn } from '../../lib/time';
 
-type Source = { id: string; title: string; status: string; publishedAt?: string | null };
+const q = (Astro.url.searchParams.get('q') ?? '').trim();
+const show = Astro.url.searchParams.get('show') ?? '';
+const page = Math.max(Number(Astro.url.searchParams.get('page') ?? 1) || 1, 1);
+const pageSize = 60;
 let sources: Source[] = [];
+let publishers: Array<{ name: string; slug: string }> = [];
+let total = 0;
+let unavailable = false;
 try {
-  const payload = await apiGet<{ sources: Source[] }>(
-    '/api/sources',
+  const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
+  if (q) params.set('q', q);
+  if (show) params.set('show', show);
+  const payload = await apiGet<{ publishers: Array<{ name: string; slug: string }>; sources: Source[]; total: number }>(
+    `/api/sources?${params}`,
     runtimeEnvFromLocals(Astro.locals)
   );
   sources = payload.sources ?? [];
+  publishers = payload.publishers ?? [];
+  total = payload.total ?? sources.length;
 } catch {
-  sources = [];
+  unavailable = true;
+}
+
+const totalClaims = sources.reduce((sum, source) => sum + (source.claimCount ?? 0), 0);
+function pageHref(nextPage: number) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (show) params.set('show', show);
+  if (nextPage > 1) params.set('page', String(nextPage));
+  return `/sources${params.size ? `?${params}` : ''}`;
 }
 ---
-<Layout title="Sources: High Signal Podcasts">
-  <h1>Sources</h1>
-  {sources.length === 0 ? (
-    <p class="empty">Insufficient evidence.</p>
+<Layout
+  title="Episode intelligence — High Signal Podcasts"
+  description="Browse podcast episodes by the attributable claims extracted from them, then open exact quotes and original sources."
+>
+  <header class="collection-header source-header">
+    <p class="eyebrow">Trusted corpus / episodes</p>
+    <h1>Episodes, reduced to their useful evidence.</h1>
+    <p class="lede">
+      Browse source episodes by publisher, then open the claims, speakers, and exact quotations
+      worth returning to.
+    </p>
+    <div class="collection-totals">
+      <p><strong>{total.toLocaleString('en-US')}</strong><span>episodes with evidence</span></p>
+      <p><strong>{totalClaims.toLocaleString('en-US')}</strong><span>claims in this view</span></p>
+      <p><strong>{publishers.length}</strong><span>trusted publishers</span></p>
+    </div>
+  </header>
+
+  <section class="index-toolbar source-toolbar" aria-label="Filter source episodes">
+    <form method="get" class="source-filter-form">
+      <div>
+        <label for="source-query">Find an episode</label>
+        <input id="source-query" type="search" name="q" value={q} placeholder="Guest, topic, or episode title" />
+      </div>
+      <div>
+        <label for="source-show">Publisher</label>
+        <select id="source-show" name="show">
+          <option value="">Every publisher</option>
+          {publishers.map((publisher) => (
+            <option value={publisher.slug} selected={show === publisher.slug}>{publisher.name}</option>
+          ))}
+        </select>
+      </div>
+      <button type="submit">Filter episodes</button>
+    </form>
+    <p>{total} matching {total === 1 ? 'episode' : 'episodes'}</p>
+  </section>
+
+  {unavailable ? (
+    <p class="empty">The trusted source index is temporarily unavailable.</p>
+  ) : sources.length === 0 ? (
+    <div class="empty-state">
+      <p class="eyebrow">No published match</p>
+      <h2>Try another publisher or a broader title.</h2>
+      <a class="button button-secondary" href="/sources">Clear filters</a>
+    </div>
   ) : (
-    sources.map((source) => (
-      <article class="card">
-        <a href={`/sources/${source.id}`}>{source.title}</a>
-        <div class="meta">
-          {[formatSaidOn(source.publishedAt), source.status].filter(Boolean).join(' · ')}
-        </div>
-      </article>
-    ))
+    <>
+      <section class="source-directory" aria-label="Source episodes">
+        {sources.map((source, index) => (
+          <article class="source-row">
+            <span class="source-rank">{String((page - 1) * pageSize + index + 1).padStart(3, '0')}</span>
+            <div class="source-row-main">
+              <p class="folio">{source.showName ?? 'Podcast'} · {formatSaidOn(source.publishedAt) || 'Recorded source'}</p>
+              <h2><a href={`/sources/${source.id}`}>{source.title}</a></h2>
+            </div>
+            <dl class="source-row-counts">
+              <div><dt>Claims</dt><dd>{source.claimCount ?? 0}</dd></div>
+              <div><dt>People</dt><dd>{source.peopleCount ?? 0}</dd></div>
+            </dl>
+            <div class="source-row-actions">
+              <a href={`/sources/${source.id}`}>Episode intelligence</a>
+              {source.sourceUrl && <a href={source.sourceUrl} rel="noreferrer" target="_blank">Original ↗</a>}
+            </div>
+          </article>
+        ))}
+      </section>
+      {total > pageSize && (
+        <nav class="pagination" aria-label="Episode pages">
+          {page > 1 ? <a href={pageHref(page - 1)}>← Previous</a> : <span></span>}
+          <span>Page {page} of {Math.ceil(total / pageSize)}</span>
+          {page * pageSize < total ? <a href={pageHref(page + 1)}>Next →</a> : <span></span>}
+        </nav>
+      )}
+    </>
   )}
 </Layout>

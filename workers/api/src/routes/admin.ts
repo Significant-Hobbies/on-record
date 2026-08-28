@@ -220,6 +220,10 @@ function reviewQueue(d1: D1Database, status: 'held' | 'draft', limit: number) {
     .limit(limit);
 }
 
+export function reviewStatusIsIndexed(status: string): boolean {
+  return status === 'published';
+}
+
 adminRoute.get('/review-queue', async (c) => {
   const held = await reviewQueue(c.env.DB, 'held', 200);
   const drafts = await reviewQueue(c.env.DB, 'draft', 100);
@@ -234,13 +238,27 @@ adminRoute.post('/claims/:id/status', async (c) => {
     return c.json({ error: 'bad_status' }, 400);
   }
   const publishedAt = body.reviewStatus === 'published' ? new Date() : null;
-  await db(c.env.DB)
+  const database = db(c.env.DB);
+  await database
     .update(schema.claims)
     .set({
       publishedAt,
       reviewStatus: body.reviewStatus as (typeof schema.claims.reviewStatus.enumValues)[number],
     })
     .where(eq(schema.claims.id, id));
+  await c.env.DB.prepare('DELETE FROM claims_fts WHERE claim_id = ?').bind(id).run();
+  if (reviewStatusIsIndexed(body.reviewStatus)) {
+    const [claim] = await database
+      .select({ assertion: schema.claims.assertion, quote: schema.claims.quote })
+      .from(schema.claims)
+      .where(eq(schema.claims.id, id))
+      .limit(1);
+    if (claim) {
+      await c.env.DB.prepare('INSERT INTO claims_fts (claim_id, assertion, quote) VALUES (?, ?, ?)')
+        .bind(id, claim.assertion, claim.quote)
+        .run();
+    }
+  }
   return c.json({ ok: true });
 });
 

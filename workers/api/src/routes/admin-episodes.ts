@@ -24,6 +24,31 @@ export function staleSegmentIds(
     .map((segment) => segment.id);
 }
 
+export function speakerRepairRejection(
+  repair: { diarLabel: string; speakerHint: string },
+  segment: { id: string; speakerHint: string | null } | undefined,
+  storedDiarLabel: string | null | undefined,
+  allowedSpeakers: ReadonlySet<string>,
+  claimedSegmentIds: ReadonlySet<string>
+): string | null {
+  if (!segment) {
+    return 'segment_not_found';
+  }
+  if (segment.speakerHint && segment.speakerHint !== 'unknown') {
+    return 'speaker_already_known';
+  }
+  if (!repair.diarLabel || repair.diarLabel !== storedDiarLabel) {
+    return 'diar_label_mismatch';
+  }
+  if (!(repair.speakerHint && allowedSpeakers.has(repair.speakerHint))) {
+    return 'speaker_not_in_episode';
+  }
+  if (claimedSegmentIds.has(segment.id)) {
+    return 'segment_has_claims';
+  }
+  return null;
+}
+
 type EpisodeInput = {
   showId: string;
   guid: string;
@@ -65,7 +90,7 @@ adminEpisodesRoute.get('/episodes/:id', async (c) => {
     .from(schema.episodePeople)
     .where(eq(schema.episodePeople.episodeId, id));
   const claimed = await database
-    .select({ segmentId: schema.claims.segmentId })
+    .select({ reviewStatus: schema.claims.reviewStatus, segmentId: schema.claims.segmentId })
     .from(schema.claims)
     .where(eq(schema.claims.episodeId, id));
   const extractedSegmentIds = [
@@ -73,11 +98,21 @@ adminEpisodesRoute.get('/episodes/:id', async (c) => {
       claimed.map((row) => row.segmentId).filter((value): value is string => Boolean(value))
     ),
   ];
+  const extractionAttempts = await database
+    .select({
+      focus: schema.llmRuns.focus,
+      promptVersion: schema.llmRuns.promptVersion,
+      segmentId: schema.llmRuns.segmentId,
+    })
+    .from(schema.llmRuns)
+    .where(eq(schema.llmRuns.episodeId, id));
   // The extractor needs the words; they live in R2 now.
   const bodies = await getSegmentBodies(c.env.RAW, id);
   return c.json({
     episode,
+    extractionAttempts: extractionAttempts.filter((row) => row.segmentId),
     extractedSegmentIds,
+    publishedClaimCount: claimed.filter((row) => row.reviewStatus === 'published').length,
     people,
     segments: segments
       .sort((a, b) => a.idx - b.idx)
@@ -277,6 +312,75 @@ adminEpisodesRoute.post('/episodes/:id/segments', async (c) => {
   return c.json({
     ids: stored.sort((a, b) => a.idx - b.idx).map((row) => row.id),
   });
+});
+
+adminEpisodesRoute.post('/episodes/:id/speakers', async (c) => {
+  const id = c.req.param('id');
+  const body = (await c.req.json()) as {
+    repairs?: Array<{ idx: number; diarLabel: string; speakerHint: string }>;
+  };
+  const repairs = body.repairs ?? [];
+  if (!segmentIndexesAreValid(repairs.map((repair) => repair.idx))) {
+    return c.json({ error: 'bad_segment_indexes' }, 400);
+  }
+  const database = db(c.env.DB);
+  const segments = await database
+    .select({
+      id: schema.segments.id,
+      idx: schema.segments.idx,
+      speakerHint: schema.segments.speakerHint,
+    })
+    .from(schema.segments)
+    .where(eq(schema.segments.episodeId, id));
+  const people = await database
+    .select({
+      confidence: schema.episodePeople.confidence,
+      slug: schema.people.slug,
+    })
+    .from(schema.episodePeople)
+    .innerJoin(schema.people, eq(schema.episodePeople.personId, schema.people.id))
+    .where(eq(schema.episodePeople.episodeId, id));
+  const claims = await database
+    .select({ segmentId: schema.claims.segmentId })
+    .from(schema.claims)
+    .where(eq(schema.claims.episodeId, id));
+  const bodies = await getSegmentBodies(c.env.RAW, id);
+  const segmentByIndex = new Map(segments.map((segment) => [segment.idx, segment]));
+  const allowedSpeakers = new Set(
+    people.filter((person) => Number(person.confidence ?? 1) >= 0.5).map((person) => person.slug)
+  );
+  const claimedSegmentIds = new Set(
+    claims.map((claim) => claim.segmentId).filter((value): value is string => Boolean(value))
+  );
+  const accepted: Array<{ id: string; speakerHint: string }> = [];
+  const skipped: Array<{ idx: number; reason: string }> = [];
+  for (const repair of repairs) {
+    const segment = segmentByIndex.get(repair.idx);
+    const reason = speakerRepairRejection(
+      repair,
+      segment,
+      bodies.get(repair.idx)?.diarLabel,
+      allowedSpeakers,
+      claimedSegmentIds
+    );
+    if (reason || !segment) {
+      skipped.push({ idx: repair.idx, reason: reason ?? 'segment_not_found' });
+      continue;
+    }
+    accepted.push({ id: segment.id, speakerHint: repair.speakerHint });
+  }
+  for (let start = 0; start < accepted.length; start += 100) {
+    await c.env.DB.batch(
+      accepted
+        .slice(start, start + 100)
+        .map((repair) =>
+          c.env.DB.prepare(
+            "UPDATE segments SET speaker_hint = ? WHERE id = ? AND episode_id = ? AND (speaker_hint IS NULL OR speaker_hint = 'unknown')"
+          ).bind(repair.speakerHint, repair.id, id)
+        )
+    );
+  }
+  return c.json({ skipped, updated: accepted.length });
 });
 
 adminEpisodesRoute.post('/episodes/:id/people', async (c) => {

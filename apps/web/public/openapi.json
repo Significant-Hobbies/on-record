@@ -3,7 +3,7 @@
   "info": {
     "title": "High Signal Podcasts public evidence API",
     "version": "1.0.0",
-    "description": "Unauthenticated read-only access to published claims, people, sources, and source-linked recommendations. Missing evidence is returned as missing."
+    "description": "Unauthenticated read-only access to trusted published claims, people, sources, and source-linked recommendations. Shows with unresolved speaker attribution are withheld, and missing evidence is returned as missing."
   },
   "servers": [{ "url": "https://api.podcasts.highsignal.app" }],
   "paths": {
@@ -18,6 +18,11 @@
       "get": {
         "operationId": "listPeople",
         "summary": "List active people with published claims",
+        "parameters": [
+          { "name": "q", "in": "query", "description": "Case-insensitive person, title, or organization match", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 500 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
         "responses": { "200": { "description": "People with public evidence", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeopleResponse" } } } } }
       }
     },
@@ -47,7 +52,13 @@
       "get": {
         "operationId": "listSources",
         "summary": "List source episodes with published claims",
-        "responses": { "200": { "description": "Up to 100 source episodes", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SourcesResponse" } } } } }
+        "parameters": [
+          { "name": "q", "in": "query", "description": "Case-insensitive episode or publisher match", "schema": { "type": "string" } },
+          { "name": "show", "in": "query", "description": "Publisher show slug", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 200 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": { "200": { "description": "Trusted source episodes and total count", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SourcesResponse" } } } } }
       }
     },
     "/api/sources/{id}": {
@@ -83,9 +94,24 @@
         "parameters": [
           { "name": "person", "in": "query", "description": "Person slug", "schema": { "type": "string" } },
           { "name": "kind", "in": "query", "description": "Reference kind such as book, tool, or product", "schema": { "type": "string" } },
-          { "name": "role", "in": "query", "description": "Actionable role such as recommends or uses", "schema": { "type": "string" } }
+          { "name": "role", "in": "query", "description": "Evidence role: recommends, uses, likes, owns, built, or avoids", "schema": { "type": "string" } },
+          { "name": "name", "in": "query", "description": "Canonicalized exact item name", "schema": { "type": "string" } }
         ],
         "responses": { "200": { "description": "Published references or an explicit insufficient-evidence result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RecommendationsResponse" } } } } }
+      }
+    },
+    "/api/recommendation-groups": {
+      "get": {
+        "operationId": "listGroupedRecommendations",
+        "summary": "Group named references by distinct attributable people",
+        "parameters": [
+          { "name": "q", "in": "query", "description": "Case-insensitive named-item match", "schema": { "type": "string" } },
+          { "name": "kind", "in": "query", "description": "Reference kind such as book, app, tool, or service", "schema": { "type": "string" } },
+          { "name": "role", "in": "query", "description": "Evidence role: recommends, uses, likes, owns, built, or avoids", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 200 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": { "200": { "description": "Named reference groups ranked by distinct people, or an explicit insufficient-evidence result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RecommendationGroupsResponse" } } } } }
       }
     }
   },
@@ -107,7 +133,9 @@
           "status": { "type": "string", "enum": ["active", "hidden"] },
           "title": { "type": ["string", "null"] },
           "org": { "type": ["string", "null"] },
-          "bio": { "type": ["string", "null"] }
+          "bio": { "type": ["string", "null"] },
+          "claimCount": { "type": "integer", "minimum": 0 },
+          "sourceCount": { "type": "integer", "minimum": 0 }
         },
         "additionalProperties": true
       },
@@ -122,8 +150,18 @@
           "quote": { "type": "string" },
           "claimType": { "type": "string" },
           "reviewStatus": { "type": "string" },
+          "stance": { "type": ["string", "null"] },
           "saidOn": { "type": ["string", "null"], "format": "date-time" },
-          "timestampS": { "type": ["number", "null"] }
+          "timestampS": { "type": ["number", "null"] },
+          "personName": { "type": "string" },
+          "personSlug": { "type": "string" },
+          "personTitle": { "type": ["string", "null"] },
+          "personOrg": { "type": ["string", "null"] },
+          "episodeTitle": { "type": "string" },
+          "showName": { "type": "string" },
+          "showSlug": { "type": "string" },
+          "sourceUrl": { "type": ["string", "null"], "format": "uri" },
+          "deepLinkUrl": { "type": ["string", "null"], "format": "uri" }
         },
         "additionalProperties": true
       },
@@ -136,16 +174,21 @@
           "title": { "type": "string" },
           "status": { "type": "string" },
           "publishedAt": { "type": ["string", "null"], "format": "date-time" },
-          "sourceUrl": { "type": ["string", "null"], "format": "uri" }
+          "sourceUrl": { "type": ["string", "null"], "format": "uri" },
+          "showName": { "type": "string" },
+          "showSlug": { "type": "string" },
+          "claimCount": { "type": "integer", "minimum": 0 },
+          "peopleCount": { "type": "integer", "minimum": 0 }
         },
         "additionalProperties": true
       },
       "Recommendation": {
         "type": "object",
-        "required": ["claimId", "personId", "name", "kind", "role", "assertion", "quote"],
+        "required": ["claimId", "personId", "personName", "name", "kind", "role", "assertion", "quote"],
         "properties": {
           "claimId": { "type": "string" },
           "personId": { "type": "string" },
+          "personName": { "type": "string" },
           "name": { "type": "string" },
           "kind": { "type": "string" },
           "role": { "type": "string" },
@@ -160,20 +203,58 @@
         },
         "additionalProperties": true
       },
+      "RecommendationGroup": {
+        "type": "object",
+        "required": ["kind", "name", "occurrenceCount", "peopleCount", "roleCounts"],
+        "properties": {
+          "kind": { "type": "string" },
+          "name": { "type": "string" },
+          "occurrenceCount": { "type": "integer", "minimum": 1 },
+          "peopleCount": { "type": "integer", "minimum": 1 },
+          "roleCounts": {
+            "type": "object",
+            "required": ["recommends", "uses", "likes", "owns", "built", "avoids"],
+            "properties": {
+              "recommends": { "type": "integer", "minimum": 0 },
+              "uses": { "type": "integer", "minimum": 0 },
+              "likes": { "type": "integer", "minimum": 0 },
+              "owns": { "type": "integer", "minimum": 0 },
+              "built": { "type": "integer", "minimum": 0 },
+              "avoids": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
       "Stats": {
         "type": "object",
-        "required": ["people", "episodes", "publishedClaims", "publishedReferences"],
+        "required": ["people", "episodes", "publishedClaims", "publishedReferences", "catalogEpisodes", "transcriptEpisodes", "trustedShows", "trustPolicy"],
         "properties": {
           "people": { "type": "integer", "minimum": 0 },
           "episodes": { "type": "integer", "minimum": 0 },
           "publishedClaims": { "type": "integer", "minimum": 0 },
-          "publishedReferences": { "type": "integer", "minimum": 0 }
+          "publishedReferences": { "type": "integer", "minimum": 0 },
+          "catalogEpisodes": { "type": "integer", "minimum": 0 },
+          "transcriptEpisodes": { "type": "integer", "minimum": 0 },
+          "trustedShows": { "type": "integer", "minimum": 0 },
+          "trustPolicy": {
+            "type": "object",
+            "required": ["withheldShows", "wording"],
+            "properties": {
+              "withheldShows": { "type": "integer", "minimum": 0 },
+              "wording": { "type": "string" }
+            }
+          }
         }
       },
       "PeopleResponse": {
         "type": "object",
-        "required": ["people"],
-        "properties": { "people": { "type": "array", "items": { "$ref": "#/components/schemas/Person" } } }
+        "required": ["people", "total"],
+        "properties": {
+          "people": { "type": "array", "items": { "$ref": "#/components/schemas/Person" } },
+          "total": { "type": "integer", "minimum": 0 }
+        }
       },
       "ClaimsResponse": {
         "type": "object",
@@ -188,6 +269,15 @@
         "required": ["recommendations"],
         "properties": {
           "recommendations": { "type": "array", "items": { "$ref": "#/components/schemas/Recommendation" } },
+          "evidence": { "type": "string", "enum": ["insufficient"] }
+        }
+      },
+      "RecommendationGroupsResponse": {
+        "type": "object",
+        "required": ["groups", "total"],
+        "properties": {
+          "groups": { "type": "array", "items": { "$ref": "#/components/schemas/RecommendationGroup" } },
+          "total": { "type": "integer", "minimum": 0 },
           "evidence": { "type": "string", "enum": ["insufficient"] }
         }
       },
@@ -211,8 +301,19 @@
       },
       "SourcesResponse": {
         "type": "object",
-        "required": ["sources"],
-        "properties": { "sources": { "type": "array", "items": { "$ref": "#/components/schemas/Source" } } }
+        "required": ["publishers", "sources", "total"],
+        "properties": {
+          "publishers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "slug"],
+              "properties": { "name": { "type": "string" }, "slug": { "type": "string" } }
+            }
+          },
+          "sources": { "type": "array", "items": { "$ref": "#/components/schemas/Source" } },
+          "total": { "type": "integer", "minimum": 0 }
+        }
       },
       "SourceEvidenceResponse": {
         "type": "object",

@@ -1,3 +1,5 @@
+import json
+
 from on_record_ingest.extract.validate import (
     find_verbatim_anchor,
     parse_claims_json,
@@ -158,6 +160,27 @@ def test_keeps_built_avoids_and_reading_speech_acts():
         ("Facebook", "avoids"),
         ("The Beginning of Infinity", "uses"),
     }
+
+
+def test_keeps_preferences_and_ownership_distinct_from_recommendations():
+    quote = (
+        "I love Linear for planning, and I bought The Staff Engineer's Path last week. "
+        "These are personal choices, not blanket recommendations."
+    )
+    refs = validate_references(
+        {
+            "references": [
+                {"kind": "app", "name": "Linear", "role": "likes"},
+                {"kind": "book", "name": "The Staff Engineer's Path", "role": "owns"},
+                {"kind": "app", "name": "Linear", "role": "recommends"},
+            ]
+        },
+        quote,
+    )
+    assert refs == [
+        {"kind": "app", "name": "Linear", "role": "likes"},
+        {"kind": "book", "name": "The Staff Engineer's Path", "role": "owns"},
+    ]
 
 
 def test_normalizes_a_kind_that_conflicts_with_the_quoted_context():
@@ -432,3 +455,102 @@ def test_local_and_gateway_requests_differ_where_they_must():
     gb = build_body(gateway, "sys", "user")
     assert gb["response_format"]["type"] == "json_object"
     assert gb["min_reasoning_level"] == "high"
+
+
+def test_batch_extraction_keeps_claim_attached_to_its_exact_segment(monkeypatch):
+    from dataclasses import replace
+
+    from on_record_ingest.config import settings as load
+    from on_record_ingest.extract import claims as claims_module
+
+    text = (
+        "I think the strongest product teams keep direct contact with customers "
+        "because otherwise prioritization becomes detached from real problems."
+    )
+    response = {
+        "claims": [
+            {
+                "segment_id": "segment-1",
+                "speaker": "guest-one",
+                "speaker_confidence": 0.99,
+                "claim_type": "belief",
+                "assertion": "The speaker believes product teams need direct customer contact.",
+                "stance": "supports",
+                "quote": text,
+                "topics": [],
+                "extraction_confidence": 0.95,
+                "references": [],
+            }
+        ]
+    }
+    request_options = {}
+
+    def fake_chat(*args, **kwargs):
+        request_options.update(kwargs)
+        return json.dumps(response), {"model": "local-test"}, 12
+
+    monkeypatch.setattr(claims_module, "_chat", fake_chat)
+    cfg = replace(load(), ai_base_url="http://127.0.0.1:1234/v1")
+    accepted, rejected, run = claims_module.extract_segments_batch(
+        cfg,
+        [{"id": "segment-1", "speakerHint": "guest-one", "text": text}],
+    )
+    assert rejected == []
+    assert accepted[0]["segmentId"] == "segment-1"
+    assert accepted[0]["speakerRaw"] == "guest-one"
+    assert accepted[0]["assertion"] == text
+    assert run["requestJson"]["segmentIds"] == ["segment-1"]
+    assert request_options["max_tokens"] == 2048
+
+
+def test_batch_extraction_rejects_a_segment_id_outside_the_batch(monkeypatch):
+    from dataclasses import replace
+
+    from on_record_ingest.config import settings as load
+    from on_record_ingest.extract import claims as claims_module
+
+    response = {
+        "claims": [
+            {
+                "segment_id": "invented-segment",
+                "speaker": "guest-one",
+                "speaker_confidence": 0.99,
+                "claim_type": "belief",
+                "assertion": "An invented claim.",
+                "quote": "This quote is deliberately long enough to pass the minimum length rule.",
+                "topics": [],
+                "extraction_confidence": 0.95,
+                "references": [],
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        claims_module,
+        "_chat",
+        lambda *args, **kwargs: (json.dumps(response), {"model": "local-test"}, 12),
+    )
+    cfg = replace(load(), ai_base_url="http://127.0.0.1:1234/v1")
+    accepted, rejected, _ = claims_module.extract_segments_batch(
+        cfg,
+        [
+            {
+                "id": "segment-1",
+                "speakerHint": "guest-one",
+                "text": "This source segment is long enough but does not contain the invented quote.",
+            }
+        ],
+    )
+    assert accepted == []
+    assert rejected[0]["reason"] == "segment_not_in_batch"
+
+
+def test_batch_request_schema_requires_the_exact_segment_id():
+    from dataclasses import replace
+
+    from on_record_ingest.config import settings as load
+    from on_record_ingest.extract.claims import BATCH_CLAIMS_SCHEMA, build_body
+
+    cfg = replace(load(), ai_base_url="http://127.0.0.1:1234/v1")
+    body = build_body(cfg, "system", "user", schema=BATCH_CLAIMS_SCHEMA)
+    item = body["response_format"]["json_schema"]["schema"]["properties"]["claims"]["items"]
+    assert "segment_id" in item["required"]

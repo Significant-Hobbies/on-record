@@ -43,6 +43,13 @@
       "when": 1756051500000,
       "tag": "0005_claim_corrected_at",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787852400000,
+      "tag": "0006_llm_segment_attempts",
+      "breakpoints": true
     }
   ]
 }

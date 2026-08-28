@@ -3,7 +3,7 @@
   "alternateName": "On the Record",
   "version": "1",
   "url": "https://podcasts.highsignal.app",
-  "description": "A public evidence index of attributable claims and recommendations from notable podcast guests.",
+  "description": "A trusted public evidence index of attributable podcast claims, people, recurring books and tools, source episodes, and exact receipts.",
   "llms": "https://podcasts.highsignal.app/llms.txt",
   "llmsFull": "https://podcasts.highsignal.app/llms-full.txt",
   "openapi": "https://podcasts.highsignal.app/openapi.json",
@@ -29,28 +29,28 @@
       "url": "https://podcasts.highsignal.app/",
       "md": "https://podcasts.highsignal.app/index.md",
       "kind": "static",
-      "description": "Product purpose, evidence contract, and current corpus"
+      "description": "Research-first search, evidence contract, and current trusted corpus"
     },
     {
       "id": "people",
       "url": "https://podcasts.highsignal.app/people",
       "md": "https://podcasts.highsignal.app/people.md",
       "kind": "dynamic",
-      "description": "People with published evidence"
+      "description": "People ranked by published claim and source counts"
     },
     {
       "id": "recommendations",
       "url": "https://podcasts.highsignal.app/recommendations",
       "md": "https://podcasts.highsignal.app/recommendations.md",
       "kind": "dynamic",
-      "description": "Source-linked recommendations and uses"
+      "description": "Named recommendations and references grouped by distinct people, with source-linked evidence"
     },
     {
       "id": "sources",
       "url": "https://podcasts.highsignal.app/sources",
       "md": "https://podcasts.highsignal.app/sources.md",
       "kind": "dynamic",
-      "description": "Source episodes with published claims"
+      "description": "Source episodes with claim and attributable-person counts"
     },
     {
       "id": "search",

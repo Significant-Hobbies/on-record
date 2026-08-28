@@ -130,6 +130,11 @@ class ApiClient:
             self._client.post(f"/admin/episodes/{episode_id}/people", json={"people": people})
         )
 
+    def repair_speakers(self, episode_id: str, repairs: list[dict[str, Any]]) -> dict[str, Any]:
+        return self._json(
+            self._client.post(f"/admin/episodes/{episode_id}/speakers", json={"repairs": repairs})
+        )
+
     def set_episode_status(self, episode_id: str, **fields: Any) -> None:
         self._json(self._client.post(f"/admin/episodes/{episode_id}/status", json=fields))
 

@@ -9,7 +9,7 @@ export function runtimeEnvFromLocals(locals: {
 }
 
 export function apiBase(runtimeEnv?: RuntimeEnv): string {
-  return (runtimeEnv?.PUBLIC_API_BASE || import.meta.env.PUBLIC_API_BASE || fallback).replace(
+  return (import.meta.env.PUBLIC_API_BASE || runtimeEnv?.PUBLIC_API_BASE || fallback).replace(
     /\/$/,
     ''
   );
@@ -17,9 +17,12 @@ export function apiBase(runtimeEnv?: RuntimeEnv): string {
 
 export async function apiGet<T>(
   path: string,
-  runtimeEnv?: { PUBLIC_API_BASE?: string }
+  runtimeEnv?: { PUBLIC_API_BASE?: string },
+  options: { timeoutMs?: number } = {}
 ): Promise<T> {
-  const response = await fetch(`${apiBase(runtimeEnv)}${path}`);
+  const response = await fetch(`${apiBase(runtimeEnv)}${path}`, {
+    signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
+  });
   if (!response.ok) {
     throw new Error(`${path} failed: ${response.status}`);
   }
@@ -32,6 +35,9 @@ export type Person = {
   name: string;
   title?: string | null;
   org?: string | null;
+  bio?: string | null;
+  claimCount?: number;
+  sourceCount?: number;
 };
 
 export type Claim = {
@@ -42,10 +48,37 @@ export type Claim = {
   reviewStatus: string;
   timestampS?: number | null;
   saidOn?: string | null;
+  stance?: string | null;
+  personId?: string;
+  personName?: string;
+  personSlug?: string;
+  personTitle?: string | null;
+  personOrg?: string | null;
+  episodeId?: string;
+  episodeTitle?: string;
+  showName?: string;
+  showSlug?: string;
+  sourceUrl?: string | null;
+  deepLinkUrl?: string | null;
+};
+
+export type Source = {
+  id: string;
+  title: string;
+  status: string;
+  publishedAt?: string | null;
+  durationS?: number | null;
+  transcriptKind?: string | null;
+  sourceUrl?: string | null;
+  showName?: string;
+  showSlug?: string;
+  claimCount?: number;
+  peopleCount?: number;
 };
 
 export type Recommendation = {
   personId?: string;
+  personName?: string;
   kind: string;
   role: string;
   name: string;
@@ -60,9 +93,24 @@ export type Recommendation = {
   saidOn?: string | null;
 };
 
+export type RecommendationGroup = {
+  kind: string;
+  name: string;
+  occurrenceCount: number;
+  peopleCount: number;
+  roleCounts: Record<string, number>;
+};
+
 export type Stats = {
+  catalogEpisodes?: number;
   people: number;
   episodes: number;
   publishedClaims: number;
   publishedReferences?: number;
+  transcriptEpisodes?: number;
+  trustedShows?: number;
+  trustPolicy?: {
+    withheldShows: number;
+    wording: string;
+  };
 };

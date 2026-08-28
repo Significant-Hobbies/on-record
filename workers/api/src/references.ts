@@ -12,11 +12,26 @@ const REFERENCE_KINDS = [
   'other',
 ] as const;
 
-const REFERENCE_ROLES = ['recommends', 'uses', 'built', 'avoids', 'mentions'] as const;
-export const ACTIONABLE_REFERENCE_ROLES = ['recommends', 'uses', 'built', 'avoids'] as const;
+const REFERENCE_ROLES = [
+  'recommends',
+  'uses',
+  'likes',
+  'owns',
+  'built',
+  'avoids',
+  'mentions',
+] as const;
+export const ACTIONABLE_REFERENCE_ROLES = [
+  'recommends',
+  'uses',
+  'likes',
+  'owns',
+  'built',
+  'avoids',
+] as const;
 
 const REFERENCE_CLAUSE_BREAK =
-  /(?:[.!?;]\s+|,\s*(?:and|but|while|whereas)\s+|\s+(?:but|whereas)\s+|\s+and\s+(?=(?:i|we|you|they|personally|currently|actually|still|use|used|recommend|avoid|built|created|made|read)\b))/i;
+  /(?:[.!?;]\s+|,\s*(?:and|but|while|whereas)\s+|\s+(?:but|whereas)\s+|\s+and\s+(?=(?:i|we|you|they|personally|currently|actually|still|use|used|recommend|avoid|built|created|made|read|love|like|prefer|own|bought)\b))/i;
 const REFERENCE_GENERIC_NAME =
   /^(?:it|this|that|these|those|them|ai|artificial intelligence|machine learning|software|hardware|books?|apps?|applications?|games?|tools?|services?|papers?|courses?|devices?|accounts?|podcasts?|shows?|products?|platforms?|sources?|(?:a|an|the|this|that|some|any|my|your|our|their)\s+(?:app|application|book|game|tool|service|paper|course|device|hardware|account|podcast|show|product|software|platform))$/i;
 const REFERENCE_DESCRIPTIVE_NAME =
@@ -65,6 +80,8 @@ export function referenceAssertion(reference: ClaimReference): string {
   const labels: Record<ActionableReferenceRole, string> = {
     avoids: 'Avoids',
     built: 'Built',
+    likes: 'Likes',
+    owns: 'Owns',
     recommends: 'Recommends',
     uses: 'Mentions personal use of',
   };
@@ -85,6 +102,94 @@ function isStableReferenceName(name: string): boolean {
   return /[A-Z]/.test(normalized) || /[./+#@]/.test(normalized);
 }
 
+type ReferenceMatch = {
+  kind?: ReferenceKind;
+  matching: string[];
+  namePattern: string;
+  role: ReferenceRole;
+};
+
+function activeReferenceObject(
+  context: ReferenceMatch,
+  verbs: string,
+  clause: string,
+  distance = 100
+): boolean {
+  const pattern = new RegExp(
+    `\\b(?:i|we)\\s+${REFERENCE_ADVERBS}(?:${verbs})\\b(?<gap>.{0,${distance}}?)${context.namePattern}`,
+    'i'
+  );
+  const match = pattern.exec(clause);
+  if (!match) {
+    return false;
+  }
+  const gap = match.groups?.['gap'] ?? '';
+  return !(
+    REFERENCE_OBJECT_PRONOUN.test(gap) ||
+    REFERENCE_REPORTED_SPEECH.test(clause.slice(0, match.index)) ||
+    (context.role === 'recommends' && /\b(?:about|regarding|concerning)\b/i.test(gap)) ||
+    (context.kind === 'person' &&
+      (REFERENCE_WRAPPED_PERSON.test(gap) || /\b(?:with|by|from)\b/i.test(gap)))
+  );
+}
+
+function recommendationSupported(context: ReferenceMatch): boolean {
+  const should = new RegExp(
+    `\\b(?:you|people|everyone|founders|engineers|teams|we)\\s+(?:really\\s+)?should\\s+(?:read|try|use|watch|listen\\s+to|check\\s+out|follow)\\b.{0,80}?${context.namePattern}`,
+    'i'
+  );
+  const relative = new RegExp(
+    `${context.namePattern}.{0,60}?\\b(?:that|which)\\s+(?:i|we)\\s+${REFERENCE_ADVERBS}recommend(?:ed)?\\b`,
+    'i'
+  );
+  const worth = new RegExp(
+    `(?:\\bmust[- ](?:read|use|watch)\\b.{0,50}?${context.namePattern}|${context.namePattern}.{0,40}?\\bworth\\s+(?:reading|trying|using|watching|listening\\s+to)\\b)`,
+    'i'
+  );
+  return context.matching.some(
+    (clause) =>
+      activeReferenceObject(context, 'recommend(?:ed)?', clause) ||
+      should.test(clause) ||
+      (context.kind !== 'person' && relative.test(clause)) ||
+      worth.test(clause)
+  );
+}
+
+function useSupported(context: ReferenceMatch): boolean {
+  const verbs =
+    'use|used|rely\\s+on|run|work\\s+with|read|am\\s+reading|are\\s+reading|have\\s+been\\s+using|have\\s+used|listen\\s+to|listened\\s+to|watch|watched|subscribe\\s+to|subscribed\\s+to|wear|drive|play';
+  const fronted = new RegExp(
+    `${context.namePattern}\\s*,\\s*(?:i|we)\\s+${REFERENCE_ADVERBS}(?:${verbs})\\b`,
+    'i'
+  );
+  return context.matching.some(
+    (clause) => activeReferenceObject(context, verbs, clause) || fronted.test(clause)
+  );
+}
+
+function preferenceSupported(context: ReferenceMatch): boolean {
+  const verbs = 'love|like|prefer|enjoy|adore|swear\\s+by';
+  const fan = new RegExp(
+    `\\b(?:i|we)(?:['’]m|\\s+am|['’]re|\\s+are)\\s+(?:a\\s+)?(?:(?:big|huge)\\s+)?fan\\s+of\\s+.{0,80}?${context.namePattern}`,
+    'i'
+  );
+  const favorite = new RegExp(
+    `(?:\\bmy\\s+favou?rite(?:\\s+\\w+){0,3}\\s+is\\s+${context.namePattern}|${context.namePattern}.{0,40}?\\bis\\s+my\\s+favou?rite\\b)`,
+    'i'
+  );
+  const obsessed = new RegExp(
+    `\\b(?:i|we)(?:['’]m|\\s+am|['’]re|\\s+are)\\s+obsessed\\s+with\\s+.{0,60}?${context.namePattern}`,
+    'i'
+  );
+  return context.matching.some(
+    (clause) =>
+      activeReferenceObject(context, verbs, clause) ||
+      fan.test(clause) ||
+      favorite.test(clause) ||
+      obsessed.test(clause)
+  );
+}
+
 function referenceRoleSupported(
   name: string,
   role: ReferenceRole,
@@ -102,61 +207,28 @@ function referenceRoleSupported(
   const matching = normalizeWs(claimQuote)
     .split(REFERENCE_CLAUSE_BREAK)
     .filter((clause) => clause.toLowerCase().includes(needle.toLowerCase()));
-  const activeObject = (verbs: string, clause: string, distance = 100): boolean => {
-    const pattern = new RegExp(
-      `\\b(?:i|we)\\s+${REFERENCE_ADVERBS}(?:${verbs})\\b(?<gap>.{0,${distance}}?)${namePattern}`,
-      'i'
-    );
-    const match = pattern.exec(clause);
-    if (!match) {
-      return false;
-    }
-    const gap = match.groups?.['gap'] ?? '';
-    return !(
-      REFERENCE_OBJECT_PRONOUN.test(gap) ||
-      REFERENCE_REPORTED_SPEECH.test(clause.slice(0, match.index)) ||
-      (role === 'recommends' && /\b(?:about|regarding|concerning)\b/i.test(gap)) ||
-      (kind === 'person' &&
-        (REFERENCE_WRAPPED_PERSON.test(gap) || /\b(?:with|by|from)\b/i.test(gap)))
-    );
-  };
+  const context = { kind, matching, namePattern, role };
   if (role === 'recommends') {
-    const should = new RegExp(
-      `\\b(?:you|people|everyone|founders|engineers|teams|we)\\s+(?:really\\s+)?should\\s+(?:read|try|use|watch|listen\\s+to|check\\s+out|follow)\\b.{0,80}?${namePattern}`,
-      'i'
-    );
-    const relative = new RegExp(
-      `${namePattern}.{0,60}?\\b(?:that|which)\\s+(?:i|we)\\s+${REFERENCE_ADVERBS}recommend(?:ed)?\\b`,
-      'i'
-    );
-    const worth = new RegExp(
-      `(?:\\bmust[- ](?:read|use|watch)\\b.{0,50}?${namePattern}|${namePattern}.{0,40}?\\bworth\\s+(?:reading|trying|using|watching|listening\\s+to)\\b)`,
-      'i'
-    );
-    return matching.some(
-      (clause) =>
-        activeObject('recommend(?:ed)?', clause) ||
-        should.test(clause) ||
-        (kind !== 'person' && relative.test(clause)) ||
-        worth.test(clause)
-    );
+    return recommendationSupported(context);
   }
   if (role === 'uses') {
-    const verbs =
-      'use|used|rely\\s+on|run|work\\s+with|read|am\\s+reading|are\\s+reading|have\\s+been\\s+using|have\\s+used|listen\\s+to|wear';
-    const fronted = new RegExp(
-      `${namePattern}\\s*,\\s*(?:i|we)\\s+${REFERENCE_ADVERBS}(?:${verbs})\\b`,
-      'i'
-    );
-    return matching.some((clause) => activeObject(verbs, clause) || fronted.test(clause));
+    return useSupported(context);
+  }
+  if (role === 'likes') {
+    return preferenceSupported(context);
+  }
+  if (role === 'owns') {
+    const verbs = 'own|bought|purchased|have\\s+purchased|have\\s+bought';
+    return matching.some((clause) => activeReferenceObject(context, verbs, clause));
   }
   if (role === 'built') {
-    const verbs = 'built|created|made|founded|developed|launched|wrote|authored|designed';
-    return matching.some((clause) => activeObject(verbs, clause));
+    const verbs =
+      'built|created|made|founded|developed|launched|wrote|authored|designed|shipped|started';
+    return matching.some((clause) => activeReferenceObject(context, verbs, clause));
   }
   const verbs =
     "avoid|avoided|never\\s+use|stopped\\s+using|quit|uninstalled|stay\\s+away\\s+from|do\\s+not\\s+use|don['’]?t\\s+use|would\\s+not\\s+use|wouldn['’]?t\\s+use|cannot\\s+use|can['’]?t\\s+use";
-  return matching.some((clause) => activeObject(verbs, clause));
+  return matching.some((clause) => activeReferenceObject(context, verbs, clause));
 }
 
 function normalizedReferenceKind(

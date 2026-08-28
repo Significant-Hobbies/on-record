@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { segmentIndexesAreValid, staleSegmentIds } from './admin-episodes';
+import { segmentIndexesAreValid, speakerRepairRejection, staleSegmentIds } from './admin-episodes';
 
 describe('segment replacement', () => {
   it('rejects duplicate, negative, and fractional segment indexes', () => {
@@ -16,5 +16,36 @@ describe('segment replacement', () => {
       { id: 'segment-2', idx: 2 },
     ];
     expect(staleSegmentIds(existing, new Set([0, 1]))).toEqual(['segment-2']);
+  });
+});
+
+describe('speaker repairs', () => {
+  const repair = { diarLabel: 'SPEAKER_01', speakerHint: 'guest-one' };
+  const segment = { id: 'segment-1', speakerHint: 'unknown' };
+  const roster = new Set(['guest-one']);
+
+  it('accepts only an unknown, unclaimed segment with matching stored evidence', () => {
+    expect(speakerRepairRejection(repair, segment, 'SPEAKER_01', roster, new Set())).toBeNull();
+  });
+
+  it('rejects drift in the label, roster, existing identity, or claim state', () => {
+    expect(speakerRepairRejection(repair, segment, 'SPEAKER_02', roster, new Set())).toBe(
+      'diar_label_mismatch'
+    );
+    expect(speakerRepairRejection(repair, segment, 'SPEAKER_01', new Set(), new Set())).toBe(
+      'speaker_not_in_episode'
+    );
+    expect(
+      speakerRepairRejection(
+        repair,
+        { id: 'segment-1', speakerHint: 'somebody-else' },
+        'SPEAKER_01',
+        roster,
+        new Set()
+      )
+    ).toBe('speaker_already_known');
+    expect(
+      speakerRepairRejection(repair, segment, 'SPEAKER_01', roster, new Set(['segment-1']))
+    ).toBe('segment_has_claims');
   });
 });

@@ -23,7 +23,7 @@ class Settings:
     podcast_index_key: str
     podcast_index_secret: str
     pipeline_version: str = "claims-v1"
-    prompt_version: str = "extract-v3"
+    prompt_version: str = "extract-v4"
 
 
 def settings() -> Settings:

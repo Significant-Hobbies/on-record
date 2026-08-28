@@ -26,10 +26,25 @@ discover → transcripts → segment → extract → publish-rules (worker)
    Sources such as Conversations with Tyler that preserve turn order but have
    no playback timing use `publisher_html_coarse`; their claim timestamps and
    deep links remain null rather than using ordinal turn numbers as seconds.
-4. **extract** — cheap triage first (recs / claim speech / skip filler).
-   Only then the configured model (`extract-v3`; recommendation focus has a
-   stricter named-speech-act prompt). Segments that already have claims are
-   skipped unless `--force`. Quote must be a verbatim substring. Reject,
-   never repair.
+4. **extract** — cheap triage first (recommendations, positions, predictions,
+   evaluations, explanations, commitments, and uncertainty; skip questions,
+   filler, ads, and context-dependent fragments). Broad extraction uses
+   `extract-v5` to classify compact exact excerpts in batches; the model never
+   regenerates the assertion or quote. The stored assertion and evidence are
+   the same source excerpt. Named recommendation focus keeps the stricter
+   `extract-v4` speech-act and stable-object contract. Per-segment attempts make
+   runs resumable, and `--target-claims 10` counts existing published claims
+   before doing more work. Quote and speaker are revalidated by the Worker.
 5. **publish** — worker re-validates the quote against stored segment text
-   and applies deterministic banding.
+   and applies deterministic banding. Manual review status changes also add or
+   remove the claim from FTS so killed claims cannot continue surfacing.
+
+Unknown diarized voices can be repaired separately with `--stage
+recover-speakers`. The stage first admits only explicit publisher phrases such
+as “our guest is” or “we speak with” into the episode roster. It can then use a
+first-person introduction, a known host welcome followed by the guest accepting
+it, or a single strongly dominant unknown label for one explicitly named guest.
+Publisher pre-roll before a known program bumper is excluded. Multi-party RSS
+transcripts above 300 segments, ambiguous labels, and multiple remaining people
+or voices fail closed. The Worker also refuses label drift, non-roster people,
+already identified segments, and segments with claims.

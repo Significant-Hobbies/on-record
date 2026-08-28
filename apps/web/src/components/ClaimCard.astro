@@ -1,13 +1,48 @@
 ---
 import type { Claim } from '../lib/api';
-import { whenLabel } from '../lib/time';
+import { formatClock, whenLabel } from '../lib/time';
 
-type Props = { claim: Claim };
-const { claim } = Astro.props;
+type Props = { claim: Claim; index?: number; compact?: boolean };
+const { claim, index, compact = false } = Astro.props;
 const when = whenLabel(claim);
+const sourceHref = claim.deepLinkUrl ?? claim.sourceUrl;
+const claimType = claim.claimType.replaceAll('_', ' ');
 ---
-<article class="card">
-  <a href={`/claims/${claim.id}`}>{claim.assertion}</a>
-  <p class="quote">{claim.quote}</p>
-  {when && <div class="meta">{when}</div>}
+<article class:list={['claim-card', { compact }]}>
+  <header class="claim-card-header">
+    <p class="folio">
+      {typeof index === 'number' && <span>{String(index + 1).padStart(2, '0')} / </span>}
+      {claimType}
+    </p>
+    {when && <time datetime={claim.saidOn ?? undefined}>{when}</time>}
+  </header>
+  <h3><a href={`/claims/${claim.id}`}>{claim.assertion}</a></h3>
+  <blockquote>“{claim.quote}”</blockquote>
+  <dl class="claim-receipt">
+    {claim.personName && (
+      <div>
+        <dt>Speaker</dt>
+        <dd>
+          {claim.personSlug ? <a href={`/people/${claim.personSlug}`}>{claim.personName}</a> : claim.personName}
+        </dd>
+      </div>
+    )}
+    {claim.episodeTitle && (
+      <div>
+        <dt>Episode</dt>
+        <dd>
+          {claim.episodeId ? <a href={`/sources/${claim.episodeId}`}>{claim.episodeTitle}</a> : claim.episodeTitle}
+        </dd>
+      </div>
+    )}
+    {claim.showName && <div><dt>Publisher</dt><dd>{claim.showName}</dd></div>}
+  </dl>
+  <footer class="claim-actions">
+    <a href={`/claims/${claim.id}`}>Full receipt</a>
+    {sourceHref && (
+      <a href={sourceHref} rel="noreferrer" target="_blank">
+        {claim.timestampS != null ? `Open at ${formatClock(claim.timestampS)}` : 'Open source'} ↗
+      </a>
+    )}
+  </footer>
 </article>

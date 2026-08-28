@@ -10,6 +10,7 @@
       "!**/.wrangler",
       "!**/dist",
       "!**/coverage",
+      "!**/.fleet/evidence",
       "!**/python",
       "!**/packages/db/migrations",
       "!**/pnpm-lock.yaml",
