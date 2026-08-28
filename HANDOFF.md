@@ -1,28 +1,31 @@
 # on-record — correctness handoff
 
-Updated 2026-08-28. This document describes the isolated local correctness
-snapshot, not production. The previous 2026-08-26 figures were contaminated by
-bad RSS/YouTube associations, a wrong Peel feed, seven adjacent Lex transcripts,
-and one synthetic canary. Do not reuse those figures.
+Updated 2026-08-28. This document describes the final correctness snapshot and
+its verified production release. The previous 2026-08-26 figures were
+contaminated by bad RSS/YouTube associations, a wrong Peel feed, seven adjacent
+Lex transcripts, and one synthetic canary. Do not reuse those figures.
 
 ## Executive truth
 
-- The finished local research product uses the v10 working store and exposes a
-  trusted 23-show boundary: 8,395 catalog episodes, 1,208 transcript episodes,
-  11,624 published claims from 935 people across 1,190 source episodes, and 300
-  named-reference rows. Of all trusted transcript episodes, 1,092 (90.4%) have
-  at least 10 published claims; only 18 have no published claim.
+- Production now exposes the trusted 23-show boundary: 8,414 catalog episodes,
+  1,209 transcript episodes, 11,624 published claims from 935 people across
+  1,190 source episodes, and 300 stored named-reference rows. The public
+  quote-safety pass exposes 294 reference evidences across 281 groups. Of the
+  live transcript episodes, 1,092 (90.3%) have at least 10 published claims;
+  19 have no published claim. The one-episode difference from the qualified
+  1,208-episode release bundle is newer production data preserved by the
+  no-delete import.
 - TBPN and Odd Lots are retained intact in the raw corpus but withheld from
   public claims, people, sources, recommendations, search, and statistics. Their
   diarized labels are not mapped to named people confidently enough for public
   attribution.
-- The local website is now a complete evidence-ledger research flow across
-  home, search, people, grouped books/apps/tools, episodes, and exact claim
-  receipts. Production is unchanged.
-- The grouped named-item slice contains 300 evidence rows across 286 canonical
-  item groups: 57 apps, 63 tools, 54 books, 51 other items, 22 services, 17
-  hardware items, 16 people, 3 courses, and 3 papers. Counts use distinct
-  attributable people, not raw mentions. Grouping depth is still modest:
+- The evidence-ledger research flow is live across home, search, people,
+  grouped books/apps/tools, episodes, and exact claim receipts. Both Workers
+  run source commit `10a863b6` at 100% traffic.
+- The public grouped named-item slice contains 294 evidence rows across 281
+  canonical item groups: 57 apps, 63 tools, 53 books, 51 other items, 21
+  services, 14 hardware items, 16 people, 3 courses, and 3 papers. Counts use
+  distinct attributable people, not raw mentions. Grouping depth is still modest:
   ChatGPT has four distinct people, Claude-as-app has three, and no book yet has
   more than one under the current evidence gate.
 
@@ -123,8 +126,14 @@ recommendation catalog; books/apps/tools remain a separately grouped slice.
 - The local model intermittently returned a temporary "model unloaded" 400.
   Local extraction now retries the same batch up to four times, so a reload no
   longer silently skips otherwise eligible evidence.
-- No production database, deployment, migration, or reviewed release artifact
-  has been changed by this expansion.
+- Production release completed on 2026-08-28 after D1 time-travel backup
+  bookmark
+  `00000084-00000ad4-000050d5-00c38b737972c80d0e4c89bca0196f54`.
+  Migration `0006_llm_segment_attempts.sql`, all 1,208 R2 transcript objects,
+  and the no-delete SQL bundle were applied successfully. The post-import D1
+  bookmark is
+  `00000091-00001a7d-000050d5-ce610641603e727426c1c9e2fdbcb93f`;
+  CI and dispatch deploy run `33183059368` passed for API and web.
 
 Final trusted coverage by show:
 

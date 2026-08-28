@@ -56,13 +56,15 @@ review-report.
   speaker segments. At the post-repair checkpoint, 1,534 claims were published
   locally and 100 transcript episodes had reached 10. Production remains
   unchanged.
-- 2026-08-28 — Finished local research product: trusted-show boundary with TBPN
-  and Odd Lots retained but publicly withheld; evidence-ledger home, search,
-  people, grouped stack, episode, and claim-receipt surfaces; 11,624 trusted
-  claims from 935 people across 1,190 source episodes, with 300 named-reference
-  rows. The trusted catalog contains 23 shows, 8,395 episodes, and 1,208
-  transcript episodes. Of those transcript episodes, 1,092 (90.4%) contain at
-  least 10 claims and only 18 contain none. Production remains unchanged.
+- 2026-08-28 — Released the finished research product: TBPN and Odd Lots remain
+  retained but publicly withheld; evidence-ledger home, search, people, grouped
+  stack, episode, and claim-receipt surfaces are live. Production serves 11,624
+  trusted claims from 935 people across 1,190 source episodes. D1 retains 300
+  named-reference rows; the public quote-safety pass exposes 294 evidences in
+  281 canonical groups. The live trusted catalog contains 23 shows, 8,414
+  episodes, and 1,209 transcript episodes. Of those, 1,092 (90.3%) contain at
+  least 10 claims and 19 contain none. API and web run commit `10a863b6` at
+  100% Cloudflare traffic.
 
 ## Products
 
