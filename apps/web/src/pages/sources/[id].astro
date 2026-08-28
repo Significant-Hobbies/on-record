@@ -27,7 +27,7 @@ const claimTypes = claims.reduce<Record<string, number>>((counts, claim) => {
 ---
 <Layout
   title={`${source?.title ?? 'Episode'} — High Signal Podcasts`}
-  description={source ? `Attributable claims and exact quotes from ${source.title}, with links to the original source.` : 'Episode evidence record.'}
+  description={source ? `Attributable claims and transcript excerpts from ${source.title}, with links to the original source.` : 'Episode evidence record.'}
 >
   {missing || !source ? (
     <div class="empty-state page-empty">
@@ -70,7 +70,7 @@ const claimTypes = claims.reduce<Record<string, number>>((counts, claim) => {
         </div>
         <div>
           <p class="eyebrow">Evidence policy</p>
-          <p>Every row below preserves an exact excerpt and an identified speaker. Unresolved voices remain absent.</p>
+          <p>Every row below preserves an exact excerpt. Identified speakers are linked; unresolved voices are labeled and excluded from people counts.</p>
         </div>
       </section>
 

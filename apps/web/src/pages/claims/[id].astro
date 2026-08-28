@@ -20,20 +20,25 @@ try {
 } catch {
   missing = true;
 }
-const link = claim?.deepLinkUrl ?? evidence[0]?.deepLinkUrl ?? claim?.sourceUrl;
+const link =
+  claim?.transcriptKind === 'youtube_captions'
+    ? claim.deepLinkUrl ?? claim.sourceUrl
+    : claim?.sourceUrl;
 const assertionAddsContext = Boolean(
   claim && claim.assertion.trim().toLocaleLowerCase('en-US') !== claim.quote.trim().toLocaleLowerCase('en-US')
 );
+const speakerUnverified = claim?.attributionStatus === 'speaker_unverified';
+const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personName ?? 'Verified speaker';
 ---
 <Layout
-  title={claim ? `${claim.personName ?? 'Published speaker'}: ${claim.assertion}` : 'Claim receipt'}
-  description={claim ? `Exact podcast quote from ${claim.personName ?? 'a verified speaker'}, linked to ${claim.episodeTitle ?? 'the source episode'}.` : 'Published claim receipt.'}
+  title={claim ? `${speakerLabel}: ${claim.assertion}` : 'Claim receipt'}
+  description={claim ? `Podcast transcript excerpt from ${speakerUnverified ? 'a speaker whose identity is not verified' : claim.personName ?? 'a verified speaker'}, linked to ${claim.episodeTitle ?? 'the source episode'}.` : 'Published claim receipt.'}
 >
   {missing || !claim ? (
     <div class="empty-state page-empty">
       <p class="eyebrow">No trusted public record</p>
       <h1>This claim is unpublished or unavailable.</h1>
-      <p>Claims from unresolved speakers are withheld rather than shown with a weak attribution.</p>
+      <p>The quote may be unavailable, unsupported, or outside the public corpus.</p>
       <a class="button button-secondary" href="/search">Search published evidence</a>
     </div>
   ) : (
@@ -42,9 +47,9 @@ const assertionAddsContext = Boolean(
         <a class="back-link" href={claim.personSlug ? `/people/${claim.personSlug}` : '/search'}>← Back to evidence</a>
         <div class="claim-page-kicker">
           <p class="eyebrow">Evidence receipt / {claim.claimType}</p>
-          <span>Published · exact quote</span>
+          <span>Published · transcript-backed</span>
         </div>
-        <h1>{assertionAddsContext ? claim.assertion : `${claim.personName ?? 'Published speaker'}: ${claim.claimType}`}</h1>
+        <h1>{assertionAddsContext ? claim.assertion : `${speakerLabel}: ${claim.claimType}`}</h1>
         <p class="claim-source-summary">
           <span>{whenLabel(claim) || 'Source date unavailable'}</span>
           <span>{claim.showName ?? 'Podcast publisher'}</span>
@@ -52,7 +57,7 @@ const assertionAddsContext = Boolean(
         </p>
         <blockquote>“{claim.quote}”</blockquote>
         <p class="claim-speaker">
-          — {claim.personSlug ? <a href={`/people/${claim.personSlug}`}>{claim.personName}</a> : claim.personName ?? 'Verified speaker'}
+          — {claim.personSlug ? <a href={`/people/${claim.personSlug}`}>{claim.personName}</a> : speakerLabel}
         </p>
       </header>
 
@@ -62,7 +67,8 @@ const assertionAddsContext = Boolean(
           <h2 id="receipt-heading">Everything needed to verify it.</h2>
         </div>
         <dl class="receipt-grid">
-          <div><dt>Speaker</dt><dd>{claim.personName ?? 'Verified speaker'}</dd></div>
+          <div><dt>Speaker</dt><dd>{speakerLabel}</dd></div>
+          <div><dt>Attribution</dt><dd>{speakerUnverified ? 'Not verified from this transcript' : 'Verified speaker'}</dd></div>
           <div><dt>Claim type</dt><dd>{claim.claimType}</dd></div>
           <div><dt>Recorded</dt><dd>{whenLabel(claim) || 'Source date unavailable'}</dd></div>
           <div><dt>Publisher</dt><dd>{claim.showName ?? 'Podcast publisher'}</dd></div>
@@ -74,7 +80,7 @@ const assertionAddsContext = Boolean(
         <div class="receipt-actions">
           {link && (
             <a class="button button-primary" href={link} rel="noreferrer" target="_blank">
-              {claim.timestampS != null ? `Open source at ${formatClock(claim.timestampS)}` : 'Open original source'} ↗
+              {claim.transcriptKind === 'youtube_captions' && claim.deepLinkUrl && claim.timestampS != null ? `Open source at ${formatClock(claim.timestampS)}` : 'Open original source'} ↗
             </a>
           )}
           {claim.episodeId && <a class="button button-secondary" href={`/sources/${claim.episodeId}`}>See episode intelligence</a>}

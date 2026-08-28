@@ -63,6 +63,84 @@ describe('sanitizeReferences', () => {
     ]);
   });
 
+  it('keeps contracted reading and past-tense book preferences', () => {
+    expect(
+      sanitizeReferences(
+        [
+          { kind: 'book', name: 'The Beginning of Infinity', role: 'uses' },
+          { kind: 'book', name: 'How to Raise an Adult', role: 'likes' },
+        ],
+        "I've read The Beginning of Infinity three times. One book I really liked was How to Raise an Adult."
+      )
+    ).toEqual([
+      { kind: 'book', name: 'The Beginning of Infinity', role: 'uses' },
+      { kind: 'book', name: 'How to Raise an Adult', role: 'likes' },
+    ]);
+  });
+
+  it('keeps title-first reading, positive book evaluation, and deictic recommendation', () => {
+    expect(
+      sanitizeReferences(
+        [{ kind: 'book', name: 'The Gruffalo', role: 'uses' }],
+        "There's one called The Gruffalo, I read to my kids every night before bed."
+      )
+    ).toEqual([{ kind: 'book', name: 'The Gruffalo', role: 'uses' }]);
+    expect(
+      sanitizeReferences(
+        [{ kind: 'book', name: 'Functional Programming in Scala', role: 'likes' }],
+        'Functional Programming in Scala is the single best technical book I have ever read.'
+      )
+    ).toEqual([{ kind: 'book', name: 'Functional Programming in Scala', role: 'likes' }]);
+    expect(
+      sanitizeReferences(
+        [{ kind: 'book', name: 'The Upside of Stress', role: 'recommends' }],
+        'The Upside of Stress changed how I approach hard work, and I highly recommend it.'
+      )
+    ).toEqual([{ kind: 'book', name: 'The Upside of Stress', role: 'recommends' }]);
+    expect(
+      sanitizeReferences(
+        [{ kind: 'book', name: 'Design of Everyday Things', role: 'likes' }],
+        "I do love the Design of Everyday Things. I think that's such a classic."
+      )
+    ).toEqual([{ kind: 'book', name: 'Design of Everyday Things', role: 'likes' }]);
+  });
+
+  it('accepts a bare enumerated title only for an audited book-answer pass', () => {
+    const raw = [{ kind: 'book', name: 'The Power Broker', role: 'recommends' }] as const;
+    const quote = 'The first is The Power Broker by Robert Caro, which changed how I think.';
+    expect(sanitizeReferences(raw, quote)).toEqual([]);
+    expect(sanitizeReferences(raw, quote, quote, true)).toEqual([
+      { kind: 'book', name: 'The Power Broker', role: 'recommends' },
+    ]);
+    expect(
+      sanitizeReferences(
+        [{ kind: 'book', name: 'Code', role: 'recommends' }],
+        'Code by Charles Petzold explains the secret language of hardware and software.',
+        undefined,
+        true
+      )
+    ).toEqual([{ kind: 'book', name: 'Code', role: 'recommends' }]);
+  });
+
+  it('drops audited non-title labels even in a book-answer pass', () => {
+    const names = [
+      'Andrew Roberts latest book on Winston Churchill',
+      'Elon Musk book',
+      "Kim Scott's writing",
+      'The How to Book',
+    ];
+    for (const name of names) {
+      expect(
+        sanitizeReferences(
+          [{ kind: 'book', name, role: 'recommends' }],
+          `I recommend ${name}.`,
+          undefined,
+          true
+        )
+      ).toEqual([]);
+    }
+  });
+
   it('keeps preferences and ownership distinct from recommendations', () => {
     const quote =
       "I love Linear for planning, and I bought The Staff Engineer's Path last week. These are personal choices, not blanket recommendations.";
@@ -110,6 +188,15 @@ describe('sanitizeReferences', () => {
         role: 'recommends',
       },
     ]);
+  });
+
+  it('converges audited cross-kind duplicates to one public kind', () => {
+    const quote = 'I use Coda every day.';
+    for (const kind of ['app', 'tool'] as const) {
+      expect(sanitizeReferences([{ kind, name: 'Coda', role: 'uses' }], quote)).toEqual([
+        { kind: 'app', name: 'Coda', role: 'uses' },
+      ]);
+    }
   });
 
   it('rejects generic objects, passive hearsay, and people who are not the object', () => {
@@ -168,6 +255,89 @@ describe('sanitizeReferences', () => {
         'As you can tell, I read a lot of books.'
       )
     ).toEqual([]);
+  });
+
+  it('rejects descriptive book labels and book subjects', () => {
+    const cases = [
+      ["I read Bill Walsh's book.", "Bill Walsh's book", 'uses'],
+      ['I love John Klassen books.', 'John Klassen books', 'likes'],
+      ["I use Gwern's book reviews.", "Gwern's book reviews", 'uses'],
+      [
+        'The front inside cover of this book is something I read every year.',
+        'The front inside cover of this book',
+        'uses',
+      ],
+      ['I read a book about Roy Cohn.', 'Roy Cohn', 'uses'],
+    ] as const;
+    for (const [quote, name, role] of cases) {
+      expect(sanitizeReferences([{ kind: 'book', name, role }], quote)).toEqual([]);
+    }
+  });
+
+  it('reclassifies audited non-book names', () => {
+    const cases = [
+      ['I love Hey Jude.', 'Hey Jude', 'likes', 'other'],
+      ['I read Wikipedia.', 'Wikipedia', 'uses', 'other'],
+      ['I love Michael Lewis.', 'Michael Lewis', 'likes', 'person'],
+      ['I read ULM Fit.', 'ULM Fit', 'uses', 'paper'],
+    ] as const;
+    for (const [quote, name, role, kind] of cases) {
+      expect(sanitizeReferences([{ kind: 'book', name, role }], quote)).toEqual([
+        { kind, name, role },
+      ]);
+    }
+  });
+
+  it('rejects lowercase generic objects and descriptive series names', () => {
+    const cases = [
+      [
+        'I bought the luggage first, long before they sent more luggage.',
+        { kind: 'hardware', name: 'luggage', role: 'owns' },
+      ],
+      [
+        'I highly recommend people watch your series with 3Blue1Brown on distance.',
+        {
+          kind: 'other',
+          name: 'your series with 3Blue1Brown on distance',
+          role: 'recommends',
+        },
+      ],
+      ["I don't use AI note taking.", { kind: 'tool', name: 'AI note taking', role: 'avoids' }],
+      [
+        'I love how everything connects to how tech works and how AI came to be.',
+        {
+          kind: 'other',
+          name: 'how everything connects to how tech works and how AI came to be',
+          role: 'likes',
+        },
+      ],
+      [
+        'One of my favorite books is one that was sent to me by Nijolė Skripskaitė.',
+        {
+          kind: 'book',
+          name: 'one that was sent to me by Nijolė Skripskaitė',
+          role: 'likes',
+        },
+      ],
+    ] as const;
+    for (const [quote, reference] of cases) {
+      expect(sanitizeReferences([reference], quote)).toEqual([]);
+    }
+  });
+
+  it('normalizes an explicitly named channel or podcast to other', () => {
+    expect(
+      sanitizeReferences(
+        [{ kind: 'app', name: 'Animagraffs', role: 'recommends' }],
+        'I highly recommend the channel, Animagraffs.'
+      )
+    ).toEqual([{ kind: 'other', name: 'Animagraffs', role: 'recommends' }]);
+    expect(
+      sanitizeReferences(
+        [{ kind: 'app', name: 'Invest Like the Best', role: 'uses' }],
+        'I listened to an episode of Invest Like the Best last year.'
+      )
+    ).toEqual([{ kind: 'other', name: 'Invest Like the Best', role: 'uses' }]);
   });
 
   it('rejects a topic mistaken for the recommended book title', () => {
@@ -231,6 +401,30 @@ describe('sanitizeReferences', () => {
         'A woman said this to me, “It never occurred to me that I could be a doctor until I read Ayn Rand.”'
       )
     ).toEqual([]);
+    expect(
+      sanitizeReferences(
+        [
+          {
+            kind: 'book',
+            name: 'In those moments of pain, you can either be broken or broken open',
+            role: 'uses',
+          },
+        ],
+        'Then I read another book, by Frederick Buechner, who said, “In those moments of pain, you can either be broken or broken open.”'
+      )
+    ).toEqual([]);
+  });
+
+  it('deduplicates the same named item and role across model-supplied kinds', () => {
+    expect(
+      sanitizeReferences(
+        [
+          { kind: 'app', name: 'v0', role: 'uses' },
+          { kind: 'tool', name: 'v0', role: 'uses' },
+        ],
+        'We use v0 every day.'
+      )
+    ).toEqual([{ kind: 'app', name: 'v0', role: 'uses' }]);
   });
 
   it('uses source context outside the quote to resolve a kind conflict', () => {

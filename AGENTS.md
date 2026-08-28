@@ -29,8 +29,10 @@ and record durable follow-up in this repository's GitHub Issues.
 
 - Never publish a claim without a verbatim quote that exists in the stored
   segment text.
-- Unknown or low-confidence speakers stay draft; they never appear on public
-  routes.
+- Unknown or low-confidence speakers must never be guessed or mapped to a
+  person. A high-confidence, quote-validated claim may appear as explicitly
+  `speaker_unverified`; public person and distinct-recommender counts exclude
+  it.
 - Python never writes D1 or R2 directly. It posts through the API worker with
   `ADMIN_TOKEN`.
 - Prefer missing data over confident misinformation.

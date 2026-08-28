@@ -1,3 +1,5 @@
+import type { AttributionStatus } from './attribution';
+
 type ConfidenceBand = 'low' | 'medium' | 'high';
 type ReviewStatus = 'draft' | 'held' | 'published';
 
@@ -6,6 +8,7 @@ export type PublishInput = {
   extractionConfidence: number;
   speakerConfidence: number;
   quoteValidated: boolean;
+  attributionStatus?: AttributionStatus;
 };
 
 export type PublishDecision = {
@@ -34,6 +37,20 @@ export function judgeClaim(input: PublishInput): PublishDecision {
     };
   }
   const extraction = input.extractionConfidence;
+  if (input.attributionStatus === 'speaker_unverified') {
+    if (extraction >= 0.85) {
+      return {
+        confidenceBand: 'high',
+        publishReason: 'high_confidence_unverified_speaker',
+        reviewStatus: 'published',
+      };
+    }
+    return {
+      confidenceBand: extraction >= 0.65 ? 'medium' : 'low',
+      publishReason: 'unverified_speaker_low_confidence',
+      reviewStatus: extraction >= 0.65 ? 'held' : 'draft',
+    };
+  }
   const speaker = input.speakerConfidence;
   if (extraction >= 0.85 && speaker >= 0.85) {
     return {

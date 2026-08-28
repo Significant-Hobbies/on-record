@@ -5,14 +5,22 @@ import Layout from '../layouts/Base.astro';
   <h1>Methodology</h1>
   <p>
     High Signal Podcasts indexes public statements as claims. A published row always has a
-    speaker, a verbatim excerpt that exists in the stored transcript segment, a date, and a
-    source timestamp when YouTube captions exist.
+    verbatim excerpt that exists in the stored transcript segment, a date, a source, and an
+    explicit attribution status. When the transcript does not establish the speaker, the row says
+    so and is excluded from person counts. A timed YouTube link appears only when that excerpt came
+    from captions on the same video; publisher and RSS transcript clocks are not assumed to match a
+    separate YouTube edit.
   </p>
   <p>
-    Daily GitHub Actions discover new episodes, take publisher or YouTube captions, skip
-    filler with a cheap filter, and send only rec/stack (or claim) segments to the free-ai
-    gateway. The website is server-rendered from the API, so new published claims appear
-    without a rebuild.
+  Daily GitHub Actions discover new episodes, take publisher or YouTube captions, and skip
+    filler with a cheap filter. Strong, complete claim excerpts can be classified by explicit
+    rules; named recommendations and ambiguous candidates use the extraction model. The Worker
+    then validates every quote and named reference against the stored segment. The website is
+    server-rendered from the API, so new published claims appear without a rebuild.
   </p>
   <p>Missing evidence is shown as missing. We do not invent an answer.</p>
+  <p>
+    Transcript excerpts can preserve errors made by a publisher or caption provider. The original
+    episode remains the final authority, and every receipt keeps that source attached for review.
+  </p>
 </Layout>

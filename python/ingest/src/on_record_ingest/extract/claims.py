@@ -6,11 +6,12 @@ from typing import Any
 
 import httpx
 
+from ..attribution import UNVERIFIED_SPEAKER_SLUG
 from ..config import Settings
 from ..seed.people import PEOPLE
 from ..seed.topics import TOPICS
+from .triage import book_excerpt, claim_excerpt
 from .validate import parse_claims_json, validate_claim
-from .triage import claim_excerpt
 
 SYSTEM_PROMPT = """Extract claims from one transcript segment. JSON only: {"claims":[...]}.
 Each claim: speaker (roster slug, guest name, or unknown), claim_type (belief|prediction|recommendation|evaluation|observation|preference|commitment|disagreement|uncertainty), assertion (third-person), stance, quote (verbatim substring >=40 chars), topics (from list), extraction_confidence, speaker_confidence, references [{kind,name,role}].
@@ -36,6 +37,35 @@ References use kind=book|app|tool|service|paper|course|hardware|person|other and
 Use a strict editorial threshold. Keep "I think distribution becomes the moat because software is easier to build." Omit "I watched the team use a whiteboard," "I started my career as an analyst," any interviewer question, and any fragment whose point depends on missing context. Most batches should contain omissions. Returning one claim for every input is an error. When unsure, omit it.
 """
 BATCH_PROMPT_VERSION = "extract-v5"
+
+BATCH_RECOMMENDATIONS_PROMPT = """Extract only evidenced named recommendations or personal-stack actions from a batch of attributed podcast transcript excerpts. JSON only: {"claims":[...]}.
+Each input has segment_id, speaker, and an exact excerpt. Return at most one claim per excerpt, copy segment_id exactly, and use claim_type=recommendation. Every returned claim must include at least one reference in references: [{kind,name,role}]. Empty claims array when no excerpt qualifies.
+kind=book|app|tool|service|paper|course|hardware|person|other. role=recommends|uses|likes|owns|built|avoids.
+Keep only a direct first-person speech act: an explicit recommendation or endorsement; direct use, reading, listening, watching, or subscribing; direct love, preference, favorite, or approval; direct ownership or purchase; building, founding, authoring, or launching; or direct rejection or discontinued use. A product description, passing mention, employer relationship, interviewer question, or statement about another person's behavior does not qualify.
+The reference name must be a stable, exact-named object copied word-for-word from the excerpt. Never return a generic category, pronoun, descriptive phrase such as "this book", or a platform used only to locate the actual object. Keep roles distinct: liking or owning something is not recommending it.
+Each claim also includes segment_id, stance, topics, extraction_confidence, and references. Do not summarize or paraphrase the excerpt; the pipeline stores the exact excerpt as the assertion and quote. When unsure, omit it.
+"""
+BATCH_RECOMMENDATIONS_PROMPT_VERSION = "extract-recs-v5"
+
+BATCH_BOOKS_PROMPT = """Extract only explicitly evidenced named books from a batch of attributed podcast transcript excerpts. JSON only: {"claims":[...]}.
+Each input has segment_id, speaker, an exact excerpt, and sometimes the immediately preceding question_context. Return at most one claim per excerpt, copy segment_id exactly, and use claim_type=recommendation. Every returned claim must include every separately supported book in references: [{kind:"book",name,role}]. Empty claims array when no excerpt qualifies.
+role=recommends for a direct recommendation or endorsement; uses for a book the speaker directly says they read or are reading; likes for direct love, preference, favorite, or personal approval; owns for direct ownership or purchase; built only when the speaker directly says they wrote or authored the book; avoids for a direct rejection.
+An explicit question_context asking which books the speaker recommends or prefers makes a directly responsive title in the excerpt a recommendation, but the title must still come from the excerpt. The title must be a stable exact-named book copied word-for-word from that same excerpt. Never infer a title from an author, topic, generic phrase such as "this book", or another excerpt. A passing mention, interviewer question, book description, or statement about another person's reading does not qualify. Keep roles distinct: reading a book is not the same as recommending it.
+Examples: "There's one called The Gruffalo, I read to my kids" => The Gruffalo, uses. "I've read The Beginning of Infinity three times" => The Beginning of Infinity, uses. If question_context asks for recommended books and the excerpt says "The first is The Power Broker by Robert Caro", return The Power Broker, recommends. "The guest mentioned The Power Broker" => empty.
+Each claim also includes segment_id, stance, topics, extraction_confidence, and references. Do not summarize or paraphrase the excerpt; the pipeline stores the exact excerpt as the assertion and quote. When unsure, omit it.
+"""
+BATCH_BOOKS_PROMPT_VERSION = "extract-books-v1"
+BATCH_BOOK_ANSWERS_PROMPT = """Extract named books from direct answers to explicit book-recommendation questions. JSON only: {"claims":[...]}.
+Every input is an answer paired with question_context. Return at most one claim per excerpt, copy segment_id exactly, use claim_type=recommendation, and include every separately supported title in references: [{kind:"book",name,role}]. A negative or hesitant preface does not cancel a later direct positive statement.
+Choose the role from the answer itself whenever possible: likes for "I love/like" or a favorite; uses for "I read/am reading/finished"; built for "I wrote/authored"; owns for direct ownership; avoids for direct rejection; recommends for "I recommend/you should read" or a bare enumerated title that directly answers the question. Do not label "I love X" as recommends merely because the question asked for recommendations.
+The name must be the exact stable book title copied word-for-word from the answer. Extract the title, not its author, topic, subtitle fragment, a generic phrase such as "this book", a collection such as "John Klassen books", a film, song, game, newsletter, article, or course. If the answer names no exact title, return an empty claims array.
+Each claim also includes segment_id, stance, topics, extraction_confidence, and references. Do not paraphrase the excerpt; the pipeline stores it verbatim. When unsure, omit it.
+"I am not a big book recommender, although I love The Design of Everyday Things" => The Design of Everyday Things, likes.
+"The first is The Power Broker by Robert Caro" => The Power Broker, recommends.
+"I recently finished Wool and really enjoyed it" => Wool, uses and likes only if both are separately supported.
+"I like Michael Lewis" => empty because that is an author, not a title.
+"""
+BATCH_BOOK_ANSWERS_PROMPT_VERSION = "extract-book-answers-v4"
 
 REFERENCE_KINDS_LIST = [
     "book",
@@ -352,51 +382,24 @@ def extract_segment(
     return accepted, rejected, run
 
 
-def extract_segments_batch(
-    settings: Settings,
-    segments: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    """Extract at most one durable claim from each already-attributed segment."""
-    segment_by_id = {
-        str(segment.get("id") or ""): segment
-        for segment in segments
-        if segment.get("id") and segment.get("speakerHint") and segment.get("text")
-    }
-    quote_by_id = {
-        segment_id: claim_excerpt(str(segment["text"]))
-        for segment_id, segment in segment_by_id.items()
-    }
-    payload = [
-        {
-            "segment_id": segment_id,
-            "speaker": str(segment["speakerHint"]),
-            "excerpt": quote_by_id[segment_id],
-        }
-        for segment_id, segment in segment_by_id.items()
-    ]
-    user_prompt = f"Segments:\n{json.dumps(payload, ensure_ascii=False)}\n"
-    raw, response_json, latency_ms = _chat(
-        settings,
-        user_prompt,
-        BATCH_CLAIMS_PROMPT,
-        # Eight compact classifications fit comfortably in 2k tokens. Asking
-        # the local runtime to reserve 4k on top of long real-text excerpts can
-        # push an otherwise valid prompt beyond the model context window.
-        max_tokens=2048,
-        schema=BATCH_CLAIMS_SCHEMA,
-    )
-    parsed = parse_claims_json(raw)
-    retry_used = False
-    if parsed is None:
-        retry_used = True
-        raw, response_json, latency_ms = _chat(
-            settings,
-            user_prompt + "\nRespond with JSON only.",
-            BATCH_CLAIMS_PROMPT,
-            max_tokens=2048,
-            schema=BATCH_CLAIMS_SCHEMA,
+def batch_prompt(focus: str) -> tuple[str, str]:
+    if focus == "recs":
+        return BATCH_RECOMMENDATIONS_PROMPT, BATCH_RECOMMENDATIONS_PROMPT_VERSION
+    if focus in {"books", "book_answers"}:
+        return (
+            BATCH_BOOK_ANSWERS_PROMPT if focus == "book_answers" else BATCH_BOOKS_PROMPT,
+            BATCH_BOOK_ANSWERS_PROMPT_VERSION
+            if focus == "book_answers"
+            else BATCH_BOOKS_PROMPT_VERSION,
         )
-        parsed = parse_claims_json(raw)
+    return BATCH_CLAIMS_PROMPT, BATCH_PROMPT_VERSION
+
+
+def _validated_batch_rows(
+    parsed: list[dict[str, Any]] | None,
+    segment_by_id: dict[str, dict[str, Any]],
+    quote_by_id: dict[str, str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     seen_segments: set[str] = set()
@@ -415,7 +418,8 @@ def extract_segments_batch(
             "assertion": quote_by_id[segment_id],
             "quote": quote_by_id[segment_id],
             "speaker": speaker,
-            "speaker_confidence": 1.0,
+            "speaker_confidence": 0.0 if speaker == UNVERIFIED_SPEAKER_SLUG else 1.0,
+            "bookAnswer": bool(segment.get("bookQuestion")),
         }
         claim, reason = validate_claim(
             evidenced_row,
@@ -430,13 +434,75 @@ def extract_segments_batch(
         claim["segmentId"] = segment_id
         accepted.append(claim)
         seen_segments.add(segment_id)
+    return accepted, rejected
+
+
+def extract_segments_batch(
+    settings: Settings,
+    segments: list[dict[str, Any]],
+    focus: str = "all",
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Extract at most one durable claim from each already-attributed segment."""
+    segment_by_id = {
+        str(segment.get("id") or ""): segment
+        for segment in segments
+        if segment.get("id") and segment.get("speakerHint") and segment.get("text")
+    }
+    excerpt = (
+        (lambda text: text.strip()[:3000].strip())
+        if focus == "book_answers"
+        else book_excerpt
+        if focus == "books"
+        else claim_excerpt
+    )
+    quote_by_id = {
+        segment_id: excerpt(str(segment["text"])) for segment_id, segment in segment_by_id.items()
+    }
+    payload = [
+        {
+            "segment_id": segment_id,
+            "speaker": str(segment["speakerHint"]),
+            "excerpt": quote_by_id[segment_id],
+            **(
+                {"question_context": str(segment["bookQuestion"])}
+                if segment.get("bookQuestion")
+                else {}
+            ),
+        }
+        for segment_id, segment in segment_by_id.items()
+    ]
+    user_prompt = f"Segments:\n{json.dumps(payload, ensure_ascii=False)}\n"
+    system_prompt, prompt_version = batch_prompt(focus)
+    raw, response_json, latency_ms = _chat(
+        settings,
+        user_prompt,
+        system_prompt,
+        # Eight compact classifications fit comfortably in 2k tokens. Asking
+        # the local runtime to reserve 4k on top of long real-text excerpts can
+        # push an otherwise valid prompt beyond the model context window.
+        max_tokens=2048,
+        schema=BATCH_CLAIMS_SCHEMA,
+    )
+    parsed = parse_claims_json(raw)
+    retry_used = False
+    if parsed is None:
+        retry_used = True
+        raw, response_json, latency_ms = _chat(
+            settings,
+            user_prompt + "\nRespond with JSON only.",
+            system_prompt,
+            max_tokens=2048,
+            schema=BATCH_CLAIMS_SCHEMA,
+        )
+        parsed = parse_claims_json(raw)
+    accepted, rejected = _validated_batch_rows(parsed, segment_by_id, quote_by_id)
     run = {
         "model": served_model(response_json, settings.force_model or "auto"),
-        "promptVersion": BATCH_PROMPT_VERSION,
+        "promptVersion": prompt_version,
         "accepted": bool(accepted),
         "reason": "ok" if parsed is not None else "json_parse_failed",
         "requestJson": {
-            "focus": "all",
+            "focus": focus,
             "segmentIds": list(segment_by_id),
             "retry": retry_used,
         },

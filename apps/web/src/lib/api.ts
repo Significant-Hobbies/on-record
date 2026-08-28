@@ -41,6 +41,7 @@ export type Person = {
 };
 
 export type Claim = {
+  attributionStatus?: 'verified_speaker' | 'speaker_unverified';
   id: string;
   assertion: string;
   claimType: string;
@@ -60,6 +61,7 @@ export type Claim = {
   showSlug?: string;
   sourceUrl?: string | null;
   deepLinkUrl?: string | null;
+  transcriptKind?: string | null;
 };
 
 export type Source = {
@@ -77,6 +79,7 @@ export type Source = {
 };
 
 export type Recommendation = {
+  attributionStatus?: 'verified_speaker' | 'speaker_unverified';
   personId?: string;
   personName?: string;
   kind: string;
@@ -90,6 +93,7 @@ export type Recommendation = {
   showName?: string | null;
   sourceUrl?: string | null;
   timestampS?: number | null;
+  transcriptKind?: string | null;
   saidOn?: string | null;
 };
 
@@ -99,6 +103,7 @@ export type RecommendationGroup = {
   occurrenceCount: number;
   peopleCount: number;
   roleCounts: Record<string, number>;
+  unverifiedSpeakerCount?: number;
 };
 
 export type Stats = {

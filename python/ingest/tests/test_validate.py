@@ -286,6 +286,130 @@ def test_rejects_generic_plural_categories():
     assert refs == []
 
 
+def test_rejects_descriptive_book_labels_and_book_subjects():
+    cases = [
+        ("I read Bill Walsh's book.", "Bill Walsh's book", "uses"),
+        ("I love John Klassen books.", "John Klassen books", "likes"),
+        ("I use Gwern's book reviews.", "Gwern's book reviews", "uses"),
+        (
+            "The front inside cover of this book is something I read every year.",
+            "The front inside cover of this book",
+            "uses",
+        ),
+        ("I read a book about Roy Cohn.", "Roy Cohn", "uses"),
+    ]
+    for quote, name, role in cases:
+        assert (
+            validate_references(
+                {"references": [{"kind": "book", "name": name, "role": role}]}, quote
+            )
+            == []
+        )
+
+
+def test_rejects_audited_non_title_book_answer_labels():
+    cases = [
+        "Andrew Roberts latest book on Winston Churchill",
+        "Elon Musk book",
+        "Kim Scott's writing",
+        "The How to Book",
+    ]
+    for name in cases:
+        quote = f"I recommend {name}."
+        assert (
+            validate_references(
+                {
+                    "bookAnswer": True,
+                    "references": [{"kind": "book", "name": name, "role": "recommends"}],
+                },
+                quote,
+            )
+            == []
+        )
+
+
+def test_reclassifies_audited_non_book_names():
+    cases = [
+        ("I love Hey Jude.", "Hey Jude", "likes", "other"),
+        ("I read Wikipedia every day.", "Wikipedia", "uses", "other"),
+        ("I love Michael Lewis.", "Michael Lewis", "likes", "person"),
+        ("I read ULM Fit.", "ULM Fit", "uses", "paper"),
+    ]
+    for quote, name, role, expected_kind in cases:
+        refs = validate_references(
+            {"references": [{"kind": "book", "name": name, "role": role}]}, quote
+        )
+        assert refs == [{"kind": expected_kind, "name": name, "role": role}]
+
+
+def test_converges_audited_cross_kind_duplicates():
+    quote = "I use Coda every day."
+    expected = [{"kind": "app", "name": "Coda", "role": "uses"}]
+    for kind in ("app", "tool"):
+        assert (
+            validate_references(
+                {"references": [{"kind": kind, "name": "Coda", "role": "uses"}]}, quote
+            )
+            == expected
+        )
+
+
+def test_rejects_lowercase_generic_objects_and_descriptive_series_names():
+    cases = [
+        (
+            "I bought the luggage first, long before they sent more luggage.",
+            {"kind": "hardware", "name": "luggage", "role": "owns"},
+        ),
+        (
+            "I highly recommend people watch your series with 3Blue1Brown on distance.",
+            {
+                "kind": "other",
+                "name": "your series with 3Blue1Brown on distance",
+                "role": "recommends",
+            },
+        ),
+        (
+            "I don't use AI note taking.",
+            {"kind": "tool", "name": "AI note taking", "role": "avoids"},
+        ),
+        (
+            "I love how everything connects to how tech works and how AI came to be.",
+            {
+                "kind": "other",
+                "name": "how everything connects to how tech works and how AI came to be",
+                "role": "likes",
+            },
+        ),
+        (
+            "One of my favorite books is one that was sent to me by Nijolė Skripskaitė.",
+            {
+                "kind": "book",
+                "name": "one that was sent to me by Nijolė Skripskaitė",
+                "role": "likes",
+            },
+        ),
+    ]
+    for quote, reference in cases:
+        assert validate_references({"references": [reference]}, quote) == []
+
+
+def test_normalizes_an_explicitly_named_channel_or_podcast_to_other():
+    cases = [
+        (
+            "I highly recommend the channel, Animagraffs.",
+            {"kind": "app", "name": "Animagraffs", "role": "recommends"},
+        ),
+        (
+            "I listened to an episode of Invest Like the Best last year.",
+            {"kind": "app", "name": "Invest Like the Best", "role": "uses"},
+        ),
+    ]
+    for quote, reference in cases:
+        assert validate_references({"references": [reference]}, quote) == [
+            {**reference, "kind": "other"}
+        ]
+
+
 def test_rejects_a_topic_mistaken_for_the_recommended_book_title():
     quote = "That ties in with another book I recommended to you about the origins of Trump."
     refs = validate_references(
@@ -341,15 +465,37 @@ def test_rejects_recommended_media_wrapped_around_a_person_name():
 
 
 def test_rejects_a_reference_spoken_inside_someone_elses_reported_quote():
-    quote = (
-        "A woman said this to me, ‘It never occurred to me that I could be a doctor "
-        "until I read Ayn Rand.’"
-    )
+    cases = [
+        (
+            "A woman said this to me, ‘It never occurred to me that I could be a doctor "
+            "until I read Ayn Rand.’",
+            {"kind": "book", "name": "Ayn Rand", "role": "uses"},
+        ),
+        (
+            "Then I read another book, by Frederick Buechner, who said, “In those moments "
+            "of pain, you can either be broken or broken open.”",
+            {
+                "kind": "book",
+                "name": "In those moments of pain, you can either be broken or broken open",
+                "role": "uses",
+            },
+        ),
+    ]
+    for quote, reference in cases:
+        assert validate_references({"references": [reference]}, quote) == []
+
+
+def test_deduplicates_the_same_named_item_and_role_across_model_supplied_kinds():
     refs = validate_references(
-        {"references": [{"kind": "book", "name": "Ayn Rand", "role": "uses"}]},
-        quote,
+        {
+            "references": [
+                {"kind": "app", "name": "v0", "role": "uses"},
+                {"kind": "tool", "name": "v0", "role": "uses"},
+            ]
+        },
+        "We use v0 every day.",
     )
-    assert refs == []
+    assert refs == [{"kind": "app", "name": "v0", "role": "uses"}]
 
 
 def test_kind_conflict_can_come_from_source_context_outside_the_quote():
@@ -501,6 +647,175 @@ def test_batch_extraction_keeps_claim_attached_to_its_exact_segment(monkeypatch)
     assert accepted[0]["assertion"] == text
     assert run["requestJson"]["segmentIds"] == ["segment-1"]
     assert request_options["max_tokens"] == 2048
+
+
+def test_recommendation_batch_uses_strict_focus_prompt_and_version(monkeypatch):
+    from dataclasses import replace
+
+    from on_record_ingest.config import settings as load
+    from on_record_ingest.extract import claims as claims_module
+
+    text = "I recommend Cursor because I use Cursor every day for production coding work."
+    response = {
+        "claims": [
+            {
+                "segment_id": "segment-1",
+                "claim_type": "recommendation",
+                "stance": "supports",
+                "topics": [],
+                "extraction_confidence": 0.95,
+                "references": [{"kind": "app", "name": "Cursor", "role": "recommends"}],
+            }
+        ]
+    }
+    request = {}
+
+    def fake_chat(_settings, _user_prompt, system_prompt, **kwargs):
+        request["system_prompt"] = system_prompt
+        request.update(kwargs)
+        return json.dumps(response), {"model": "local-test"}, 12
+
+    monkeypatch.setattr(claims_module, "_chat", fake_chat)
+    cfg = replace(load(), ai_base_url="http://127.0.0.1:1234/v1")
+    accepted, rejected, run = claims_module.extract_segments_batch(
+        cfg,
+        [{"id": "segment-1", "speakerHint": "guest-one", "text": text}],
+        focus="recs",
+    )
+    assert rejected == []
+    assert accepted[0]["references"] == [{"kind": "app", "name": "Cursor", "role": "recommends"}]
+    assert "named recommendations" in request["system_prompt"]
+    assert run["promptVersion"] == "extract-recs-v5"
+    assert run["requestJson"]["focus"] == "recs"
+
+
+def test_book_batch_accepts_contracted_reading_with_exact_title(monkeypatch):
+    from dataclasses import replace
+
+    from on_record_ingest.config import settings as load
+    from on_record_ingest.extract import claims as claims_module
+
+    text = "I've read The Beginning of Infinity three times because it keeps changing my mind."
+    response = {
+        "claims": [
+            {
+                "segment_id": "segment-1",
+                "claim_type": "recommendation",
+                "stance": "uses",
+                "topics": [],
+                "extraction_confidence": 0.95,
+                "references": [
+                    {"kind": "book", "name": "The Beginning of Infinity", "role": "uses"}
+                ],
+            }
+        ]
+    }
+    request = {}
+
+    def fake_chat(_settings, _user_prompt, system_prompt, **kwargs):
+        request["system_prompt"] = system_prompt
+        return json.dumps(response), {"model": "local-test"}, 12
+
+    monkeypatch.setattr(claims_module, "_chat", fake_chat)
+    cfg = replace(load(), ai_base_url="http://127.0.0.1:1234/v1")
+    accepted, rejected, run = claims_module.extract_segments_batch(
+        cfg,
+        [{"id": "segment-1", "speakerHint": "guest-one", "text": text}],
+        focus="books",
+    )
+    assert rejected == []
+    assert accepted[0]["references"] == [
+        {"kind": "book", "name": "The Beginning of Infinity", "role": "uses"}
+    ]
+    assert "named books" in request["system_prompt"]
+    assert run["promptVersion"] == "extract-books-v1"
+
+
+def test_book_answer_batch_uses_independent_checkpoint(monkeypatch):
+    from dataclasses import replace
+
+    from on_record_ingest.config import settings as load
+    from on_record_ingest.extract import claims as claims_module
+
+    monkeypatch.setattr(
+        claims_module,
+        "_chat",
+        lambda *_args, **_kwargs: ('{"claims":[]}', {"model": "local-test"}, 4),
+    )
+    cfg = replace(load(), ai_base_url="http://127.0.0.1:1234/v1")
+    _accepted, _rejected, run = claims_module.extract_segments_batch(
+        cfg,
+        [
+            {
+                "id": "answer",
+                "speakerHint": "guest",
+                "text": "The first is The Power Broker by Robert Caro, which changed how I think.",
+                "bookQuestion": "Which books do you recommend most?",
+            }
+        ],
+        focus="book_answers",
+    )
+    assert run["promptVersion"] == "extract-book-answers-v4"
+
+
+def test_book_roles_accept_title_first_reading_and_explicit_positive_evaluation():
+    from on_record_ingest.extract.validate import validate_references
+
+    reading = "There's one called The Gruffalo, I read to my kids every night before bed."
+    positive = "Functional Programming in Scala is the single best technical book I have ever read."
+    deictic = "The Upside of Stress changed how I approach hard work, and I highly recommend it."
+    assert validate_references(
+        {"references": [{"kind": "book", "name": "The Gruffalo", "role": "uses"}]},
+        reading,
+    ) == [{"kind": "book", "name": "The Gruffalo", "role": "uses"}]
+    assert validate_references(
+        {
+            "references": [
+                {
+                    "kind": "book",
+                    "name": "Functional Programming in Scala",
+                    "role": "likes",
+                }
+            ]
+        },
+        positive,
+    ) == [{"kind": "book", "name": "Functional Programming in Scala", "role": "likes"}]
+    assert validate_references(
+        {"references": [{"kind": "book", "name": "The Upside of Stress", "role": "recommends"}]},
+        deictic,
+    ) == [{"kind": "book", "name": "The Upside of Stress", "role": "recommends"}]
+
+    direct_emphasis = "I do love the Design of Everyday Things. I think that's such a classic."
+    assert validate_references(
+        {"references": [{"kind": "book", "name": "Design of Everyday Things", "role": "likes"}]},
+        direct_emphasis,
+    ) == [{"kind": "book", "name": "Design of Everyday Things", "role": "likes"}]
+
+
+def test_book_answer_context_supports_a_bare_enumerated_title():
+    quote = "The first is The Power Broker by Robert Caro, which changed how I think."
+    assert validate_references(
+        {
+            "bookAnswer": True,
+            "references": [{"kind": "book", "name": "The Power Broker", "role": "recommends"}],
+        },
+        quote,
+    ) == [{"kind": "book", "name": "The Power Broker", "role": "recommends"}]
+    assert (
+        validate_references(
+            {"references": [{"kind": "book", "name": "The Power Broker", "role": "recommends"}]},
+            quote,
+        )
+        == []
+    )
+    code_quote = "Code by Charles Petzold explains the secret language of hardware and software."
+    assert validate_references(
+        {
+            "bookAnswer": True,
+            "references": [{"kind": "book", "name": "Code", "role": "recommends"}],
+        },
+        code_quote,
+    ) == [{"kind": "book", "name": "Code", "role": "recommends"}]
 
 
 def test_batch_extraction_rejects_a_segment_id_outside_the_batch(monkeypatch):

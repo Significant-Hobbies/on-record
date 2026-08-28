@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { attributionStatusFor, type AttributionStatus } from '../attribution';
 import { isClaimType } from '../claim-types';
 import { db, schema } from '../db';
 import { youtubeDeepLink } from '../deep-link';
@@ -15,6 +16,7 @@ import { referenceAssertion, sanitizeReferences, type ClaimReference } from '../
 export const adminClaimsRoute = new Hono<{ Bindings: Env }>();
 
 export type IncomingClaim = {
+  attributionStatus?: AttributionStatus;
   personId: string;
   segmentId: string;
   speakerRaw: string;
@@ -29,6 +31,7 @@ export type IncomingClaim = {
   promptVersion?: string;
   pipelineVersion?: string;
   references?: ClaimReference[];
+  bookAnswer?: boolean;
 };
 
 type LlmRunInput = {
@@ -109,10 +112,10 @@ async function persistReferences(
   claimId: string,
   refs: ClaimReference[]
 ): Promise<void> {
-  // A duplicate re-extraction is authoritative for this exact quote. Replace
-  // the old set so references accepted by an earlier, weaker validator do not
-  // survive forever.
-  await database.delete(schema.claimReferences).where(eq(schema.claimReferences.claimId, claimId));
+  // Extraction is additive. A later model pass may identify another named
+  // object in the same exact quote, but an empty or partial answer must not
+  // erase previously validated evidence. Public reads re-sanitize every row,
+  // so references rejected by a stronger validator no longer surface.
   for (const ref of refs) {
     await database
       .insert(schema.claimReferences)
@@ -128,15 +131,30 @@ async function persistReferences(
 }
 
 function referencesForClaim(incoming: IncomingClaim, body: SegmentBody): ClaimReference[] {
-  return sanitizeReferences(incoming.references ?? [], incoming.quote, body.text);
+  const bookAnswerPrompt = incoming.promptVersion?.startsWith('extract-book-answers-') ?? false;
+  return sanitizeReferences(
+    incoming.references ?? [],
+    incoming.quote,
+    body.text,
+    Boolean(incoming.bookAnswer && bookAnswerPrompt)
+  );
 }
 
 function usesEvidencedReferencePrompt(promptVersion?: string): boolean {
-  return promptVersion === 'extract-v3' || promptVersion === 'extract-v4';
+  return (
+    promptVersion === 'extract-v3' ||
+    promptVersion === 'extract-v4' ||
+    promptVersion === 'extract-recs-v5' ||
+    promptVersion === 'extract-books-v1' ||
+    promptVersion === 'extract-book-answers-v1' ||
+    promptVersion === 'extract-book-answers-v2' ||
+    promptVersion === 'extract-book-answers-v3' ||
+    promptVersion === 'extract-book-answers-v4'
+  );
 }
 
 export function transcriptHasPreciseTimestamps(kind: string | null): boolean {
-  return kind !== 'rss_text_coarse' && kind !== 'publisher_html_coarse';
+  return Boolean(kind && kind !== 'none' && !kind.endsWith('_coarse'));
 }
 
 export function assertionForClaim(incoming: IncomingClaim, refs: ClaimReference[]): string {
@@ -200,7 +218,9 @@ async function persistOneClaim(
   // The guarantee is unchanged: the quote must appear in the stored source
   // text. That text is now read from R2 rather than carried in the row.
   const anchor = findVerbatimAnchor(body.text, incoming.quote);
+  const attributionStatus = attributionStatusFor(incoming.speakerRaw, incoming.attributionStatus);
   const decision = judgeClaim({
+    attributionStatus,
     extractionConfidence: incoming.extractionConfidence,
     quoteValidated: anchor !== null,
     speakerConfidence: incoming.speakerConfidence,
@@ -213,12 +233,12 @@ async function persistOneClaim(
     .from(schema.claims)
     .where(eq(schema.claims.dedupeHash, hash))
     .limit(1);
+  if (requiresEvidencedReference(incoming, refs)) {
+    return { id: '', reason: 'no_evidenced_reference', reviewStatus: 'rejected' };
+  }
   if (existing) {
     await persistReferences(database, existing.id, refs);
     return { id: existing.id, reason: 'duplicate', reviewStatus: existing.reviewStatus };
-  }
-  if (requiresEvidencedReference(incoming, refs)) {
-    return { id: '', reason: 'no_evidenced_reference', reviewStatus: 'rejected' };
   }
   const assertion = assertionForClaim(incoming, refs);
   const id = newId();
@@ -227,6 +247,7 @@ async function persistOneClaim(
   await database.insert(schema.claims).values({
     ...optionalClaimFields(incoming, decision, anchor, now),
     assertion,
+    attributionStatus,
     claimType: incoming.claimType as (typeof schema.claims.claimType.enumValues)[number],
     confidenceBand: decision.confidenceBand,
     createdAt: now,
@@ -247,7 +268,7 @@ async function persistOneClaim(
   });
   await database.insert(schema.claimEvidence).values({
     claimId: id,
-    deepLinkUrl: youtubeDeepLink(episode.youtubeVideoId, timestampS),
+    deepLinkUrl: youtubeDeepLink(episode.youtubeVideoId, timestampS, episode.transcriptKind),
     episodeId: episode.id,
     id: newId(),
     quote: incoming.quote,
@@ -373,7 +394,10 @@ adminClaimsRoute.post('/episodes/:id/retime', async (c) => {
       .where(eq(schema.claims.id, claim.id));
     await database
       .update(schema.claimEvidence)
-      .set({ deepLinkUrl: youtubeDeepLink(episode.youtubeVideoId, timestampS), timestampS })
+      .set({
+        deepLinkUrl: youtubeDeepLink(episode.youtubeVideoId, timestampS, episode.transcriptKind),
+        timestampS,
+      })
       .where(eq(schema.claimEvidence.claimId, claim.id));
   }
   return c.json({ claims: claims.length, moved });

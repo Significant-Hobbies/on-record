@@ -29,14 +29,19 @@ discover → transcripts → segment → extract → publish-rules (worker)
 4. **extract** — cheap triage first (recommendations, positions, predictions,
    evaluations, explanations, commitments, and uncertainty; skip questions,
    filler, ads, and context-dependent fragments). Broad extraction uses
-   `extract-v5` to classify compact exact excerpts in batches; the model never
-   regenerates the assertion or quote. The stored assertion and evidence are
-   the same source excerpt. Named recommendation focus keeps the stricter
-   `extract-v4` speech-act and stable-object contract. Per-segment attempts make
-   runs resumable, and `--target-claims 10` counts existing published claims
-   before doing more work. Quote and speaker are revalidated by the Worker.
-5. **publish** — worker re-validates the quote against stored segment text
-   and applies deterministic banding. Manual review status changes also add or
+   deterministic rules for complete, high-signal non-reference claims and
+   `extract-v5` to classify ambiguous candidates in batches of up to 20.
+   Named-item extraction uses a separate batched `extract-recs-v5` contract
+   that requires a direct speech act and a stable exact-named object. Neither
+   path regenerates the assertion or quote: the stored assertion and evidence
+   are the same source excerpt. Per-segment attempts make runs resumable. There is no
+   default per-episode claim ceiling; `--target-claims` is an optional operator
+   limit. The Worker revalidates every quote.
+5. **publish** — worker re-validates the quote against stored segment text and
+   applies deterministic banding. Identified speakers use their attribution
+   confidence. A high-confidence exact excerpt may publish as
+   `speaker_unverified`, but it is labeled in the UI and excluded from person
+   and distinct-recommender counts. Manual review status changes also add or
    remove the claim from FTS so killed claims cannot continue surfacing.
 
 Unknown diarized voices can be repaired separately with `--stage

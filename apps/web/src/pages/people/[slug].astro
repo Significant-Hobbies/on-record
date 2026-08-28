@@ -47,7 +47,7 @@ const initials = person?.name.split(' ').map((part) => part[0]).slice(0, 2).join
 ---
 <Layout
   title={`${person?.name ?? slug} — Claims and recommendations`}
-  description={person ? `What ${person.name} has said, recommended, and used on podcasts, with exact quotes and source receipts.` : 'Published speaker record.'}
+  description={person ? `What ${person.name} has said, recommended, and used on podcasts, with transcript excerpts and source receipts.` : 'Published speaker record.'}
 >
   {missing || !person ? (
     <div class="empty-state page-empty">
@@ -94,7 +94,7 @@ const initials = person?.name.split(' ').map((part) => part[0]).slice(0, 2).join
                 <p>
                   <a href={`/claims/${item.claimId}`}>Evidence receipt</a>
                   {(item.deepLinkUrl || item.sourceUrl) && (
-                    <> · <a href={item.deepLinkUrl ?? item.sourceUrl} rel="noreferrer" target="_blank">Source ↗</a></>
+                    <> · <a href={item.transcriptKind === 'youtube_captions' ? item.deepLinkUrl ?? item.sourceUrl : item.sourceUrl} rel="noreferrer" target="_blank">Source ↗</a></>
                   )}
                 </p>
               </article>
@@ -109,7 +109,7 @@ const initials = person?.name.split(' ').map((part) => part[0]).slice(0, 2).join
             <p class="eyebrow">Claim ledger</p>
             <h2 id="person-claims-heading">What {person.name.split(' ')[0]} said.</h2>
           </div>
-          <p>{visibleClaims.length} exact-quote {visibleClaims.length === 1 ? 'record' : 'records'}</p>
+          <p>{visibleClaims.length} transcript-backed {visibleClaims.length === 1 ? 'record' : 'records'}</p>
         </div>
         <nav class="type-filter" aria-label="Filter claims by type">
           <a href={`/people/${person.slug}`} aria-current={!selectedType ? 'page' : undefined}>All <span>{claims.length}</span></a>

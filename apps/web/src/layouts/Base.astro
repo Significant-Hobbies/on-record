@@ -3,7 +3,8 @@ import '../styles/global.css';
 
 const {
   title = 'High Signal Podcasts',
-  description = 'What notable people actually said on podcasts, with attributable claims, recommendations, books, tools, and verbatim evidence.',
+  description = 'Attributable podcast claims, recommendations, books, and tools with verbatim transcript evidence and source trails.',
+  robots = 'index,follow,max-image-preview:large,max-snippet:-1',
 } = Astro.props;
 const siteUrl = 'https://podcasts.highsignal.app';
 const canonical = new URL(Astro.url.pathname, siteUrl).toString();
@@ -21,6 +22,7 @@ const structuredData = JSON.stringify({
       '@type': 'Organization',
       '@id': `${siteUrl}/#organization`,
       name: 'High Signal',
+      description: 'Evidence-backed intelligence products for people who need to inspect the source.',
       url: 'https://highsignal.app',
       logo: `${siteUrl}/favicon.svg`,
       sameAs: ['https://github.com/Significant-Hobbies'],
@@ -81,7 +83,7 @@ const structuredData = JSON.stringify({
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="theme-color" content="#f1eadb" />
-    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1" />
+    <meta name="robots" content={robots} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     {currentPath === '/' && <link rel="alternate" type="text/markdown" href="/index.md" />}
@@ -186,6 +188,7 @@ const structuredData = JSON.stringify({
       is:inline
       src="https://sassmaker.com/ai-chat-footer.js"
       data-name="High Signal Podcasts"
+      data-compose="false"
       defer
     ></script>
   </body>

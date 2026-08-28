@@ -179,6 +179,11 @@ export const claims = sqliteTable(
   'claims',
   {
     assertion: text('assertion').notNull(),
+    attributionStatus: text('attribution_status', {
+      enum: ['verified_speaker', 'speaker_unverified'],
+    })
+      .notNull()
+      .default('verified_speaker'),
     claimType: text('claim_type', {
       enum: [
         'belief',

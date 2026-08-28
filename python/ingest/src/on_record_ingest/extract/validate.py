@@ -38,7 +38,8 @@ REFERENCE_CLAUSE_BREAK = re.compile(
     re.IGNORECASE,
 )
 REFERENCE_GENERIC_NAME = re.compile(
-    r"^(?:it|this|that|these|those|them|ai|artificial intelligence|machine learning|"
+    r"^(?:it|this|that|these|those|him|his|her|them|ai|artificial intelligence|machine learning|"
+    r"ai note[- ]taking|"
     r"software|hardware|books?|apps?|applications?|games?|tools?|services?|papers?|"
     r"courses?|devices?|accounts?|podcasts?|shows?|products?|platforms?|sources?|"
     r"(?:a|an|the|this|that|some|any|my|your|our|their)\s+"
@@ -50,9 +51,31 @@ REFERENCE_DESCRIPTIVE_NAME = re.compile(
     r"^(?:his|her|their|my|your|our|a|an|the|this|that)\s+"
     r"(?:(?:new|latest|recent|current|favorite|favourite)\s+)?"
     r"(?:book|app|application|game|tool|service|paper|course|device|account|podcast|"
-    r"show|product|platform)\b",
+    r"show|series|channel|product|platform)\b",
     re.IGNORECASE,
 )
+REFERENCE_NON_TITLE_BOOK_NAME = re.compile(
+    r"(?:['’]s\s+(?:new\s+)?book|\bbooks|\bbook\s+reviews)$|"
+    r"^(?:the\s+)?(?:first|second|last)\s+(?:third|half|part|chapter|section)$|"
+    r"^(?:the\s+)?(?:front|back)(?:\s+inside)?\s+cover\s+of\s+(?:this|the)\s+book$|"
+    r"['’]s\s+(?:auto)?biography$|['’]s\s+encyclopedia$",
+    re.IGNORECASE,
+)
+REFERENCE_AUDITED_NON_TITLE_BOOK_NAMES = {
+    "amazon's management science",
+    "andrew roberts latest book on winston churchill",
+    "cialdini's persuasion book",
+    "elon musk book",
+    "kim scott's writing",
+    "over my shoulder",
+    "rick reuben's creativity book",
+    "shakespearean comedies",
+    "shawn theron",
+    "the design sprint",
+    "the economic history of chicago",
+    "the how to book",
+    "what is it in the first place",
+}
 REFERENCE_OBJECT_PRONOUN = re.compile(r"\b(?:it|them|this|that|these|those)\b", re.IGNORECASE)
 REFERENCE_REPORTED_SPEECH = re.compile(
     r"\b(?:he|she|they|someone|a\s+woman|a\s+man|the\s+woman|the\s+man|my\s+friend)\s+"
@@ -60,7 +83,8 @@ REFERENCE_REPORTED_SPEECH = re.compile(
     re.IGNORECASE,
 )
 REFERENCE_WRAPPED_PERSON = re.compile(
-    r"\b(?:conversation|interview|episode|talk|book|article|work)\s+(?:with|by|from)\b",
+    r"\b(?:conversation|interview|episode|talk|book|article|work|series|channel|podcast|show)\s+"
+    r"(?:with|by|from)\b",
     re.IGNORECASE,
 )
 REFERENCE_ADVERBS = (
@@ -70,7 +94,8 @@ REFERENCE_ADVERBS = (
 REFERENCE_KIND_CONFLICTS = {
     "book": re.compile(
         r"\b(?:game|app|application|software|tool|service|platform|device|hardware|course|"
-        r"paper|article|account|documentary|film|movie|video|channel|supplement|vitamin|"
+        r"paper|article|account|documentary|films?|movies?|songs?|albums?|magazines?|"
+        r"newsletters?|website|blog|talk|video|channel|supplement|vitamin|"
         r"multivitamin|drug|medication)\b",
         re.IGNORECASE,
     ),
@@ -98,6 +123,55 @@ REFERENCE_KIND_CONFLICTS = {
         re.IGNORECASE,
     ),
 }
+REFERENCE_KIND_OVERRIDES = {
+    "antigravity": "app",
+    "blade runner": "other",
+    "claude": "app",
+    "coda": "app",
+    "creative destruction": "book",
+    "demand-side sales 101": "book",
+    "design sprint by google": "other",
+    "devin": "app",
+    "don giovanni": "other",
+    "embrace the adventure": "other",
+    "figjam": "app",
+    "forbes": "other",
+    "founders podcast": "other",
+    "gong": "app",
+    "goose": "tool",
+    "gta 4": "other",
+    "hey jude": "other",
+    "marginal revolution": "other",
+    "michael lewis": "person",
+    "miro": "app",
+    "mystery": "app",
+    "new york times": "other",
+    "nintendo power": "other",
+    "notebooklm": "app",
+    "nvidia": "other",
+    "orb": "service",
+    "pando": "app",
+    "persona": "other",
+    "pessimist archive": "other",
+    "quantum country": "other",
+    "red dead 1": "other",
+    "reinhold niebuhr": "person",
+    "rescuetime": "app",
+    "roald dahl": "person",
+    "scaling devtools": "other",
+    "silent all these years": "other",
+    "ted chiang": "person",
+    "the princess bride": "other",
+    "the peel": "other",
+    "thomas mann": "person",
+    "twitter": "app",
+    "ulm fit": "paper",
+    "v0": "app",
+    "vercel": "service",
+    "virgil": "person",
+    "wikipedia": "other",
+    "zoom": "app",
+}
 
 
 def normalize_ws(text: str) -> str:
@@ -112,7 +186,10 @@ def is_stable_reference_name(name: str) -> bool:
     ):
         return False
     if " " not in normalized:
-        return True
+        return bool(re.search(r"[A-Z0-9./+#@]", normalized))
+    first_token = normalized.split(" ", 1)[0]
+    if re.fullmatch(r"[a-z]+", first_token):
+        return False
     return any(char.isupper() for char in normalized) or bool(re.search(r"[./+#@]", normalized))
 
 
@@ -226,6 +303,28 @@ def parse_claims_json(raw: str) -> list[dict[str, Any]] | None:
     return [row for row in payload if isinstance(row, dict)]
 
 
+def _reference_fields(item: Any) -> tuple[str, str, str] | None:
+    if not isinstance(item, dict):
+        return None
+    kind = str(item.get("kind") or "").strip().lower()
+    role = str(item.get("role") or "").strip().lower()
+    name = str(item.get("name") or "").strip()
+    normalized_name = normalize_ws(name)
+    invalid_book_name = kind == "book" and (
+        REFERENCE_NON_TITLE_BOOK_NAME.search(normalized_name)
+        or normalized_name.lower() in REFERENCE_AUDITED_NON_TITLE_BOOK_NAMES
+    )
+    if (
+        kind not in REFERENCE_KINDS
+        or role not in REFERENCE_ROLES
+        or len(name) < 2
+        or not is_stable_reference_name(name)
+        or invalid_book_name
+    ):
+        return None
+    return kind, role, name
+
+
 def validate_references(
     row: dict[str, Any], claim_quote: str, kind_context: str | None = None
 ) -> list[dict[str, str]]:
@@ -234,26 +333,27 @@ def validate_references(
         return []
     haystack = normalize_ws(claim_quote).lower()
     out: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str]] = set()
+    allow_book_answer = bool(row.get("bookAnswer") or row.get("book_answer"))
     for item in raw:
-        if not isinstance(item, dict):
+        fields = _reference_fields(item)
+        if fields is None:
             continue
-        kind = str(item.get("kind") or "").strip().lower()
-        role = str(item.get("role") or "").strip().lower()
-        name = str(item.get("name") or "").strip()
-        if (
-            kind not in REFERENCE_KINDS
-            or role not in REFERENCE_ROLES
-            or len(name) < 2
-            or not is_stable_reference_name(name)
-        ):
-            continue
+        kind, role, name = fields
         if normalize_ws(name).lower() not in haystack:
             continue
-        if not reference_role_supported(name, role, claim_quote, kind):
+        if not reference_role_supported(
+            name,
+            role,
+            claim_quote,
+            kind,
+            allow_book_answer=allow_book_answer,
+        ):
             continue
-        kind = normalized_reference_kind(name, kind, kind_context or claim_quote)
-        key = (kind, role, name.lower())
+        kind = normalized_reference_kind(
+            name, kind, kind_context or claim_quote, allow_book_answer=allow_book_answer
+        )
+        key = (role, name.lower())
         if key in seen:
             continue
         seen.add(key)
@@ -267,19 +367,26 @@ class ReferenceMatch:
     kind: str | None
     name_pattern: str
     matching: list[str]
+    full: str
 
 
 def _active_reference_object(
     context: ReferenceMatch, verbs: str, clause: str, distance: int = 100
 ) -> bool:
     pattern = re.compile(
-        rf"\b(?:i|we)\s+{REFERENCE_ADVERBS}(?:{verbs})\b"
+        rf"\b(?:i|we)(?:\s+|['’](?:m|re|ve)\s+){REFERENCE_ADVERBS}(?:{verbs})\b"
         rf"(?P<gap>.{{0,{distance}}}?){context.name_pattern}",
         re.IGNORECASE,
     )
     for match in pattern.finditer(clause):
         gap = match.group("gap")
         if REFERENCE_OBJECT_PRONOUN.search(gap):
+            continue
+        if context.kind == "book" and re.search(
+            r"\b(?:book|biography)\s+(?:about|on)\b", gap, re.IGNORECASE
+        ):
+            continue
+        if re.search(r"\b(?:said|told|wrote|asked)\b", gap, re.IGNORECASE):
             continue
         if REFERENCE_REPORTED_SPEECH.search(clause[: match.start()]):
             continue
@@ -314,7 +421,15 @@ def _recommendation_supported(context: ReferenceMatch) -> bool:
         rf"(?:reading|trying|using|watching|listening\s+to)\b)",
         re.IGNORECASE,
     )
-    return any(
+    deictic = re.compile(
+        rf"{context.name_pattern}.{{0,100}}?\b(?:i|we)(?:\s+|['’](?:m|re|ve)\s+)"
+        rf"{REFERENCE_ADVERBS}recommend(?:ed)?\s+(?:it|that|this)\b",
+        re.IGNORECASE,
+    )
+    my_recommendations = re.compile(
+        rf"\bmy\s+recommendations?\b.{{0,180}}?{context.name_pattern}", re.IGNORECASE
+    )
+    return bool(deictic.search(context.full) or my_recommendations.search(context.full)) or any(
         _active_reference_object(context, r"recommend(?:ed)?", clause)
         or should.search(clause)
         or (context.kind != "person" and relative.search(clause))
@@ -325,22 +440,34 @@ def _recommendation_supported(context: ReferenceMatch) -> bool:
 
 def _use_supported(context: ReferenceMatch) -> bool:
     verbs = (
-        r"use|used|rely\s+on|run|work\s+with|read|am\s+reading|are\s+reading|"
-        r"have\s+been\s+using|have\s+used|listen\s+to|listened\s+to|watch|watched|"
+        r"use|used|using|rely\s+on|run|work\s+with|read|reread|reading|"
+        r"finished\s+reading|started\s+reading|am\s+reading|are\s+reading|"
+        r"have\s+read|have\s+been\s+reading|have\s+been\s+using|have\s+used|"
+        r"listen\s+to|listened\s+to|watch|watched|"
         r"subscribe\s+to|subscribed\s+to|wear|drive|play"
     )
     fronted = re.compile(
         rf"{context.name_pattern}\s*,\s*(?:i|we)\s+{REFERENCE_ADVERBS}(?:{verbs})\b",
         re.IGNORECASE,
     )
+    title_first = re.compile(
+        rf"{context.name_pattern}.{{0,100}}?\b(?:i|we)(?:\s+|['’](?:m|re|ve)\s+)"
+        rf"{REFERENCE_ADVERBS}(?:{verbs})\b",
+        re.IGNORECASE,
+    )
     return any(
-        _active_reference_object(context, verbs, clause) or fronted.search(clause)
+        _active_reference_object(context, verbs, clause)
+        or fronted.search(clause)
+        or title_first.search(clause)
         for clause in context.matching
     )
 
 
 def _preference_supported(context: ReferenceMatch) -> bool:
-    verbs = r"love|like|prefer|enjoy|adore|swear\s+by"
+    verbs = (
+        r"love|loved|like|liked|prefer|preferred|enjoy|enjoyed|adore|adored|swear\s+by|"
+        r"do\s+(?:love|like|prefer|enjoy|adore)"
+    )
     fan = re.compile(
         rf"\b(?:i|we)(?:['’]m|\s+am|['’]re|\s+are)\s+(?:a\s+)?"
         rf"(?:(?:big|huge)\s+)?fan\s+of\s+.{{0,80}}?{context.name_pattern}",
@@ -356,17 +483,45 @@ def _preference_supported(context: ReferenceMatch) -> bool:
         rf".{{0,60}}?{context.name_pattern}",
         re.IGNORECASE,
     )
+    described_book = re.compile(
+        rf"\b(?:book|novel|memoir|biography)\b.{{0,60}}?"
+        rf"\b(?:i|we)(?:\s+|['’](?:m|re|ve)\s+){REFERENCE_ADVERBS}"
+        rf"(?:love|loved|like|liked|prefer|preferred|enjoy|enjoyed|adore|adored)\b"
+        rf".{{0,80}}?{context.name_pattern}",
+        re.IGNORECASE,
+    )
+    positive_book = re.compile(
+        rf"(?:{context.name_pattern}.{{0,100}}?\b(?:best|great|excellent|incredible|"
+        rf"fantastic|extraordinary|exceptionally\s+good|wonderful)\b.{{0,40}}?\bbook\b|"
+        rf"\b(?:best|great|excellent|incredible|fantastic|extraordinary|"
+        rf"exceptionally\s+good|wonderful)\b.{{0,40}}?\bbook\b.{{0,100}}?"
+        rf"{context.name_pattern})",
+        re.IGNORECASE,
+    )
+    title_then_approval = re.compile(
+        rf"{context.name_pattern}.{{0,100}}?\b(?:i|we)\s+(?:thought|think)\s+"
+        rf"(?:it|that|this)\s+(?:is|was)\s+(?:great|excellent|incredible|fantastic|"
+        rf"extraordinary|wonderful)\b",
+        re.IGNORECASE,
+    )
     return any(
         _active_reference_object(context, verbs, clause)
         or fan.search(clause)
         or favorite.search(clause)
         or obsessed.search(clause)
+        or described_book.search(clause)
+        or positive_book.search(clause)
+        or title_then_approval.search(clause)
         for clause in context.matching
     )
 
 
 def reference_role_supported(
-    name: str, role: str, claim_quote: str, kind: str | None = None
+    name: str,
+    role: str,
+    claim_quote: str,
+    kind: str | None = None,
+    allow_book_answer: bool = False,
 ) -> bool:
     """Require a direct grammatical link between the named thing and speech act."""
     if role not in REFERENCE_ROLES:
@@ -380,8 +535,11 @@ def reference_role_supported(
         kind=kind,
         name_pattern=re.escape(needle).replace(r"\ ", r"\s+"),
         matching=[clause for clause in clauses if needle.casefold() in clause.casefold()],
+        full=normalize_ws(claim_quote),
     )
     if role == "recommends":
+        if allow_book_answer and kind == "book":
+            return True
         return _recommendation_supported(context)
     if role == "uses":
         return _use_supported(context)
@@ -405,15 +563,33 @@ def reference_role_supported(
     )
 
 
-def normalized_reference_kind(name: str, kind: str, claim_quote: str) -> str:
+def normalized_reference_kind(
+    name: str, kind: str, claim_quote: str, allow_book_answer: bool = False
+) -> str:
     """Downgrade an explicitly contradicted model category to safe `other`."""
+    override = REFERENCE_KIND_OVERRIDES.get(normalize_ws(name).casefold())
+    if override:
+        return override
+    if kind == "book" and allow_book_answer:
+        return kind
+    context = normalize_ws(claim_quote)
+    name_pattern = re.escape(normalize_ws(name)).replace(r"\ ", r"\s+")
+    media_wrapper = re.compile(
+        rf"\b(?:channel|podcast|show|series|episode)"
+        rf"(?:\s+(?:called|named|of))?\s*,?\s*{name_pattern}\b",
+        re.IGNORECASE,
+    )
+    if kind != "other" and media_wrapper.search(context):
+        return "other"
+    return _kind_after_conflict_check(name, kind, context, name_pattern)
+
+
+def _kind_after_conflict_check(name: str, kind: str, context: str, name_pattern: str) -> str:
     conflict = REFERENCE_KIND_CONFLICTS.get(kind)
     if conflict is None:
         return kind
     needle = normalize_ws(name).casefold()
-    context = normalize_ws(claim_quote)
     folded = context.casefold()
-    name_pattern = re.escape(normalize_ws(name)).replace(r"\ ", r"\s+")
     if kind == "book" and re.search(rf"\bread\s+in\s+{name_pattern}", context, re.IGNORECASE):
         return "other"
     at = folded.find(needle)
@@ -504,4 +680,5 @@ def _validated_body(
         "speakerConfidence": speaker_conf,
         "topics": [str(slug) for slug in topic_list if str(slug) in topics],
         "references": validate_references(row, quote, segment_text),
+        "bookAnswer": bool(row.get("bookAnswer") or row.get("book_answer")),
     }, None

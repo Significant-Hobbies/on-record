@@ -1,6 +1,7 @@
-import { and, desc, eq, gte, inArray, like, lte, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, like, lte, notInArray, or, sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { UNVERIFIED_SPEAKER_SLUG } from '../attribution';
 import { isClaimType } from '../claim-types';
 import { db, schema } from '../db';
 import type { Env } from '../env';
@@ -28,22 +29,35 @@ function trustedShowFilter(): SQL {
 
 const publicClaimFields = {
   assertion: schema.claims.assertion,
+  attributionStatus: schema.claims.attributionStatus,
   claimType: schema.claims.claimType,
   deepLinkUrl: sql<string | null>`(
-    select ${schema.claimEvidence.deepLinkUrl}
-    from ${schema.claimEvidence}
-    where ${schema.claimEvidence.claimId} = ${schema.claims.id}
-      and ${schema.claimEvidence.role} = 'primary'
-    limit 1
+    case when ${schema.episodes.transcriptKind} = 'youtube_captions' then (
+      select ${schema.claimEvidence.deepLinkUrl}
+      from ${schema.claimEvidence}
+      where ${schema.claimEvidence.claimId} = ${schema.claims.id}
+        and ${schema.claimEvidence.role} = 'primary'
+      limit 1
+    ) else null end
   )`,
   episodeId: schema.episodes.id,
   episodeTitle: schema.episodes.title,
   id: schema.claims.id,
-  personId: schema.people.id,
-  personName: schema.people.name,
-  personOrg: schema.people.org,
-  personSlug: schema.people.slug,
-  personTitle: schema.people.title,
+  personId: sql<
+    string | null
+  >`case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.people.id} else null end`,
+  personName: sql<
+    string | null
+  >`case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.people.name} else null end`,
+  personOrg: sql<
+    string | null
+  >`case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.people.org} else null end`,
+  personSlug: sql<
+    string | null
+  >`case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.people.slug} else null end`,
+  personTitle: sql<
+    string | null
+  >`case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.people.title} else null end`,
   quote: schema.claims.quote,
   reviewStatus: schema.claims.reviewStatus,
   saidOn: schema.claims.saidOn,
@@ -51,7 +65,10 @@ const publicClaimFields = {
   showSlug: schema.shows.slug,
   sourceUrl: schema.episodes.sourceUrl,
   stance: schema.claims.stance,
-  timestampS: schema.claims.timestampS,
+  timestampS: sql<
+    number | null
+  >`case when ${schema.episodes.transcriptKind} = 'youtube_captions' then ${schema.claims.timestampS} else null end`,
+  transcriptKind: schema.episodes.transcriptKind,
 };
 
 const publicSourceFields = {
@@ -93,6 +110,7 @@ publicRoute.get('/people', async (c) => {
   const filters: SQL[] = [
     eq(schema.people.status, 'active'),
     eq(schema.claims.reviewStatus, 'published'),
+    eq(schema.claims.attributionStatus, 'verified_speaker'),
     trustedShowFilter(),
   ];
   if (q) {
@@ -140,6 +158,9 @@ publicRoute.get('/people', async (c) => {
 
 publicRoute.get('/people/:slug', async (c) => {
   const slug = c.req.param('slug');
+  if (slug === UNVERIFIED_SPEAKER_SLUG) {
+    return c.json({ error: 'not_found' }, 404);
+  }
   const [person] = await db(c.env.DB)
     .select()
     .from(schema.people)
@@ -162,10 +183,15 @@ publicRoute.get('/claims/:id', async (c) => {
   if (!claim) {
     return c.json({ error: 'not_found' }, 404);
   }
-  const evidence = await db(c.env.DB)
+  const rawEvidence = await db(c.env.DB)
     .select()
     .from(schema.claimEvidence)
     .where(eq(schema.claimEvidence.claimId, claim.id));
+  const evidence = rawEvidence.map((row) => ({
+    ...row,
+    deepLinkUrl: claim.transcriptKind === 'youtube_captions' ? row.deepLinkUrl : null,
+    timestampS: claim.transcriptKind === 'youtube_captions' ? row.timestampS : null,
+  }));
   const rawReferences = await db(c.env.DB)
     .select()
     .from(schema.claimReferences)
@@ -201,7 +227,7 @@ publicRoute.get('/sources', async (c) => {
   const rows = await database
     .select({
       claimCount: sql<number>`count(distinct ${schema.claims.id})`,
-      peopleCount: sql<number>`count(distinct ${schema.claims.personId})`,
+      peopleCount: sql<number>`count(distinct case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.claims.personId} end)`,
       ...publicSourceFields,
     })
     .from(schema.episodes)
@@ -333,19 +359,31 @@ publicRoute.get('/search', async (c) => {
 
 export const recommendationFields = {
   assertion: schema.claims.assertion,
+  attributionStatus: schema.claims.attributionStatus,
   claimId: schema.claims.id,
-  deepLinkUrl: schema.claimEvidence.deepLinkUrl,
+  deepLinkUrl: sql<
+    string | null
+  >`case when ${schema.episodes.transcriptKind} = 'youtube_captions' then ${schema.claimEvidence.deepLinkUrl} else null end`,
   episodeTitle: schema.episodes.title,
   kind: schema.claimReferences.kind,
   name: schema.claimReferences.name,
-  personId: schema.claims.personId,
-  personName: schema.people.name,
+  personId: sql<
+    string | null
+  >`case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.claims.personId} else null end`,
+  personName: sql<
+    string | null
+  >`case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.people.name} else null end`,
   quote: schema.claims.quote,
   role: schema.claimReferences.role,
   saidOn: schema.claims.saidOn,
+  promptVersion: schema.claims.promptVersion,
+  segmentId: schema.claims.segmentId,
   showName: schema.shows.name,
   sourceUrl: schema.episodes.sourceUrl,
-  timestampS: schema.claims.timestampS,
+  timestampS: sql<
+    number | null
+  >`case when ${schema.episodes.transcriptKind} = 'youtube_captions' then ${schema.claims.timestampS} else null end`,
+  transcriptKind: schema.episodes.transcriptKind,
 };
 
 async function publishedReferences(
@@ -383,13 +421,15 @@ async function publishedReferences(
       )
     )
     .where(and(...clauses))
-    .orderBy(desc(schema.claims.saidOn));
+    .orderBy(desc(schema.claims.saidOn), asc(schema.claims.createdAt));
   const seen = new Set<string>();
   return rows
     .flatMap((row) => {
       const [reference] = sanitizeReferences(
         [{ kind: row.kind, name: row.name, role: row.role }],
-        row.quote
+        row.quote,
+        row.quote,
+        row.promptVersion?.startsWith('extract-book-answers-') ?? false
       );
       if (!reference) {
         return [];
@@ -406,12 +446,13 @@ async function publishedReferences(
       ) {
         return [];
       }
-      const key = `${row.deepLinkUrl ?? row.claimId}|${row.personId}|${reference.kind}|${reference.role}|${reference.name.toLowerCase()}`;
+      const key = `${row.segmentId ?? row.claimId}|${row.personId}|${reference.kind}|${reference.role}|${canonicalReferenceName(reference.name)}`;
       if (seen.has(key)) {
         return [];
       }
       seen.add(key);
-      return [{ ...row, ...reference, assertion: referenceAssertion(reference) }];
+      const { promptVersion: _promptVersion, segmentId: _segmentId, ...publicRow } = row;
+      return [{ ...publicRow, ...reference, assertion: referenceAssertion(reference) }];
     })
     .slice(0, limit);
 }
@@ -469,7 +510,7 @@ publicRoute.get('/stats', async (c) => {
   const [counts] = await database
     .select({
       episodes: sql<number>`count(distinct ${schema.claims.episodeId})`,
-      people: sql<number>`count(distinct ${schema.claims.personId})`,
+      people: sql<number>`count(distinct case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.claims.personId} end)`,
       publishedClaims: sql<number>`count(*)`,
     })
     .from(schema.claims)
@@ -501,7 +542,8 @@ publicRoute.get('/stats', async (c) => {
     trustedShows: catalog?.trustedShows ?? 0,
     trustPolicy: {
       withheldShows: WITHHELD_PUBLIC_SHOW_SLUGS.length,
-      wording: 'Shows with unresolved speaker attribution are withheld from public counts.',
+      wording:
+        'Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts.',
     },
   });
 });

@@ -63,7 +63,8 @@ const groupQuery = new URLSearchParams({
 });
 if (kind) groupQuery.set('kind', kind);
 if (role) groupQuery.set('role', role);
-if (q) groupQuery.set('q', q);
+if (item) groupQuery.set('q', item);
+else if (q) groupQuery.set('q', q);
 
 let groups: RecommendationGroup[] = [];
 let total = 0;
@@ -99,19 +100,19 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
 ---
 <Layout
   title="Grouped recommendations: High Signal Podcasts"
-  description="Books, apps, tools, and other named podcast references grouped by distinct attributable people, with every count linked to source evidence."
+  description="Books, apps, tools, and other named podcast references grouped by distinct verified people, with every count linked to source evidence."
 >
   <header class="collection-header">
     <p class="eyebrow">Evidence index / named items</p>
     <h1>Books, apps, and tools people actually name.</h1>
     <p class="lede">
       Compare how many distinct people recommended, used, liked, owned, built, or avoided the
-      same item—then inspect every exact quote behind the count.
+      same item—then inspect every transcript excerpt behind the count.
     </p>
     <div class="collection-totals" aria-label="Current filtered totals">
       <p><strong>{total.toLocaleString()}</strong><span>named items</span></p>
       <p><strong>{occurrenceTotal.toLocaleString()}</strong><span>evidence rows on this page</span></p>
-      <p><strong>Exact</strong><span>speaker + quote required</span></p>
+      <p><strong>Explicit</strong><span>quote verified; attribution disclosed</span></p>
     </div>
   </header>
 
@@ -177,7 +178,9 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
               <p class="quote">“{recommendation.quote}”</p>
               <div class="meta">
                 {[
-                  recommendation.personName,
+                  recommendation.attributionStatus === 'speaker_unverified'
+                    ? 'Speaker unverified'
+                    : recommendation.personName,
                   recommendation.showName,
                   recommendation.episodeTitle,
                   whenLabel(recommendation),
@@ -188,7 +191,7 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
               <p>
                 {(recommendation.deepLinkUrl || recommendation.sourceUrl) && (
                   <>
-                    <a href={recommendation.deepLinkUrl ?? recommendation.sourceUrl} rel="noreferrer" target="_blank">Source</a>
+                    <a href={recommendation.transcriptKind === 'youtube_captions' ? recommendation.deepLinkUrl ?? recommendation.sourceUrl : recommendation.sourceUrl} rel="noreferrer" target="_blank">Source</a>
                     {' · '}
                   </>
                 )}
@@ -216,6 +219,7 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
                 </h2>
                 <p class="role-breakdown">
                   {roleCounts.map(([action, count]) => `${count} ${rolePhrases[action] ?? action}`).join(' · ')}
+                  {group.unverifiedSpeakerCount ? `${roleCounts.length ? ' · ' : ''}${group.unverifiedSpeakerCount} unverified-speaker ${group.unverifiedSpeakerCount === 1 ? 'row' : 'rows'}` : ''}
                 </p>
               </div>
               <p class="people-count">

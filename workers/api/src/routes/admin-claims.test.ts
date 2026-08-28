@@ -21,6 +21,8 @@ const baseClaim: IncomingClaim = {
 
 describe('general claim persistence', () => {
   it('does not invent timestamps for coarse text transcripts', () => {
+    expect(transcriptHasPreciseTimestamps(null)).toBe(false);
+    expect(transcriptHasPreciseTimestamps('none')).toBe(false);
     expect(transcriptHasPreciseTimestamps('rss_text_coarse')).toBe(false);
     expect(transcriptHasPreciseTimestamps('publisher_html_coarse')).toBe(false);
     expect(transcriptHasPreciseTimestamps('publisher_html')).toBe(true);
@@ -60,6 +62,30 @@ describe('general claim persistence', () => {
     };
     expect(requiresEvidencedReference(advice, [])).toBe(false);
     expect(assertionForClaim(advice, [])).toBe(baseClaim.assertion);
+  });
+
+  it('evidence-gates batched recommendation extraction', () => {
+    const recommendation = {
+      ...baseClaim,
+      claimType: 'recommendation',
+      promptVersion: 'extract-recs-v5',
+    };
+    expect(requiresEvidencedReference(recommendation, [])).toBe(true);
+    expect(
+      assertionForClaim(recommendation, [{ kind: 'app', name: 'Cursor', role: 'recommends' }])
+    ).toBe('Recommends Cursor.');
+  });
+
+  it('evidence-gates the focused book extraction pass', () => {
+    const book = {
+      ...baseClaim,
+      claimType: 'recommendation',
+      promptVersion: 'extract-books-v1',
+    };
+    expect(requiresEvidencedReference(book, [])).toBe(true);
+    expect(
+      assertionForClaim(book, [{ kind: 'book', name: 'The Beginning of Infinity', role: 'uses' }])
+    ).toBe('Mentions personal use of The Beginning of Infinity.');
   });
 
   it('keeps deterministic reference assertions for recommendation rows', () => {

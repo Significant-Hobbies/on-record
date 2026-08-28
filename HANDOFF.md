@@ -1,9 +1,61 @@
 # on-record — correctness handoff
 
-Updated 2026-08-28. This document describes the final correctness snapshot and
-its verified production release. The previous 2026-08-26 figures were
+Updated 2026-08-29. This document distinguishes the qualified local release
+candidate from the verified production release. The previous 2026-08-26 figures were
 contaminated by bad RSS/YouTube associations, a wrong Peel feed, seven adjacent
 Lex transcripts, and one synthetic canary. Do not reuse those figures.
+
+## 2026-08-29 qualified release candidate
+
+The qualified v10 store is
+`workers/api/.wrangler/audits/2026-08-27-recommendations-v10/`. It is the local
+  release source. The production snapshot below remains the last verified live
+  state until the release receipt is appended.
+
+- The trusted catalog has 8,395 episode records, but only 1,208 episodes have
+  transcript segments. Those 1,208 episodes contain 30,561 public claims from
+  956 verified people: 28,939 verified-speaker claims and 1,622 explicitly
+  `speaker_unverified` claims.
+- Coverage is uncapped and evidence limited: 1,177 episodes have at least 10
+  claims, 753 have at least 20, and 309 have at least 30. The minimum is 4,
+  average 25.3, and maximum 108 claims per transcript episode.
+- The grouped named-item slice contains 1,144 validated evidence rows across 963
+  groups: 416 books, 149 apps, 50 tools, 57 services, 27 hardware items, 61
+  people, 3 courses, 9 papers, and 191 other named items. Ninety-nine groups have
+  repeated evidence. Counts use distinct verified people; 37 unverified-speaker
+  evidences are disclosed separately and never inflate people counts.
+- The strict named-reference sweep screened 19,981 candidate segments across
+  1,203 episodes and accepted 525 model candidates before the Worker evidence
+  and normalization gates. The subsequent book sweeps screened 3,107 general
+  book candidates plus 301 adjacent answers to explicit book questions. After
+  conservative title validation and canonicalization, public book evidence grew
+  from 133 rows to 539 rows across 416 titles; 63 titles have more than one
+  verified person. Final dry runs for both book queues report zero remaining
+  calls and zero remaining candidates.
+- The final release gate retracted 16 exact-quote duplicates copied from
+  Acquired's canonical Mark Zuckerberg interview into the later Chase Center
+  compilation, plus three repeated sponsor-copy claims from Lenny episodes.
+  The canonical interview evidence remains; sponsor copy is not public data.
+- Integrity checks report zero missing primary-evidence rows, duplicate quote
+  groups, invalid attribution states, verified/unverified person mismatches,
+  and public same-claim cross-kind reference duplicates. Suspicious-name checks
+  reject generic descriptions and non-title book labels.
+- Local web checks return HTTP 200 for home, recommendations, search, and
+  methodology. A grouped item beyond the default page (`Zork`) renders its
+  evidence page with the correct one-distinct-person count. Unverified
+  recommendation responses expose null person ID/name values.
+- Final `pnpm quality` passes formatting, lint, all TypeScript checks, 81 API
+  tests, 228 Python tests, unused-code, complexity, zero-clone duplication,
+  cycle, suppression, and hygiene gates. The Astro production build passes.
+- To inspect this exact local store, run the API from `workers/api` with
+  `pnpm exec wrangler dev --local --ip 127.0.0.1 --port 8787 --persist-to
+  .wrangler/audits/2026-08-27-recommendations-v10 --var
+  ADMIN_TOKEN:local-audit --var ENVIRONMENT:local`, then run the web app from
+  the repository root with
+  `PUBLIC_API_BASE=http://127.0.0.1:8787 pnpm dev:web`.
+- The owner authorized this candidate for production release on 2026-08-29.
+  Migration, data-import, deploy, and public-verification receipts are recorded
+  separately so none of those gates is implied by this local qualification.
 
 ## Executive truth
 
@@ -57,7 +109,37 @@ Lex transcripts, and one synthetic canary. Do not reuse those figures.
   candidate tail, so it is verified local evidence rather than a complete
   corpus answer.
 
-## 2026-08-28 broad-claim working expansion
+## 2026-08-28 local uncapped expansion
+
+The production snapshot above remains unchanged. The active local working
+store is
+`workers/api/.wrangler/audits/2026-08-27-recommendations-v10/`.
+
+- The per-episode ceiling is removed. `--target-claims` now defaults to `0`,
+  meaning every eligible segment, and local broad extraction defaults to the
+  maximum supported batch size of 20.
+- A claim whose excerpt is strong but whose transcript does not establish the
+  speaker can publish as `speaker_unverified`. The public API returns a null
+  person for it, the UI labels the uncertainty, and people and distinct-
+  recommender counts exclude it.
+- Unknown speakers still cannot silently pass as identified people. The
+  pipeline uses one attribution sentinel only to satisfy the claim foreign
+  key; public person routes never expose it.
+- Strong, complete non-reference statements use deterministic
+  `extract-rules-v1` classification over an exact source excerpt. Named
+  recommendations use the batched `extract-recs-v5` path through the local
+  model. Every row is revalidated against the stored segment by the Worker.
+- TBPN and Odd Lots remain excluded from the public product and from default
+  corpus extraction. Explicit episode/show commands can still inspect their
+  retained raw data.
+- Migration `0007_claim_attribution_status.sql` has been applied only to the
+  local v10 working snapshot. No remote migration, production ingest, deploy,
+  commit, or push is part of this in-progress pass.
+
+The completed run remains resumable per segment. Its per-segment checkpoints
+are the evidence that makes a zero-work verification rerun possible.
+
+## 2026-08-28 capped exact-speaker expansion (historical)
 
 The product target is now explicit: every trusted transcribed episode should
 yield at least 10 defensible recommendations, ideas, predictions, opinions,

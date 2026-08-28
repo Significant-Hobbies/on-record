@@ -28,7 +28,7 @@ const reviewDir = join(
 );
 const reviewedPath = join(reviewDir, 'recommendations-sorted.json');
 const rejectedPath = join(reviewDir, 'recommendations-rejected.json');
-const outDir = join(root, 'workers/api/.wrangler/releases/2026-08-28-trusted-v10');
+const outDir = join(root, 'workers/api/.wrangler/releases/2026-08-29-trusted-v10');
 
 for (const required of [d1Path, r2IndexPath, r2BlobsPath, reviewedPath, rejectedPath]) {
   invariant(existsSync(required), `missing trusted release input: ${required}`);
@@ -251,8 +251,8 @@ const namedItemGroups = new Set(
 invariant(foreignKeyViolations.length === 0, 'trusted release has foreign-key violations');
 invariant(integrity === 'ok', `trusted release integrity check failed: ${integrity}`);
 invariant(duplicateQuoteGroups === 0, 'trusted release contains duplicate quote groups');
-invariant(validatedCounts.publishedClaims === 11_624, 'trusted claim count drifted');
-invariant(validatedCounts.publishedReferences === 300, 'trusted reference count drifted');
+invariant(validatedCounts.publishedClaims === 30_561, 'trusted claim count drifted');
+invariant(validatedCounts.publishedReferences === 1314, 'trusted reference count drifted');
 invariant(validatedCounts.transcriptEpisodes === 1208, 'trusted transcript count drifted');
 
 const manifest = {

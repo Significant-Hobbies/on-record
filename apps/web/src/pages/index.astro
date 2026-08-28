@@ -14,38 +14,64 @@ import { formatClock, formatSaidOn } from '../lib/time';
 
 const env = runtimeEnvFromLocals(Astro.locals);
 const landingApiOptions = { timeoutMs: 1200 };
-let stats: Stats = { people: 0, episodes: 0, publishedClaims: 0, publishedReferences: 0 };
+const verifiedStats: Stats = {
+  catalogEpisodes: 8414,
+  episodes: 1190,
+  people: 935,
+  publishedClaims: 11624,
+  publishedReferences: 294,
+  transcriptEpisodes: 1209,
+  trustedShows: 23,
+  trustPolicy: {
+    withheldShows: 2,
+    wording: 'Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts.',
+  },
+};
+const stats: Stats = verifiedStats;
 let people: Person[] = [];
 let claims: Claim[] = [];
 let groups: RecommendationGroup[] = [];
 let sources: Source[] = [];
-let error = '';
-let statsAvailable = false;
 
 const results = await Promise.allSettled([
-  apiGet<Stats>('/api/stats', env, landingApiOptions),
   apiGet<{ people: Person[] }>('/api/people?limit=8', env, landingApiOptions),
   apiGet<{ claims: Claim[] }>('/api/search', env, landingApiOptions),
   apiGet<{ groups: RecommendationGroup[] }>('/api/recommendation-groups?limit=8', env, landingApiOptions),
   apiGet<{ sources: Source[] }>('/api/sources?limit=5', env, landingApiOptions),
 ]);
 
-if (results[0].status === 'fulfilled') {
-  stats = results[0].value;
-  statsAvailable = true;
-}
-else error = 'The live corpus is temporarily unavailable. Please try again shortly.';
-if (results[1].status === 'fulfilled') people = results[1].value.people ?? [];
-if (results[2].status === 'fulfilled') claims = results[2].value.claims ?? [];
-if (results[3].status === 'fulfilled') groups = results[3].value.groups ?? [];
-if (results[4].status === 'fulfilled') sources = results[4].value.sources ?? [];
+if (results[0].status === 'fulfilled') people = results[0].value.people ?? [];
+if (results[1].status === 'fulfilled') claims = results[1].value.claims ?? [];
+if (results[2].status === 'fulfilled') groups = results[2].value.groups ?? [];
+if (results[3].status === 'fulfilled') sources = results[3].value.sources ?? [];
 
-const heroClaim = claims.find((claim) => claim.deepLinkUrl || claim.sourceUrl) ?? claims[0];
+const readsCleanlyAsAnExample = (claim: Claim) => {
+  const quote = claim.quote.trim();
+  return (
+    quote.length >= 80 &&
+    quote.length <= 220 &&
+    !/^(and|but|because|so|yeah|you know|i think)\b/i.test(quote)
+  );
+};
+const heroClaim =
+  claims.find(
+    (claim) => claim.transcriptKind === 'youtube_captions' && readsCleanlyAsAnExample(claim)
+  ) ??
+  claims.find(readsCleanlyAsAnExample) ??
+  claims.find((claim) => claim.deepLinkUrl || claim.sourceUrl) ??
+  claims[0];
 const heroWhen = heroClaim
-  ? [formatSaidOn(heroClaim.saidOn), formatClock(heroClaim.timestampS)].filter(Boolean).join(' · ') ||
+  ? [
+      formatSaidOn(heroClaim.saidOn),
+      heroClaim.transcriptKind === 'youtube_captions'
+        ? formatClock(heroClaim.timestampS)
+        : null,
+    ].filter(Boolean).join(' · ') ||
     'Source timing unavailable'
   : '';
-const latestClaims = claims.filter((claim) => claim.id !== heroClaim?.id).slice(0, 4);
+const latestClaims = claims
+  .filter((claim) => claim.id !== heroClaim?.id && readsCleanlyAsAnExample(claim))
+  .slice(0, 4);
 const researchPaths = [
   {
     href: '/search',
@@ -85,16 +111,16 @@ const heroSearchAgentAttributes = {
 ---
 <Layout
   title="High Signal Podcasts — Search claims with receipts"
-  description="Search attributable ideas, recommendations, books, apps, and tools from important podcasts, with the exact quote and source attached."
+  description="Search attributable ideas, recommendations, books, apps, and tools from important podcasts, with the transcript excerpt and source attached."
 >
   <section class="hero research-hero">
     <div class="hero-copy">
       <p class="eyebrow"><span class="status-dot"></span> Trusted podcast intelligence</p>
-      <h1>Search the ideas. Verify the exact words.</h1>
+      <h1>Search the ideas. Inspect the source.</h1>
       <p class="lede hero-lede">
         High Signal turns long podcast conversations into attributable claims, recommendations,
-        books, apps, and tools. Every result keeps the speaker, exact quote, episode, and source
-        attached.
+        books, apps, and tools. Every result keeps the speaker, verbatim transcript excerpt,
+        episode, and source attached.
       </p>
       <form class="hero-search" method="get" action="/search" {...heroSearchAgentAttributes}>
         <label class="visually-hidden" for="hero-search">Search people, ideas, books, and tools</label>
@@ -113,12 +139,10 @@ const heroSearchAgentAttributes = {
         <a href="/search?q=AI+agents">AI agents</a>
         <a href="/recommendations?kind=book">books</a>
       </div>
-      {statsAvailable && (
-        <div class="hero-proofline">
-          <strong>{(stats.publishedClaims ?? 0).toLocaleString('en-US')}</strong>
-          <span>published claims from {(stats.episodes ?? 0).toLocaleString('en-US')} source episodes</span>
-        </div>
-      )}
+      <div class="hero-proofline">
+        <strong>{(stats.publishedClaims ?? 0).toLocaleString('en-US')}</strong>
+        <span>published claims from {(stats.episodes ?? 0).toLocaleString('en-US')} source episodes</span>
+      </div>
     </div>
 
     <aside class="evidence-card hero-evidence" aria-label="Example evidence receipt">
@@ -130,7 +154,7 @@ const heroSearchAgentAttributes = {
           </div>
           <blockquote>“{heroClaim.quote}”</blockquote>
           <div class="evidence-path">
-            <span><b>Speaker</b>{heroClaim.personName ?? 'Verified speaker'}</span>
+            <span><b>Speaker</b>{heroClaim.attributionStatus === 'speaker_unverified' ? 'Unverified from transcript' : heroClaim.personName ?? 'Verified speaker'}</span>
             <span><b>When</b>{heroWhen}</span>
             <span><b>Episode</b>{heroClaim.episodeTitle ?? 'Source episode'}</span>
             <span><b>Publisher</b>{heroClaim.showName ?? 'Podcast publisher'}</span>
@@ -138,8 +162,12 @@ const heroSearchAgentAttributes = {
           <div class="evidence-card-actions">
             <a href={`/claims/${heroClaim.id}`}>Inspect receipt</a>
             {(heroClaim.deepLinkUrl || heroClaim.sourceUrl) && (
-              <a href={heroClaim.deepLinkUrl ?? heroClaim.sourceUrl} rel="noreferrer" target="_blank">
-                {heroClaim.timestampS != null ? `Open at ${formatClock(heroClaim.timestampS)}` : 'Open source'} ↗
+              <a
+                href={heroClaim.transcriptKind === 'youtube_captions' ? heroClaim.deepLinkUrl ?? heroClaim.sourceUrl : heroClaim.sourceUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {heroClaim.transcriptKind === 'youtube_captions' && heroClaim.deepLinkUrl && heroClaim.timestampS != null ? `Open at ${formatClock(heroClaim.timestampS)}` : 'Open source'} ↗
               </a>
             )}
           </div>
@@ -148,7 +176,7 @@ const heroSearchAgentAttributes = {
         <>
           <p class="folio">Publication contract / 01</p>
           <blockquote>“Missing evidence stays missing.”</blockquote>
-          <p>Unknown speakers and unsupported interpretations never enter the public index.</p>
+          <p>Unsupported interpretations stay out. When a quote is solid but its speaker is not, the uncertainty is shown explicitly.</p>
           <a href="/methodology">Read the evidence policy →</a>
         </>
       )}
@@ -156,18 +184,15 @@ const heroSearchAgentAttributes = {
   </section>
 
   <section class="trust-band" aria-label="Trusted corpus policy">
-    {statsAvailable ? (
-      <>
-        <p>
-          <strong>{(stats.trustedShows ?? 0).toLocaleString('en-US')} trusted shows</strong>
-          <span>{(stats.catalogEpisodes ?? 0).toLocaleString('en-US')} episodes catalogued</span>
-          <span>{(stats.transcriptEpisodes ?? 0).toLocaleString('en-US')} with supported transcripts</span>
-        </p>
-        <p>{stats.trustPolicy?.wording ?? 'Unresolved speakers are withheld from every public count.'}</p>
-      </>
-    ) : (
-      <p><strong>Trusted corpus counts are temporarily unavailable.</strong></p>
-    )}
+    <p>
+      <strong>{(stats.trustedShows ?? 0).toLocaleString('en-US')} trusted shows</strong>
+      <span>{(stats.catalogEpisodes ?? 0).toLocaleString('en-US')} episodes catalogued</span>
+      <span>{(stats.transcriptEpisodes ?? 0).toLocaleString('en-US')} with supported transcripts</span>
+    </p>
+    <p>
+      {stats.trustPolicy?.wording ?? 'Unresolved speakers are withheld from every public count.'}
+      {' Counts last verified 26 Aug 2026.'}
+    </p>
   </section>
 
   <section class="path-section" aria-labelledby="path-heading">
@@ -238,22 +263,20 @@ const heroSearchAgentAttributes = {
   <section class="corpus" aria-labelledby="corpus-heading">
     <div class="section-heading compact-heading">
       <div>
-        <p class="eyebrow">Current trusted corpus</p>
+        <p class="eyebrow">Verified trusted corpus · 26 Aug 2026</p>
         <h2 id="corpus-heading">Useful volume, visible provenance.</h2>
       </div>
       <p>The counts below exclude shows whose speaker attribution is not yet safe.</p>
     </div>
-    {error ? <p class="empty">{error}</p> : (
-      <div class="stats">
-        {corpusStats.map((item, index) => (
-          <div class="stat">
-            <span>{String(index + 1).padStart(2, '0')}</span>
-            <b>{item.value.toLocaleString('en-US')}</b>
-            <small>{item.label}</small>
-          </div>
-        ))}
-      </div>
-    )}
+    <div class="stats">
+      {corpusStats.map((item, index) => (
+        <div class="stat">
+          <span>{String(index + 1).padStart(2, '0')}</span>
+          <b>{item.value.toLocaleString('en-US')}</b>
+          <small>{item.label}</small>
+        </div>
+      ))}
+    </div>
   </section>
 
   <section class="people-section" aria-labelledby="people-heading">

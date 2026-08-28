@@ -12,11 +12,28 @@ from typing import Any
 import httpx
 
 from .api_client import ApiClient
+from .attribution import UNVERIFIED_SPEAKER_SLUG, attribution_status
 from .attributions import confidence_for, judge
 from .config import Settings
 from .config import settings as load_settings
-from .extract.claims import BATCH_PROMPT_VERSION, extract_segment, extract_segments_batch, is_local
-from .extract.triage import claim_candidate_score, triage_segment
+from .extract.claims import (
+    BATCH_BOOK_ANSWERS_PROMPT_VERSION,
+    BATCH_BOOKS_PROMPT_VERSION,
+    BATCH_PROMPT_VERSION,
+    BATCH_RECOMMENDATIONS_PROMPT_VERSION,
+    extract_segment,
+    extract_segments_batch,
+    is_local,
+)
+from .extract.triage import (
+    book_answer_candidate,
+    claim_candidate_score,
+    claim_excerpt,
+    deterministic_claim_type,
+    deterministic_excerpt_is_complete,
+    triage_book_segment,
+    triage_segment,
+)
 from .guest_recovery import explicit_guest_names
 from .identify import UNKNOWN, identify_speakers
 from .match import guests_from_text, merge_discovery_items, merge_video, video_id_from_source_url
@@ -25,8 +42,8 @@ from .seed.people import PEOPLE
 from .seed.shows import SHOWS
 from .seed.topics import TOPICS
 from .segment import cues_to_segments
-from .speaker_recovery import recover_self_identified_speakers
 from .sources import podcast_index, rss_feed, youtube_api, youtube_rss
+from .speaker_recovery import recover_self_identified_speakers
 from .transcripts.acquired import TRANSCRIPT_KIND as ACQUIRED_PUBLISHER_HTML
 from .transcripts.acquired import (
     PublisherSourceUnavailable as AcquiredPublisherSourceUnavailable,
@@ -99,6 +116,17 @@ def load_roster(api: ApiClient) -> dict[str, str]:
     ~2,500 D1 round-trips before a single claim was read.
     """
     return {str(p["slug"]): str(p["id"]) for p in api.list_people()}
+
+
+def load_extraction_roster(api: ApiClient) -> dict[str, str]:
+    """Load the existing roster and seed only the attribution sentinel if needed."""
+    people_map = load_roster(api)
+    if UNVERIFIED_SPEAKER_SLUG in people_map:
+        return people_map
+    sentinel = next(person for person in PEOPLE if person["slug"] == UNVERIFIED_SPEAKER_SLUG)
+    [person_id] = api.upsert_people([sentinel])
+    people_map[UNVERIFIED_SPEAKER_SLUG] = person_id
+    return people_map
 
 
 def seed_roster(api: ApiClient) -> tuple[dict[str, str], dict[str, str]]:
@@ -691,6 +719,7 @@ def attach_person_ids(
             continue
         row = dict(claim)
         row["personId"] = person_id
+        row["attributionStatus"] = attribution_status(str(claim["speakerRaw"]))
         out.append(row)
     return out
 
@@ -714,12 +743,19 @@ def segment_action(
     focus: str,
     prompt_version: str,
 ) -> str:
-    if not force and segment.get("id") in already:
+    segment_id = str(segment.get("id") or "")
+    if not force and focus not in {"recs", "books", "book_answers"} and segment_id in already:
         return "extracted"
-    attempt = (str(segment.get("id") or ""), prompt_version, focus)
-    if not force and attempt in attempted:
+    attempt = (segment_id, prompt_version, focus)
+    recommendation_attempted = focus == "recs" and any(
+        attempted_segment == segment_id and attempted_focus == focus
+        for attempted_segment, _attempted_prompt, attempted_focus in attempted
+    )
+    if not force and (attempt in attempted or recommendation_attempted):
         return "attempted"
-    if segment.get("speakerHint") == UNKNOWN:
+    if focus == "books":
+        return triage_book_segment(str(segment.get("text") or ""))
+    if focus == "book_answers":
         return "skip"
     reason = triage_segment(str(segment.get("text") or ""))
     if focus == "recs" and reason != "rec":
@@ -743,6 +779,8 @@ def extract_one_segment(
     if known:
         for claim in accepted:
             claim["speakerRaw"] = str(known)
+            if known == UNVERIFIED_SPEAKER_SLUG:
+                claim["speakerConfidence"] = 0.0
     for claim in accepted:
         claim["segmentId"] = segment["id"]
         claim["pipelineVersion"] = cfg.pipeline_version
@@ -762,6 +800,17 @@ def extract_one_segment(
 
 def claims_for_focus(claims: list[dict[str, Any]], focus: str) -> list[dict[str, Any]]:
     """A recommendations run persists only claims with surviving evidence."""
+    if focus in {"books", "book_answers"}:
+        out = []
+        for claim in claims:
+            references = [
+                reference
+                for reference in claim.get("references") or []
+                if reference.get("kind") == "book"
+            ]
+            if references:
+                out.append({**claim, "references": references})
+        return out
     if focus != "recs":
         return claims
     return [claim for claim in claims if claim.get("references")]
@@ -777,8 +826,10 @@ class ExtractOpts:
     force: bool = False
     focus: str = "all"
     limit: int = 0
-    batch_size: int = 0
-    target_claims: int = 10
+    skip_episodes: int = 0
+    batch_size: int = 20
+    target_claims: int = 0
+    rules_only: bool = False
 
 
 @dataclass
@@ -809,12 +860,14 @@ def extract_one_batch(
     cfg: Settings,
     people_map: dict[str, str],
     segments: list[dict[str, Any]],
+    focus: str = "all",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    accepted, rejected, run = extract_segments_batch(cfg, segments)
+    accepted, rejected, run = extract_segments_batch(cfg, segments, focus)
+    prompt_version = str(run.get("promptVersion") or BATCH_PROMPT_VERSION)
     for claim in accepted:
         claim["pipelineVersion"] = cfg.pipeline_version
         claim["model"] = run.get("model") or cfg.extract_model
-        claim["promptVersion"] = BATCH_PROMPT_VERSION
+        claim["promptVersion"] = prompt_version
     LOGGER.info(
         "batch segments=%s accepted=%s rejected=%s",
         len(segments),
@@ -822,6 +875,36 @@ def extract_one_batch(
         len(rejected),
     )
     return attach_person_ids(accepted, people_map), run
+
+
+def deterministic_claim_for_segment(segment: dict[str, Any]) -> dict[str, Any] | None:
+    text = str(segment.get("text") or "")
+    if deterministic_claim_type(text) is None:
+        return None
+    speaker = str(segment.get("speakerHint") or "")
+    quote = claim_excerpt(text)
+    if not deterministic_excerpt_is_complete(quote):
+        return None
+    claim_type = deterministic_claim_type(quote)
+    if claim_type is None:
+        return None
+    return {
+        "assertion": quote,
+        "attributionStatus": attribution_status(speaker),
+        "claimType": claim_type,
+        "extractionConfidence": 0.9,
+        "model": "deterministic-v1",
+        "personId": "",
+        "pipelineVersion": "claims-v1",
+        "promptVersion": "extract-rules-v1",
+        "quote": quote,
+        "references": [],
+        "segmentId": str(segment["id"]),
+        "speakerConfidence": 0.0 if speaker == UNVERIFIED_SPEAKER_SLUG else 1.0,
+        "speakerRaw": speaker,
+        "stance": None,
+        "topics": [],
+    }
 
 
 def claims_are_near_duplicates(left: dict[str, Any], right: dict[str, Any]) -> bool:
@@ -855,12 +938,24 @@ def _batch_candidates(
 ) -> tuple[list[dict[str, Any]], int]:
     candidates: list[dict[str, Any]] = []
     skipped = 0
-    for segment in segments:
+    for index, segment in enumerate(segments):
         action = _segment_action(context, segment)
+        candidate = segment
+        if context.opts.focus in {"books", "book_answers"} and action != "attempted" and index > 0:
+            previous = segments[index - 1]
+            if book_answer_candidate(
+                str(previous.get("text") or ""), str(segment.get("text") or "")
+            ):
+                if action == "skip":
+                    action = "book"
+                candidate = {
+                    **segment,
+                    "bookQuestion": str(previous.get("text") or "")[-500:],
+                }
         if action in {"attempted", "extracted", "skip"}:
             skipped += 1
             continue
-        candidates.append(segment)
+        candidates.append(candidate)
     candidates.sort(
         key=lambda segment: (
             -claim_candidate_score(str(segment.get("text") or "")),
@@ -916,7 +1011,7 @@ def _batch_runs(
                 "focus": context.opts.focus,
                 "latencyMs": run.get("latencyMs") if index == 0 else None,
                 "model": run.get("model") or context.cfg.extract_model,
-                "promptVersion": BATCH_PROMPT_VERSION,
+                "promptVersion": run.get("promptVersion") or context.prompt_version,
                 "reason": (
                     "ok"
                     if accepted
@@ -945,10 +1040,33 @@ def _extract_one_candidate_batch(
     published: int,
 ) -> tuple[list[dict[str, Any]], int] | None:
     try:
-        raw, run = extract_one_batch(context.cfg, context.people_map, batch)
+        raw, run = extract_one_batch(
+            context.cfg,
+            context.people_map,
+            batch,
+            context.opts.focus,
+        )
     except httpx.HTTPError as exc:
         LOGGER.warning("batch extract failed: %s", exc)
         return None
+    raw = claims_for_focus(raw, context.opts.focus)
+    if (
+        context.opts.focus in {"recs", "books", "book_answers"}
+        and not raw
+        and run.get("reason") == "ok"
+    ):
+        run["reason"] = "no_evidenced_reference"
+    return _post_candidate_claims(context, batch, raw, run, accepted_claims, published)
+
+
+def _post_candidate_claims(
+    context: EpisodeExtractContext,
+    batch: list[dict[str, Any]],
+    raw: list[dict[str, Any]],
+    run: dict[str, Any],
+    accepted_claims: list[dict[str, Any]],
+    published: int,
+) -> tuple[list[dict[str, Any]], int]:
     posted, deferred = _claims_within_target(
         raw, accepted_claims, published, context.opts.target_claims
     )
@@ -960,8 +1078,37 @@ def _extract_one_candidate_batch(
         for claim, outcome in zip(posted, outcomes, strict=False)
         if outcome.get("id") and outcome.get("reviewStatus") != "rejected"
     ]
-    newly_published = sum(1 for outcome in outcomes if outcome.get("reviewStatus") == "published")
+    newly_published = sum(
+        1
+        for outcome in outcomes
+        if outcome.get("reviewStatus") == "published" and outcome.get("reason") != "duplicate"
+    )
     return saved, newly_published
+
+
+def _extract_one_deterministic_batch(
+    context: EpisodeExtractContext,
+    batch: list[dict[str, Any]],
+    accepted_claims: list[dict[str, Any]],
+    published: int,
+) -> tuple[list[dict[str, Any]], int]:
+    raw = [
+        claim
+        for segment in batch
+        if (claim := deterministic_claim_for_segment(segment)) is not None
+    ]
+    for claim in raw:
+        claim["personId"] = context.people_map.get(str(claim["speakerRaw"]), "")
+        claim["pipelineVersion"] = context.cfg.pipeline_version
+    raw = [claim for claim in raw if claim["personId"]]
+    run = {
+        "model": "deterministic-v1",
+        "promptVersion": "extract-rules-v1",
+        "reason": "deterministic_strong_signal",
+        "requestJson": {"segmentIds": [str(segment["id"]) for segment in batch]},
+        "responseJson": None,
+    }
+    return _post_candidate_claims(context, batch, raw, run, accepted_claims, published)
 
 
 def _extract_episode_batches(
@@ -973,10 +1120,32 @@ def _extract_episode_batches(
     published = context.published_claims
     llm_calls = 0
     accepted_claims: list[dict[str, Any]] = []
-    for start in range(0, len(candidates), batch_size):
+    deterministic = (
+        [segment for segment in candidates if deterministic_claim_for_segment(segment) is not None]
+        if context.opts.focus == "all"
+        else []
+    )
+    model_candidates = (
+        [segment for segment in candidates if deterministic_claim_for_segment(segment) is None]
+        if context.opts.focus == "all"
+        else candidates
+    )
+    for start in range(0, len(deterministic), batch_size):
         if context.opts.target_claims > 0 and published >= context.opts.target_claims:
             break
-        batch = candidates[start : start + batch_size]
+        batch = deterministic[start : start + batch_size]
+        if context.opts.dry_run:
+            continue
+        result = _extract_one_deterministic_batch(context, batch, accepted_claims, published)
+        saved, newly_published = result
+        accepted_claims.extend(saved)
+        extracted += len(saved)
+        published += newly_published
+    active_model_candidates = [] if context.opts.rules_only else model_candidates
+    for start in range(0, len(active_model_candidates), batch_size):
+        if context.opts.target_claims > 0 and published >= context.opts.target_claims:
+            break
+        batch = active_model_candidates[start : start + batch_size]
         llm_calls += 1
         if context.opts.dry_run:
             continue
@@ -988,10 +1157,11 @@ def _extract_episode_batches(
         extracted += len(saved)
         published += newly_published
     LOGGER.info(
-        "episode %s batch_calls=%s candidates=%s skipped=%s new_claims=%s published_total=%s",
+        "episode %s batch_calls=%s deterministic=%s model_candidates=%s skipped=%s new_claims=%s published_total=%s",
         context.episode["id"],
         llm_calls,
-        len(candidates),
+        len(deterministic),
+        len(model_candidates),
         skipped,
         extracted,
         published,
@@ -1029,7 +1199,7 @@ def _extract_episode_segments(
             LOGGER.warning("segment %s extract failed: %s", segment["idx"], exc)
             continue
         posted = claims_for_focus(posted, context.opts.focus)
-        if context.opts.focus == "recs":
+        if context.opts.focus in {"recs", "books", "book_answers"}:
             run["accepted"] = bool(posted)
             if not posted and run.get("reason") == "ok":
                 run["reason"] = "no_evidenced_reference"
@@ -1056,8 +1226,16 @@ def _extract_episode(
 ) -> tuple[int, int, int]:
     detail = api.get_episode(episode["id"])
     prompt_version = (
-        BATCH_PROMPT_VERSION
-        if opts.batch_size > 1 and opts.focus == "all"
+        (
+            BATCH_RECOMMENDATIONS_PROMPT_VERSION
+            if opts.focus == "recs"
+            else BATCH_BOOKS_PROMPT_VERSION
+            if opts.focus == "books"
+            else BATCH_BOOK_ANSWERS_PROMPT_VERSION
+            if opts.focus == "book_answers"
+            else BATCH_PROMPT_VERSION
+        )
+        if opts.batch_size > 1
         else str(getattr(cfg, "prompt_version", "extract-v4"))
     )
     already = set(detail.get("extractedSegmentIds") or [])
@@ -1073,15 +1251,18 @@ def _extract_episode(
     segments = _slice_segments(
         list(detail.get("segments") or []), opts.skip_segments, opts.max_segments
     )
-    has_identifiable_segment = any(
-        str(segment.get("speakerHint") or "") not in {"", UNKNOWN} for segment in segments
-    )
-    if not guests and not has_identifiable_segment:
-        # Nobody identifiable is on this episode, so every claim would be
-        # attributed to "unknown" and never published. Exact publisher
-        # segment identities are sufficient even when RSS omitted the roster.
-        LOGGER.info("episode %s skipped: no identifiable speaker", episode["id"])
-        return 0, 0, 0
+    # Unknown labels describe an attribution limitation, not an absence of
+    # evidence. Route them through a non-person sentinel so the API can publish
+    # verbatim evidence without inventing a speaker or inflating person counts.
+    segments = [
+        {
+            **segment,
+            "speakerHint": UNVERIFIED_SPEAKER_SLUG,
+        }
+        if str(segment.get("speakerHint") or "") in {"", UNKNOWN}
+        else segment
+        for segment in segments
+    ]
     context = EpisodeExtractContext(
         api=api,
         cfg=cfg,
@@ -1094,7 +1275,7 @@ def _extract_episode(
         guests=guests,
         published_claims=int(detail.get("publishedClaimCount") or 0),
     )
-    if opts.batch_size > 1 and opts.focus == "all":
+    if opts.batch_size > 1:
         return _extract_episode_batches(context, segments)
     return _extract_episode_segments(context, segments)
 
@@ -1103,6 +1284,7 @@ def _extract_episode(
 # reaches `extracted`. Selecting on status alone stranded 185 of 250 segments
 # in episodes that earlier runs had capped part way through.
 EXTRACTABLE_STATUSES = ("segmented", "extracted", "published")
+WITHHELD_PUBLIC_SHOW_SLUGS = {"odd-lots", "tbpn"}
 
 
 def _extract_targets(
@@ -1110,11 +1292,19 @@ def _extract_targets(
 ) -> list[dict[str, Any]]:
     if episode_id:
         return [api.get_episode(episode_id)["episode"]]
-    return [
+    rows = [
         row
         for status in EXTRACTABLE_STATUSES
         for row in api.list_episodes(status=status, show_id=show_id)
     ]
+    if show_id:
+        return rows
+    withheld_show_ids = {
+        str(show["id"])
+        for show in api.list_shows()
+        if str(show.get("slug") or "") in WITHHELD_PUBLIC_SHOW_SLUGS
+    }
+    return [row for row in rows if str(row.get("showId") or "") not in withheld_show_ids]
 
 
 def run_extract(
@@ -1127,6 +1317,8 @@ def run_extract(
         raise SystemExit("AI_API_KEY is required for extract")
     extracted = 0
     targets = _extract_targets(api, opts.episode_id, opts.show_id)
+    if opts.skip_episodes > 0:
+        targets = targets[opts.skip_episodes :]
     if opts.limit > 0:
         targets = targets[: opts.limit]
     for episode in targets:
@@ -1560,7 +1752,7 @@ def seed_maps_for_stage(
     api: ApiClient, stage: str, dry_run: bool
 ) -> tuple[dict[str, str], dict[str, str]]:
     if stage == "extract" and not dry_run:
-        return load_roster(api), {}
+        return load_extraction_roster(api), {}
     if stage not in {"all", "discover", "extract"}:
         return {}, {}
     if not dry_run:
@@ -1602,18 +1794,29 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-segments", type=int, default=0)
     parser.add_argument("--skip-segments", type=int, default=0)
     parser.add_argument("--limit", type=int, default=0, help="cap how many items a stage handles")
-    parser.add_argument("--focus", choices=["all", "recs"], default="all")
+    parser.add_argument(
+        "--skip-episodes",
+        type=int,
+        default=0,
+        help="skip the first matching episodes during extraction for disjoint local workers",
+    )
+    parser.add_argument("--focus", choices=["all", "recs", "books", "book_answers"], default="all")
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=0,
-        help="extract broad claims from 2-20 attributed candidate segments per local model call",
+        default=20,
+        help="extract broad claims from 2-20 candidate segments per local model call",
     )
     parser.add_argument(
         "--target-claims",
         type=int,
-        default=10,
-        help="stop broad batch extraction after reaching this many new claims per episode",
+        default=0,
+        help="optional per-episode claim ceiling; 0 extracts every eligible segment",
+    )
+    parser.add_argument(
+        "--rules-only",
+        action="store_true",
+        help="publish strong deterministic claims now and leave ambiguous candidates unattempted",
     )
     parser.add_argument(
         "--whisper",
@@ -1681,8 +1884,10 @@ def main(argv: list[str] | None = None) -> int:
                     max_segments=args.max_segments,
                     skip_segments=args.skip_segments,
                     limit=args.limit,
+                    skip_episodes=args.skip_episodes,
                     batch_size=args.batch_size,
                     target_claims=args.target_claims,
+                    rules_only=args.rules_only,
                 ),
             )
         if not args.dry_run:

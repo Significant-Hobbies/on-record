@@ -12739,5 +12739,12 @@
   "aliases": [],
   "matchAliases": [],
   "source": "curated-host"
+ },
+ {
+  "slug": "speaker-unverified",
+  "name": "Speaker unverified",
+  "aliases": [],
+  "matchAliases": [],
+  "source": "system"
  }
 ]

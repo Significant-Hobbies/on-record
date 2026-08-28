@@ -5,7 +5,10 @@ import { formatClock, whenLabel } from '../lib/time';
 type Props = { claim: Claim; index?: number; compact?: boolean };
 const { claim, index, compact = false } = Astro.props;
 const when = whenLabel(claim);
-const sourceHref = claim.deepLinkUrl ?? claim.sourceUrl;
+const sourceHref =
+  claim.transcriptKind === 'youtube_captions'
+    ? claim.deepLinkUrl ?? claim.sourceUrl
+    : claim.sourceUrl;
 const claimType = claim.claimType.replaceAll('_', ' ');
 ---
 <article class:list={['claim-card', { compact }]}>
@@ -19,7 +22,12 @@ const claimType = claim.claimType.replaceAll('_', ' ');
   <h3><a href={`/claims/${claim.id}`}>{claim.assertion}</a></h3>
   <blockquote>“{claim.quote}”</blockquote>
   <dl class="claim-receipt">
-    {claim.personName && (
+    {claim.attributionStatus === 'speaker_unverified' ? (
+      <div>
+        <dt>Speaker</dt>
+        <dd>Not verified from transcript</dd>
+      </div>
+    ) : claim.personName && (
       <div>
         <dt>Speaker</dt>
         <dd>
@@ -41,7 +49,7 @@ const claimType = claim.claimType.replaceAll('_', ' ');
     <a href={`/claims/${claim.id}`}>Full receipt</a>
     {sourceHref && (
       <a href={sourceHref} rel="noreferrer" target="_blank">
-        {claim.timestampS != null ? `Open at ${formatClock(claim.timestampS)}` : 'Open source'} ↗
+        {claim.transcriptKind === 'youtube_captions' && claim.deepLinkUrl && claim.timestampS != null ? `Open at ${formatClock(claim.timestampS)}` : 'Open source'} ↗
       </a>
     )}
   </footer>

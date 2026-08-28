@@ -1,6 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { requireAdmin } from '../auth';
+import { isClaimType } from '../claim-types';
 import { db, schema } from '../db';
 import type { Env } from '../env';
 import { newId } from '../ids';
@@ -259,6 +260,19 @@ adminRoute.post('/claims/:id/status', async (c) => {
         .run();
     }
   }
+  return c.json({ ok: true });
+});
+
+adminRoute.post('/claims/:id/classification', async (c) => {
+  const id = c.req.param('id');
+  const body = (await c.req.json()) as { claimType?: string };
+  if (!(body.claimType && isClaimType(body.claimType))) {
+    return c.json({ error: 'bad_claim_type' }, 400);
+  }
+  await db(c.env.DB)
+    .update(schema.claims)
+    .set({ claimType: body.claimType })
+    .where(eq(schema.claims.id, id));
   return c.json({ ok: true });
 });
 

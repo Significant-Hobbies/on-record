@@ -4,7 +4,8 @@ Source-backed index of what notable people have publicly said.
 
 The product answers: what does this person believe, recommend, predict, or
 disagree with — and how has that changed? Every published result is a claim
-with a verbatim excerpt, speaker, date, timestamp, and source link.
+with a verbatim transcript excerpt, speaker, date, and source link. A timed
+YouTube link is included only when the excerpt came from that video's captions.
 
 This is not a transcript search engine. The primary unit is the claim.
 

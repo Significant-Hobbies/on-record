@@ -1,4 +1,49 @@
-from on_record_ingest.extract.triage import claim_candidate_score, claim_excerpt, triage_segment
+from on_record_ingest.extract.triage import (
+    book_answer_candidate,
+    book_excerpt,
+    claim_candidate_score,
+    claim_excerpt,
+    deterministic_excerpt_is_complete,
+    triage_book_segment,
+    triage_segment,
+)
+
+
+def test_book_focus_keeps_explicit_reading_and_preference_actions():
+    assert triage_book_segment("I've read The Beginning of Infinity three times now.") == "book"
+    assert (
+        triage_book_segment(
+            "One book I really loved was Thinking in Systems because it changed how I plan."
+        )
+        == "book"
+    )
+    assert triage_book_segment("The guest mentioned The Beginning of Infinity in passing.") == (
+        "skip"
+    )
+
+
+def test_book_excerpt_centers_the_exact_book_action():
+    text = (
+        "This is unrelated scene-setting. "
+        "I'm reading The Power Broker because its account of institutions is extraordinary. "
+        "This is unrelated closing narration."
+    )
+    excerpt = book_excerpt(text)
+    assert excerpt in text
+    assert excerpt.startswith("I'm reading The Power Broker")
+    assert "closing narration" not in excerpt
+
+
+def test_book_answer_candidate_requires_an_explicit_question_and_title_shape():
+    question = "What are two or three books that you recommend most to other people?"
+    assert book_answer_candidate(
+        question,
+        "The first is The Power Broker by Robert Caro, which changed how I understand cities.",
+    )
+    assert not book_answer_candidate(
+        "What product do you recommend?",
+        "The first is The Power Broker by Robert Caro, which changed how I understand cities.",
+    )
 
 
 def test_keeps_personal_stack_as_a_recommendation_candidate():
@@ -119,6 +164,25 @@ def test_candidate_score_prefers_substantive_supported_positions_over_fragments(
             "And I would argue that it is not yet a platform, but it is important."
         )
         == 0
+    )
+
+
+def test_deterministic_excerpt_rejects_fragments_and_interview_meta():
+    assert deterministic_excerpt_is_complete(
+        "I think direct customer contact is the durable advantage because it shortens "
+        "the learning loop for every product decision."
+    )
+    assert not deterministic_excerpt_is_complete(
+        "Because if the instructions are precise, the whole process is already scripted "
+        "for you and there is no ambiguity."
+    )
+    assert not deterministic_excerpt_is_complete(
+        "The interesting part, I don't know if it was where your question was going, "
+        "is that those labs are managing researchers."
+    )
+    assert not deterministic_excerpt_is_complete(
+        "heavily cloud code is used throughout the company and I think that gives the "
+        "team a better view of where the product breaks."
     )
 
 

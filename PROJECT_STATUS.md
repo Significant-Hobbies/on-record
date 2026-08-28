@@ -1,6 +1,6 @@
 # on-record — PROJECT STATUS
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 ## Why / What
 
@@ -15,7 +15,7 @@ markets.
 
 **IN scope (public beta):** 25-show raw catalog, 23-show trusted public index,
 publisher/RSS transcripts,
-claim extraction with verbatim-quote and exact-speaker gates, manually reviewed
+claim extraction with verbatim-quote and explicit-attribution gates, manually reviewed
 recommendations, D1 FTS5 search, and public API.
 
 **OUT of scope (V1):** Whisper, position clustering, agreement graphs,
@@ -65,6 +65,13 @@ review-report.
   episodes, and 1,209 transcript episodes. Of those, 1,092 (90.3%) contain at
   least 10 claims and 19 contain none. API and web run commit `10a863b6` at
   100% Cloudflare traffic.
+- 2026-08-29 — Qualified an uncapped production release candidate: 30,561
+  public claims across 1,208 transcript episodes, 956
+  verified people, and 1,144 named-reference evidences in 963 grouped items.
+  The book slice now contains 539 evidences across 416 canonical titles, 63 of
+  them supported by more than one verified person. Both focused book queues
+  rerun at zero remaining candidates; corpus integrity and public grouped-
+  reference duplicate checks are clean.
 
 ## Products
 
@@ -80,8 +87,8 @@ review-report.
   claims, people, sources, recommendations, search, and statistics without
   deleting the retained raw records
 - SSR site reads live D1 via the API; ingest does not rebuild the web Worker
-- Exact quotes, identified speakers, source episodes, and timestamps when the
-  publisher provides usable timing
+- Exact transcript excerpts, explicit speaker-attribution status, source
+  episodes, and timestamps when the publisher provides usable timing
 
 ## Todo / Planned / Deferred / Blocked
 
@@ -89,12 +96,12 @@ Tracked in GitHub Issues. Continue transcript and speaker coverage beyond the
 verified beta slice; cataloged shows with no supported evidence remain pending
 rather than being presented as fully analyzed.
 
-The trusted-product goal is 10 defensible recommendations, ideas, or opinions
-per transcribed episode. The completed local pass has 11,624 of the nominal
-12,080 items (96.2%), with 1,092 of 1,208 transcript episodes at 10 or more.
-The remaining 116 episodes have a combined gap of 456. A high-recall candidate
-audit caps current evidence-rule capacity at 11,868 and finds 30 episodes with
-fewer than 10 eligible candidates, so the residual should not be filled with
-weaker or invented claims. Reaching the all-catalog target of 83,950 first
-requires transcripts for 7,187 trusted catalog episodes; that is a separate
-source-coverage project, not unfinished extraction from the data already held.
+The trusted-product goal is at least 10 defensible recommendations, ideas, or
+opinions per transcribed episode without a per-episode ceiling. The qualified
+local pass now has 30,561 public claims: 1,177 of 1,208 transcript episodes
+(97.4%) have at least 10, 753 have at least 20, and 309 have at least 30. The
+remaining 31 episodes stay below 10 because the evidence gate found no further
+defensible claims; they must not be filled with weaker or invented material.
+The trusted catalog has 8,395 episode records, so extending coverage beyond the
+1,208 episodes with transcript segments is a separate source-acquisition
+project, not unfinished extraction from data already held.

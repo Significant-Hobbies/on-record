@@ -19,6 +19,7 @@ export function createValidationDatabase(root) {
     '0004_segments_to_r2.sql',
     '0005_claim_corrected_at.sql',
     '0006_llm_segment_attempts.sql',
+    '0007_claim_attribution_status.sql',
   ]) {
     const sql = readFileSync(join(root, 'packages/db/migrations', migration), 'utf8');
     for (const statement of sql.split('--> statement-breakpoint')) {
