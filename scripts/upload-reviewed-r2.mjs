@@ -10,9 +10,14 @@ const manifestPath = resolve(
 );
 const apply = process.argv.includes('--apply');
 const uploads = JSON.parse(readFileSync(manifestPath, 'utf8'));
+const startArg = process.argv.indexOf('--start');
+const startIndex = startArg >= 0 ? Number(process.argv[startArg + 1]) : 0;
 
 if (!Array.isArray(uploads) || uploads.length === 0) {
   throw new Error(`No R2 uploads found in ${manifestPath}`);
+}
+if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex >= uploads.length) {
+  throw new Error(`--start must be an index from 0 to ${uploads.length - 1}`);
 }
 
 for (const upload of uploads) {
@@ -68,12 +73,27 @@ function uploadObject(upload) {
   });
 }
 
-let completed = 0;
-const queue = [...uploads];
+async function uploadObjectWithRetry(upload, maxAttempts = 3) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await uploadObject(upload);
+      return;
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      console.warn(`Retrying ${upload.key} after failed attempt ${attempt}/${maxAttempts}`);
+      await new Promise((resolveRetry) => setTimeout(resolveRetry, attempt * 500));
+    }
+  }
+}
+
+let completed = startIndex;
+const queue = uploads.slice(startIndex);
 const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
   while (queue.length > 0) {
     const upload = queue.shift();
-    await uploadObject(upload);
+    await uploadObjectWithRetry(upload);
     completed += 1;
     if (completed % 10 === 0 || completed === uploads.length) {
       console.log(`Uploaded ${completed}/${uploads.length} reviewed R2 objects`);
@@ -82,4 +102,11 @@ const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
 });
 
 await Promise.all(workers);
-console.log(JSON.stringify({ apply: true, objects: completed, status: 'uploaded' }));
+console.log(
+  JSON.stringify({
+    apply: true,
+    objects: uploads.length - startIndex,
+    startIndex,
+    status: 'uploaded',
+  })
+);
