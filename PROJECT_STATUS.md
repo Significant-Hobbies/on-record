@@ -72,6 +72,14 @@ review-report.
   them supported by more than one verified person. Both focused book queues
   rerun at zero remaining candidates; corpus integrity and public grouped-
   reference duplicate checks are clean.
+- 2026-08-29 — Released the v10 corpus after a D1 Time Travel backup and
+  migration 0007. Production now serves 30,562 published claims, 30,562 primary
+  evidence rows, 30,562 FTS rows, and 1,316 stored named-reference rows; public
+  stats expose 956 verified people, 1,208 represented episodes, 1,209 trusted
+  transcript episodes, and 1,141 sanitized named-item evidences. Remote checks
+  found zero missing primary evidence, duplicate quote groups, foreign-key
+  violations, or pending migrations. The incremental builder now emits
+  provider-safe table layers and 1,000-claim FTS batches.
 
 ## Products
 
@@ -97,8 +105,8 @@ verified beta slice; cataloged shows with no supported evidence remain pending
 rather than being presented as fully analyzed.
 
 The trusted-product goal is at least 10 defensible recommendations, ideas, or
-opinions per transcribed episode without a per-episode ceiling. The qualified
-local pass now has 30,561 public claims: 1,177 of 1,208 transcript episodes
+opinions per transcribed episode without a per-episode ceiling. The released
+v10 source has 30,561 public claims: 1,177 of 1,208 transcript episodes
 (97.4%) have at least 10, 753 have at least 20, and 309 have at least 30. The
 remaining 31 episodes stay below 10 because the evidence gate found no further
 defensible claims; they must not be filled with weaker or invented material.

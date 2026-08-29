@@ -1,16 +1,16 @@
 # on-record — correctness handoff
 
-Updated 2026-08-29. This document distinguishes the qualified local release
-candidate from the verified production release. The previous 2026-08-26 figures were
-contaminated by bad RSS/YouTube associations, a wrong Peel feed, seven adjacent
-Lex transcripts, and one synthetic canary. Do not reuse those figures.
+Updated 2026-08-29. The qualified v10 corpus is released to production. The
+previous 2026-08-26 figures were contaminated by bad RSS/YouTube associations,
+a wrong Peel feed, seven adjacent Lex transcripts, and one synthetic canary. Do
+not reuse those figures.
 
-## 2026-08-29 qualified release candidate
+## 2026-08-29 production release
 
 The qualified v10 store is
-`workers/api/.wrangler/audits/2026-08-27-recommendations-v10/`. It is the local
-  release source. The production snapshot below remains the last verified live
-  state until the release receipt is appended.
+`workers/api/.wrangler/audits/2026-08-27-recommendations-v10/`. It remains the
+local release source. The import is incremental and does not delete newer
+production rows.
 
 - The trusted catalog has 8,395 episode records, but only 1,208 episodes have
   transcript segments. Those 1,208 episodes contain 30,561 public claims from
@@ -40,10 +40,10 @@ The qualified v10 store is
   groups, invalid attribution states, verified/unverified person mismatches,
   and public same-claim cross-kind reference duplicates. Suspicious-name checks
   reject generic descriptions and non-title book labels.
-- Local web checks return HTTP 200 for home, recommendations, search, and
-  methodology. A grouped item beyond the default page (`Zork`) renders its
-  evidence page with the correct one-distinct-person count. Unverified
-  recommendation responses expose null person ID/name values.
+- Public web checks return HTTP 200 for home, recommendations, search, and
+  methodology. Live FTS search returns claim receipts, grouped-item counts
+  resolve to the underlying evidence rows, and unverified-speaker claim
+  responses expose null person ID/name values.
 - Final `pnpm quality` passes formatting, lint, all TypeScript checks, 81 API
   tests, 228 Python tests, unused-code, complexity, zero-clone duplication,
   cycle, suppression, and hygiene gates. The Astro production build passes.
@@ -53,33 +53,45 @@ The qualified v10 store is
   ADMIN_TOKEN:local-audit --var ENVIRONMENT:local`, then run the web app from
   the repository root with
   `PUBLIC_API_BASE=http://127.0.0.1:8787 pnpm dev:web`.
-- The owner authorized this candidate for production release on 2026-08-29.
-  Migration, data-import, deploy, and public-verification receipts are recorded
-  separately so none of those gates is implied by this local qualification.
+- The owner authorized this release on 2026-08-29. Before mutation, D1 Time
+  Travel bookmark
+  `000000a1-00000000-000050d5-c9b19586455709e60eb01467dd61605d` was recorded.
+  Migration `0007_claim_attribution_status.sql`, 1,208 reviewed R2 transcript
+  objects, the no-delete D1 claim/evidence/reference layers, and the FTS index
+  were applied. The post-release bookmark is
+  `000000b0-000000c6-000050d5-3e809c3d9e1c85557c705e46f9949fb1`.
+- Source commit `3a9b195fdfabefa0d641c56be2cd63080f04cc1e` passed CI run
+  `33217345951`; dispatch deploy run `33217663844` passed for API and web. The
+  release builder was then hardened to emit provider-safe claim, dependent,
+  and 1,000-claim FTS chunks after Cloudflare rejected the original monolithic
+  transaction. Failed D1 transactions rolled back automatically.
 
 ## Executive truth
 
-- Production now exposes the trusted 23-show boundary: 8,414 catalog episodes,
-  1,209 transcript episodes, 11,624 published claims from 935 people across
-  1,190 source episodes, and 300 stored named-reference rows. The public
-  quote-safety pass exposes 294 reference evidences across 281 groups. Of the
-  live transcript episodes, 1,092 (90.3%) have at least 10 published claims;
-  19 have no published claim. The one-episode difference from the qualified
-  1,208-episode release bundle is newer production data preserved by the
-  no-delete import.
+- Production exposes the trusted 23-show boundary: 8,423 active catalog
+  episodes, 1,209 transcript episodes, 30,562 published claims from 956
+  verified people across 1,208 source episodes, and 1,141 public named-item
+  evidence rows. The difference from the qualified 30,561-claim release bundle
+  is one newer production claim preserved by the no-delete import.
+- Remote D1 contains 30,562 claim-evidence rows, 1,316 stored reference rows,
+  30,562 FTS rows, 257,515 segments across 1,211 transcript episodes, and
+  10,335 catalog episodes before the trusted-show and active-show public
+  filters. It reports 28,940 verified-speaker claims and 1,622 explicitly
+  unverified-speaker claims.
+- Remote integrity checks report zero missing primary-evidence rows, duplicate
+  quote groups, foreign-key violations, and pending migrations. The public
+  stats, source, grouped-recommendation, claim-receipt, and search responses
+  were verified after import.
 - TBPN and Odd Lots are retained intact in the raw corpus but withheld from
   public claims, people, sources, recommendations, search, and statistics. Their
   diarized labels are not mapped to named people confidently enough for public
   attribution.
 - The evidence-ledger research flow is live across home, search, people,
-  grouped books/apps/tools, episodes, and exact claim receipts. Both Workers
-  run source commit `10a863b6` at 100% traffic.
-- The public grouped named-item slice contains 294 evidence rows across 281
-  canonical item groups: 57 apps, 63 tools, 53 books, 51 other items, 21
-  services, 14 hardware items, 16 people, 3 courses, and 3 papers. Counts use
-  distinct attributable people, not raw mentions. Grouping depth is still modest:
-  ChatGPT has four distinct people, Claude-as-app has three, and no book yet has
-  more than one under the current evidence gate.
+  grouped books/apps/tools, episodes, and exact claim receipts. Counts use
+  distinct verified people; unverified evidence is disclosed separately and
+  does not inflate a group.
+
+## Historical source inventory and reviewed slices
 
 - The clean local catalog contains 25 configured shows and 10,305 unique
   episode rows covering 2015–2026.
@@ -109,10 +121,10 @@ The qualified v10 store is
   candidate tail, so it is verified local evidence rather than a complete
   corpus answer.
 
-## 2026-08-28 local uncapped expansion
+## 2026-08-28 local uncapped expansion (historical)
 
-The production snapshot above remains unchanged. The active local working
-store is
+This section describes the pre-release working pass. The active local working
+store was
 `workers/api/.wrangler/audits/2026-08-27-recommendations-v10/`.
 
 - The per-episode ceiling is removed. `--target-claims` now defaults to `0`,
@@ -132,9 +144,9 @@ store is
 - TBPN and Odd Lots remain excluded from the public product and from default
   corpus extraction. Explicit episode/show commands can still inspect their
   retained raw data.
-- Migration `0007_claim_attribution_status.sql` has been applied only to the
-  local v10 working snapshot. No remote migration, production ingest, deploy,
-  commit, or push is part of this in-progress pass.
+- At this checkpoint, migration `0007_claim_attribution_status.sql` had been
+  applied only to the local v10 working snapshot. The production release and
+  remote migration are recorded in the 2026-08-29 receipt above.
 
 The completed run remains resumable per segment. Its per-segment checkpoints
 are the evidence that makes a zero-work verification rerun possible.

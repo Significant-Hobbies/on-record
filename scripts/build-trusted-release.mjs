@@ -197,25 +197,155 @@ const insertOrder = [
   'claim_topics',
   'claim_references',
 ];
-const sql = [
-  '-- Incremental trusted-corpus release generated from the verified v10 snapshot.',
-  '-- This file contains no DELETE statements and preserves newer production rows.',
-  'PRAGMA foreign_keys = ON;',
-  ...insertOrder.flatMap((table) => upsertStatements(table, tables[table])),
-  `INSERT INTO claims_fts (claim_id, assertion, quote)
+const claimSegmentIds = new Set(claims.map((claim) => String(claim.segment_id)));
+const claimSegments = tables.segments.filter((segment) => claimSegmentIds.has(String(segment.id)));
+invariant(
+  claimSegments.length === claimSegmentIds.size,
+  'trusted claims reference segments missing from the release source'
+);
+const ftsStatements = [];
+const ftsClaimBatchSize = 1000;
+for (let offset = 0; offset < claims.length; offset += ftsClaimBatchSize) {
+  const claimIds = claims.slice(offset, offset + ftsClaimBatchSize).map((claim) => {
+    invariant(/^[0-9a-f-]+$/u.test(claim.id), `unsafe claim ID for FTS release: ${claim.id}`);
+    return `'${claim.id}'`;
+  });
+  ftsStatements.push(`INSERT INTO claims_fts (claim_id, assertion, quote)
    SELECT c.id, c.assertion, c.quote
    FROM claims c
-   JOIN episodes e ON e.id = c.episode_id
-   JOIN shows sh ON sh.id = e.show_id
-   WHERE c.review_status = 'published'
-     AND sh.slug NOT IN ('tbpn', 'odd-lots')
-     AND NOT EXISTS (SELECT 1 FROM claims_fts f WHERE f.claim_id = c.id);`,
-  '',
-].join('\n\n');
+   WHERE c.id IN (${claimIds.join(', ')})
+     AND NOT EXISTS (SELECT 1 FROM claims_fts f WHERE f.claim_id = c.id);`);
+}
+const releaseStatements = [
+  ...insertOrder.flatMap((table) => upsertStatements(table, tables[table])),
+  ...ftsStatements,
+];
+const releaseHeader = [
+  '-- Incremental trusted-corpus release generated from the verified v10 snapshot.',
+  '-- This file contains no DELETE statements and preserves newer production rows.',
+];
+const sql = [...releaseHeader, 'PRAGMA foreign_keys = ON;', ...releaseStatements, ''].join('\n\n');
 
 mkdirSync(outDir, { recursive: true });
 const sqlPath = join(outDir, 'release.sql');
 writeFileSync(sqlPath, sql);
+const claimPrerequisiteSql = [
+  ...releaseHeader,
+  '-- Minimal segment prerequisites for the claims layer.',
+  'PRAGMA foreign_keys = ON;',
+  ...upsertStatements('segments', claimSegments),
+  '',
+].join('\n\n');
+const claimPrerequisitePath = join(outDir, 'claim-prerequisites.sql');
+writeFileSync(claimPrerequisitePath, claimPrerequisiteSql);
+const statementsPerChunk = 1000;
+const maxChunkBytes = 12 * 1024 * 1024;
+
+function writeStatementChunks({
+  directory,
+  filePrefix,
+  label,
+  maxBytes = maxChunkBytes,
+  maxStatements = statementsPerChunk,
+  statements,
+}) {
+  mkdirSync(directory, { recursive: true });
+  const chunks = [];
+  let chunkStatements = [];
+  let chunkBytes = 0;
+
+  function writeChunk() {
+    const chunkNumber = chunks.length + 1;
+    const chunkSql = [
+      ...releaseHeader,
+      `-- Ordered ${label} chunk ${chunkNumber}; safe to rerun because every write is an upsert.`,
+      'PRAGMA foreign_keys = ON;',
+      ...chunkStatements,
+      '',
+    ].join('\n\n');
+    const chunkPath = join(directory, `${filePrefix}-${String(chunkNumber).padStart(2, '0')}.sql`);
+    writeFileSync(chunkPath, chunkSql);
+    chunks.push({
+      bytes: Buffer.byteLength(chunkSql),
+      path: chunkPath,
+      sha256: createHash('sha256').update(chunkSql).digest('hex'),
+      statements: chunkStatements.length,
+    });
+  }
+
+  for (const statement of statements) {
+    const statementBytes = Buffer.byteLength(statement) + 2;
+    if (
+      chunkStatements.length > 0 &&
+      (chunkStatements.length >= maxStatements || chunkBytes + statementBytes > maxBytes)
+    ) {
+      writeChunk();
+      chunkStatements = [];
+      chunkBytes = 0;
+    }
+    chunkStatements.push(statement);
+    chunkBytes += statementBytes;
+  }
+  if (chunkStatements.length > 0) {
+    writeChunk();
+  }
+  return chunks;
+}
+
+const releaseChunks = writeStatementChunks({
+  directory: join(outDir, 'release-chunks'),
+  filePrefix: 'release',
+  label: 'release',
+  statements: releaseStatements,
+});
+const claimLayerChunks = writeStatementChunks({
+  directory: join(outDir, 'claim-layer-chunks'),
+  filePrefix: 'claims',
+  label: 'claims layer',
+  statements: upsertStatements('claims', claims),
+});
+const dependentLayerChunks = writeStatementChunks({
+  directory: join(outDir, 'dependent-layer-chunks'),
+  filePrefix: 'dependents',
+  label: 'dependent layer',
+  statements: [
+    ...upsertStatements('claim_evidence', tables.claim_evidence),
+    ...upsertStatements('claim_topics', tables.claim_topics),
+    ...upsertStatements('claim_references', tables.claim_references),
+    ...ftsStatements,
+  ],
+});
+const claimEvidenceChunks = writeStatementChunks({
+  directory: join(outDir, 'claim-evidence-chunks'),
+  filePrefix: 'claim-evidence',
+  label: 'claim evidence',
+  maxBytes: 4 * 1024 * 1024,
+  maxStatements: 200,
+  statements: upsertStatements('claim_evidence', tables.claim_evidence),
+});
+const claimTopicChunks = writeStatementChunks({
+  directory: join(outDir, 'claim-topic-chunks'),
+  filePrefix: 'claim-topics',
+  label: 'claim topics',
+  maxBytes: 4 * 1024 * 1024,
+  maxStatements: 200,
+  statements: upsertStatements('claim_topics', tables.claim_topics),
+});
+const claimReferenceChunks = writeStatementChunks({
+  directory: join(outDir, 'claim-reference-chunks'),
+  filePrefix: 'claim-references',
+  label: 'claim references',
+  maxBytes: 4 * 1024 * 1024,
+  maxStatements: 200,
+  statements: upsertStatements('claim_references', tables.claim_references),
+});
+const ftsChunks = writeStatementChunks({
+  directory: join(outDir, 'fts-chunks'),
+  filePrefix: 'fts',
+  label: 'FTS',
+  maxStatements: 1,
+  statements: ftsStatements,
+});
 writeFileSync(join(outDir, 'r2-uploads.json'), `${JSON.stringify(r2Uploads, null, 2)}\n`);
 
 const validationDb = createValidationDatabase(root);
@@ -268,6 +398,19 @@ const manifest = {
   },
   releaseSql: {
     bytes: Buffer.byteLength(sql),
+    claimPrerequisites: {
+      bytes: Buffer.byteLength(claimPrerequisiteSql),
+      path: claimPrerequisitePath,
+      rows: claimSegments.length,
+      sha256: createHash('sha256').update(claimPrerequisiteSql).digest('hex'),
+    },
+    claimLayerChunks,
+    claimEvidenceChunks,
+    claimReferenceChunks,
+    claimTopicChunks,
+    chunks: releaseChunks,
+    dependentLayerChunks,
+    ftsChunks,
     path: sqlPath,
     sha256: createHash('sha256').update(sql).digest('hex'),
   },
