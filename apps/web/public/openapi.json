@@ -40,8 +40,11 @@
     "/api/claims/{id}": {
       "get": {
         "operationId": "getPublishedClaim",
-        "summary": "Get one published claim with evidence and actionable references",
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "summary": "Get one published claim with evidence, actionable references, and optional transcript context",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "context", "in": "query", "description": "Set to 1 to include the stored transcript around the quote. Omitted by default so the ordinary receipt reads no transcript.", "schema": { "type": "string", "enum": ["1", "true"] } }
+        ],
         "responses": {
           "200": { "description": "Published claim, evidence, and references", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ClaimEvidenceResponse" } } } },
           "404": { "description": "No published claim found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
@@ -295,6 +298,7 @@
         "required": ["claim", "evidence", "references"],
         "properties": {
           "claim": { "$ref": "#/components/schemas/Claim" },
+          "context": { "type": ["object", "null"], "description": "Stored transcript around the verbatim quote, returned only for context=1. Null when the stored transcript is missing or the quote cannot be anchored in it; context is never generated.", "required": ["text", "quoteStart", "quoteEnd"], "properties": { "text": { "type": "string" }, "quoteStart": { "type": "integer" }, "quoteEnd": { "type": "integer" } } },
           "evidence": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
           "references": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
         }

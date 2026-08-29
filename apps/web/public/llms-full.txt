@@ -27,7 +27,9 @@ Base URL: `https://api.podcasts.highsignal.app`
 - `GET /api/people`: people with published claim and source counts; supports
   `q`, `limit`, and `offset`.
 - `GET /api/people/{slug}`: one person, published claims, and recommendations.
-- `GET /api/claims/{id}`: one published claim with evidence and references.
+- `GET /api/claims/{id}`: one published claim with evidence and references;
+  `context=1` adds the stored transcript around the quote, or `null` when it
+  is unavailable.
 - `GET /api/sources`: paginated trusted source episodes with claim and people
   counts; supports `q`, `show`, `limit`, and `offset`.
 - `GET /api/sources/{id}`: one source and its published claims.

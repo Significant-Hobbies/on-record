@@ -28,7 +28,8 @@ use the unauthenticated, read-only API at
 
 - `/api/search?q=...` for published claim search.
 - `/api/people` and `/api/people/{slug}` for people and their evidence.
-- `/api/claims/{id}` for a claim, evidence, and references.
+- `/api/claims/{id}` for a claim, evidence, and references; add `?context=1`
+  for the stored transcript around the quote.
 - `/api/recommendations` for source-linked books, tools, and products.
 - `/api/sources` and `/api/sources/{id}` for source episodes.
 

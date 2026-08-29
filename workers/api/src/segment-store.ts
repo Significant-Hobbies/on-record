@@ -3,10 +3,16 @@ import type { CueMap } from '@on-record/db';
 /**
  * Segment text and cue maps live in R2, not D1.
  *
- * Nothing public ever reads them — they exist so a claim's quote can be
- * checked against its source and its timestamp resolved at write time. At
- * 2,600 episodes that is roughly 400MB of raw material no reader would ever
- * see, so D1 keeps only the anchor row the claim's foreign key points at.
+ * They exist so a claim's quote can be checked against its source and its
+ * timestamp resolved at write time. At 2,600 episodes that is roughly 400MB of
+ * raw material, so D1 keeps only the anchor row the claim's foreign key points
+ * at.
+ *
+ * One public reader exists: `claim-context.ts` returns a claim's own segment
+ * plus one neighbour on each side, and only for a claim that already passed the
+ * published + trusted-show gate, behind an explicit `?context=1` opt-in so the
+ * ordinary claim receipt still costs no R2 read. Nothing else public reads
+ * them, and no path exposes a whole episode transcript.
  *
  * One object per episode, fetched once per batch rather than per claim.
  */
