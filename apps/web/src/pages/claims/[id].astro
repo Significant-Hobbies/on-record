@@ -3,23 +3,33 @@ import Layout from '../../layouts/Base.astro';
 import { apiGet, runtimeEnvFromLocals, type Claim } from '../../lib/api';
 import { formatClock, whenLabel } from '../../lib/time';
 
+type TranscriptContext = { text: string; quoteStart: number; quoteEnd: number };
+
 const { id } = Astro.params;
 let claim: Claim | null = null;
 let evidence: Array<{ deepLinkUrl?: string | null; quote: string }> = [];
 let references: Array<{ kind: string; role: string; name: string }> = [];
+let context: TranscriptContext | null = null;
 let missing = false;
 try {
   const payload = await apiGet<{
     claim: Claim;
+    context?: TranscriptContext | null;
     evidence: Array<{ deepLinkUrl?: string | null; quote: string }>;
     references: Array<{ kind: string; role: string; name: string }>;
-  }>(`/api/claims/${id}`, runtimeEnvFromLocals(Astro.locals));
+  }>(`/api/claims/${id}?context=1`, runtimeEnvFromLocals(Astro.locals));
   claim = payload.claim;
   evidence = payload.evidence ?? [];
   references = payload.references ?? [];
+  context = payload.context ?? null;
 } catch {
   missing = true;
 }
+// Split on the API's character offsets so the excerpt stays exactly what was
+// stored; nothing here re-derives or rewords the transcript.
+const contextBefore = context ? context.text.slice(0, context.quoteStart) : '';
+const contextQuote = context ? context.text.slice(context.quoteStart, context.quoteEnd) : '';
+const contextAfter = context ? context.text.slice(context.quoteEnd) : '';
 const link =
   claim?.transcriptKind === 'youtube_captions'
     ? claim.deepLinkUrl ?? claim.sourceUrl
@@ -77,6 +87,19 @@ const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personNam
             <dd>{claim.episodeId ? <a href={`/sources/${claim.episodeId}`}>{claim.episodeTitle}</a> : claim.episodeTitle ?? 'Source episode'}</dd>
           </div>
         </dl>
+        {context && contextQuote && (
+          <div class="receipt-context">
+            <p class="eyebrow">Transcript context</p>
+            <p class="context-passage">
+              {contextBefore.trim() && <span class="context-around">…{contextBefore}</span>}
+              <mark class="context-quote">{contextQuote}</mark>
+              {contextAfter.trim() && <span class="context-around">{contextAfter}…</span>}
+            </p>
+            <p class="context-note">
+              Stored transcript either side of the excerpt. The highlighted words are the published quote; the surrounding text is unedited source, never generated.
+            </p>
+          </div>
+        )}
         <div class="receipt-actions">
           {link && (
             <a class="button button-primary" href={link} rel="noreferrer" target="_blank">

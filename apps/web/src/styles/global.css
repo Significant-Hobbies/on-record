@@ -2084,6 +2084,41 @@ main > h1:first-child {
   grid-column: 1 / -1;
 }
 
+.receipt-context {
+  grid-column: 2;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.receipt-context .eyebrow {
+  color: var(--mark);
+}
+
+.context-passage {
+  margin: 0.9rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.context-quote {
+  padding: 0.08em 0.15em;
+  border-bottom: 2px solid var(--accent);
+  background: rgba(173, 121, 56, 0.2);
+  color: var(--ink);
+}
+
+.context-note {
+  margin: 0.9rem 0 0;
+  max-width: 46ch;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
 .receipt-actions {
   grid-column: 2;
 }
@@ -2126,6 +2161,7 @@ main > h1:first-child {
     grid-template-columns: 1fr;
   }
 
+  .receipt-context,
   .receipt-actions {
     grid-column: 1;
   }

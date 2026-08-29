@@ -2,6 +2,11 @@ import { and, asc, desc, eq, gte, inArray, like, lte, notInArray, or, sql } from
 import type { SQL } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { UNVERIFIED_SPEAKER_SLUG } from '../attribution';
+import {
+  type ClaimTranscriptContext,
+  claimTranscriptContext,
+  wantsTranscriptContext,
+} from '../claim-context';
 import { isClaimType } from '../claim-types';
 import { db, schema } from '../db';
 import type { Env } from '../env';
@@ -27,7 +32,7 @@ function trustedShowFilter(): SQL {
   return notInArray(schema.shows.slug, [...WITHHELD_PUBLIC_SHOW_SLUGS]);
 }
 
-const publicClaimFields = {
+export const publicClaimFields = {
   assertion: schema.claims.assertion,
   attributionStatus: schema.claims.attributionStatus,
   claimType: schema.claims.claimType,
@@ -177,6 +182,29 @@ publicRoute.get('/people/:slug', async (c) => {
   return c.json({ claims, person, recommendations });
 });
 
+/**
+ * Resolves the transcript window around an already-published claim.
+ *
+ * The claim has passed the published + trusted-show gate before this runs, so
+ * the segment lookup only widens what is shown about a claim already public.
+ * Every failure path returns null: missing data beats invented context.
+ */
+async function transcriptContextForClaim(
+  env: Env,
+  claim: { id: string; quote: string }
+): Promise<ClaimTranscriptContext | null> {
+  const [segment] = await db(env.DB)
+    .select({ episodeId: schema.segments.episodeId, idx: schema.segments.idx })
+    .from(schema.segments)
+    .innerJoin(schema.claims, eq(schema.claims.segmentId, schema.segments.id))
+    .where(eq(schema.claims.id, claim.id))
+    .limit(1);
+  if (!segment) {
+    return null;
+  }
+  return await claimTranscriptContext(env.RAW, segment.episodeId, segment.idx, claim.quote);
+}
+
 publicRoute.get('/claims/:id', async (c) => {
   const id = c.req.param('id');
   const [claim] = await publicClaims(c.env.DB, [eq(schema.claims.id, id)], 1);
@@ -204,7 +232,11 @@ publicRoute.get('/claims/:id', async (c) => {
   const references = rawReferences.flatMap((reference) =>
     sanitizeReferences([reference], claim.quote)
   );
-  return c.json({ claim, evidence, references });
+  if (!wantsTranscriptContext(c.req.query('context'))) {
+    return c.json({ claim, evidence, references });
+  }
+  const context = await transcriptContextForClaim(c.env, claim);
+  return c.json({ claim, context, evidence, references });
 });
 
 publicRoute.get('/sources', async (c) => {
