@@ -1,0 +1,88 @@
+{
+  "$schema": "fleet.landing-audit.scorecard.v1",
+  "project": "on-record",
+  "priority": "P2",
+  "candidate": "http://127.0.0.1:4321/",
+  "productionChanged": false,
+  "checkedAt": "2026-08-28",
+  "purpose": {
+    "score": 98,
+    "minimum": 85,
+    "p0": 0,
+    "p1": 0,
+    "note": "The first viewport identifies a source-backed podcast research index, the people it serves, four searchable evidence types, a real receipt, a dated corpus proof line, and an immediate search action. It now promises verbatim transcript evidence and source inspection instead of implying that publisher transcripts are infallible audio transcriptions."
+  },
+  "design": {
+    "score": 96,
+    "minimum": 88,
+    "p0": 0,
+    "p1": 0,
+    "note": "The Evidence Ledger is an unusually strong product-specific system: editorial paper and serif typography, archival-green trust cues, rust actions, one-pixel rules, square evidence receipts, compact metadata, restrained density, and clear research paths without generic SaaS decoration."
+  },
+  "seo": {
+    "score": 99,
+    "passed": 15,
+    "failed": 0,
+    "warnings": 0,
+    "linkGraph": {
+      "sitemapPages": 11,
+      "crawledPages": 11,
+      "errors": 0,
+      "redirects": 0,
+      "orphanCandidates": 176
+    },
+    "note": "All critical landing checks pass. The 176 sitemap omissions are linked dynamic claim, person, and source records rather than broken or unreachable pages; expanding the sitemap to the entire live corpus remains a real but non-blocking discovery opportunity. The custom 404 is now explicitly noindex."
+  },
+  "geo": {
+    "score": 100,
+    "productionTier": "S",
+    "productionScore": 100,
+    "oraProductionScore": 73,
+    "oraProductionGrade": "B",
+    "oraEssentialsScore": 87,
+    "note": "Fleet's product-appropriate audit passes llms.txt, /api/ai, homepage Markdown, robots policy, sitemap, JSON-LD, typed discovery surfaces, and catalog integrity. A forced Ora refresh lifted its stale 26/F reading to 73/B with an 87 essentials score; most remaining full-score deductions ask a public read-only archive for unrelated MCP, OAuth, payments, app-directory, Wikipedia, and SDK surfaces."
+  },
+  "performance": {
+    "score": 100,
+    "successfulCoverageRuns": 20,
+    "weightedLcpMs": 555,
+    "weightedCls": 0,
+    "weightedTbtMs": 0,
+    "profiles": {
+      "mobileSlowScore": 99,
+      "mobileSlowLcpMs": 1507,
+      "mobileMidScore": 100,
+      "mobileMidLcpMs": 755,
+      "mobileFastScore": 100,
+      "mobileFastLcpMs": 381,
+      "desktopScore": 100,
+      "desktopLcpMs": 206
+    },
+    "note": "Twenty production-style Cloudflare Worker Lighthouse runs clear the weighted good gate with zero CLS and TBT. Removing the blocking aggregate stats request improved weighted LCP from 3.04 seconds in the development candidate to 555 milliseconds in the production build."
+  },
+  "verification": {
+    "build": "Astro Cloudflare production build passes",
+    "typecheck": "All TypeScript and Astro checks pass",
+    "lint": "Repository Biome check passes",
+    "tests": "API suite passes: 14 files and 63 tests",
+    "seoAudit": "15 passed, 0 failed, 0 warnings",
+    "agentIndex": "Production S-tier, 100 percent",
+    "contentIntegrity": "A featured publisher-transcript quote was found to contain an ASR error and its YouTube deep link pointed about 14 minutes early. The candidate withholds cross-source timestamps on write and read, suppresses unsafe legacy links in the UI, avoids promoting low-readability excerpts, and explains transcript-provider fallibility without silently rewriting quotations.",
+    "footer": {
+      "askAi": "pass",
+      "projectStrip": "pass",
+      "note": "The Ask AI loader now preserves the separately mounted fleet project strip. Both render in the local candidate."
+    },
+    "responsiveScreenshots": [
+      "../../../artifacts/design/landing-current/after-390.png",
+      "../../../artifacts/design/landing-current/after-768.png",
+      "../../../artifacts/design/landing-current/after-1440.png"
+    ]
+  },
+  "limitations": [
+    "No deployment, commit, push, database write, DNS change, account action, or production configuration change was performed.",
+    "The known live claim remains mis-transcribed and mistimed until an authorized release changes the public read boundary and the record is re-reviewed against the original audio.",
+    "Current production still omits dynamic claim, person, and source records from its sitemap and retains the old footer composition until a later authorized release.",
+    "No Wikipedia page, MCP server, OAuth surface, paid API, SDK, or app-directory listing was invented merely to raise a generic external agent-readiness score."
+  ]
+}
