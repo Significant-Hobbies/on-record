@@ -208,7 +208,7 @@ def build_body(
     ]
     if is_local(settings):
         # LM Studio rejects json_object and wants a schema, which is the
-            # stronger guarantee anyway.
+        # stronger guarantee anyway.
         return {
             "model": settings.force_model or settings.extract_model,
             "temperature": 0,
