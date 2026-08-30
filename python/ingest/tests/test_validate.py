@@ -555,12 +555,10 @@ def test_well_formed_json_is_untouched():
     assert parse_claims_json('```json\n{"claims":[{"quote":"a"}]}\n```') == [{"quote": "a"}]
 
 
-def test_served_model_prefers_what_the_gateway_actually_used():
+def test_served_model_prefers_provider_response_model():
     from on_record_ingest.extract.claims import served_model
 
-    assert served_model({"x_gateway": {"model": "ministral-3b-latest"}}, "gemini-2.5-flash") == (
-        "ministral-3b-latest"
-    )
+    assert served_model({}, "gemini-2.5-flash") == "gemini-2.5-flash"
     assert served_model({"model": "gemini-2.5-flash"}, "auto") == "gemini-2.5-flash"
     assert served_model({}, "auto") == "auto"
 
@@ -580,7 +578,7 @@ def test_extraction_prompt_carries_only_this_episode_roster():
     assert "jensen-huang" not in prompt
 
 
-def test_local_and_gateway_requests_differ_where_they_must():
+def test_local_and_remote_requests_differ_where_they_must():
     from dataclasses import replace
 
     from on_record_ingest.config import settings as load
@@ -588,9 +586,15 @@ def test_local_and_gateway_requests_differ_where_they_must():
 
     base = load()
     local = replace(base, ai_base_url="http://localhost:1234/v1", force_model="qwen/qwen3.5-27b")
-    gateway = replace(base, ai_base_url="https://ai-gateway.sassmaker.com/v1", force_model="")
+    remote = replace(
+        base,
+        ai_base_url="https://direct.example.test/v1",
+        ai_model="free-model",
+        extract_model="free-model",
+        force_model="",
+    )
 
-    assert is_local(local) and not is_local(gateway)
+    assert is_local(local) and not is_local(remote)
 
     lb = build_body(local, "sys", "user")
     assert lb["response_format"]["type"] == "json_schema"
@@ -598,9 +602,10 @@ def test_local_and_gateway_requests_differ_where_they_must():
     assert lb["reasoning_effort"] == "none"
     assert "min_reasoning_level" not in lb and "project_id" not in lb
 
-    gb = build_body(gateway, "sys", "user")
-    assert gb["response_format"]["type"] == "json_object"
-    assert gb["min_reasoning_level"] == "high"
+    rb = build_body(remote, "sys", "user")
+    assert rb["response_format"]["type"] == "json_object"
+    assert rb["model"] == "free-model"
+    assert "min_reasoning_level" not in rb and "project_id" not in rb
 
 
 def test_batch_extraction_keeps_claim_attached_to_its_exact_segment(monkeypatch):

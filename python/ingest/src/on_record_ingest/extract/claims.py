@@ -191,7 +191,7 @@ BATCH_CLAIMS_SCHEMA: dict[str, Any] = {
 
 
 def is_local(settings: Settings) -> bool:
-    """A model served from this machine, rather than through the gateway."""
+    """A model served from this machine rather than a remote provider."""
     return "localhost" in settings.ai_base_url or "127.0.0.1" in settings.ai_base_url
 
 
@@ -208,8 +208,7 @@ def build_body(
     ]
     if is_local(settings):
         # LM Studio rejects json_object and wants a schema, which is the
-        # stronger guarantee anyway. None of the gateway's routing fields mean
-        # anything here.
+            # stronger guarantee anyway.
         return {
             "model": settings.force_model or settings.extract_model,
             "temperature": 0,
@@ -228,19 +227,12 @@ def build_body(
             "messages": messages,
         }
     return {
-        "model": settings.force_model or "auto",
+        "model": settings.force_model or settings.extract_model or settings.ai_model,
         "temperature": 0,
-        # The gateway caps max_tokens at 8192 whatever the model allows.
         "max_tokens": min(max_tokens, 8000),
-        "project_id": settings.ai_project_id,
         # Supported by every model we pin, and it is what stops the answer
         # arriving wrapped in prose that then fails to parse.
         "response_format": {"type": "json_object"},
-        # These two do the work a pinned model was doing, without giving up
-        # the fallback. response_format filters the pool to models that can
-        # emit JSON; the floor drops the low-reasoning tier, which is where
-        # ministral-3b lives. 38 candidates across nine providers survive.
-        "min_reasoning_level": "high",
         "messages": messages,
     }
 
@@ -253,17 +245,15 @@ def _chat(
     schema: dict[str, Any] = CLAIMS_SCHEMA,
 ) -> tuple[str, dict[str, Any], int]:
     started = time.perf_counter()
+    if not settings.ai_base_url:
+        raise RuntimeError("AI_BASE_URL is required for inference")
+    if not (settings.force_model or settings.extract_model or settings.ai_model):
+        raise RuntimeError("AI_MODEL is required for inference")
     headers = {"Content-Type": "application/json"}
     if settings.ai_api_key:
         headers["Authorization"] = f"Bearer {settings.ai_api_key}"
     elif not is_local(settings):
         raise RuntimeError("AI_API_KEY is required for remote inference")
-    if not is_local(settings):
-        headers["X-Gateway-Project-Id"] = settings.ai_project_id
-        if settings.force_model:
-            # Pinning wins the model but loses the fallback: when that one
-            # model is rate limited every call 503s. Only pin deliberately.
-            headers["X-Gateway-Force-Model"] = settings.force_model
     body = build_body(settings, system_prompt, user_prompt, max_tokens, schema)
     last_error: Exception | None = None
     payload: dict[str, Any] = {}
@@ -304,11 +294,11 @@ def _chat(
 
 
 def served_model(response_json: dict[str, Any], requested: str) -> str:
-    """Which model actually answered. Claims record this, not what we asked for."""
-    gateway = response_json.get("x_gateway")
-    if isinstance(gateway, dict) and gateway.get("model"):
-        return str(gateway["model"])
-    return str(response_json.get("model") or requested)
+    """Which model actually answered, falling back to the requested model."""
+    response_model = response_json.get("model")
+    if isinstance(response_model, str) and response_model:
+        return response_model
+    return requested
 
 
 def _http_error_message(response: httpx.Response) -> str:
@@ -371,7 +361,9 @@ def extract_segment(
             continue
         accepted.append(claim)
     run = {
-        "model": served_model(response_json, settings.force_model or "auto"),
+        "model": served_model(
+            response_json, settings.force_model or settings.extract_model or settings.ai_model
+        ),
         "promptVersion": settings.prompt_version,
         "accepted": bool(accepted),
         "reason": "ok" if parsed is not None else "json_parse_failed",
@@ -497,7 +489,9 @@ def extract_segments_batch(
         parsed = parse_claims_json(raw)
     accepted, rejected = _validated_batch_rows(parsed, segment_by_id, quote_by_id)
     run = {
-        "model": served_model(response_json, settings.force_model or "auto"),
+        "model": served_model(
+            response_json, settings.force_model or settings.extract_model or settings.ai_model
+        ),
         "promptVersion": prompt_version,
         "accepted": bool(accepted),
         "reason": "ok" if parsed is not None else "json_parse_failed",
