@@ -1,12 +1,15 @@
 import { getTableColumns } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
+import { UNVERIFIED_SPEAKER_SLUG } from '../attribution';
 import { claimTranscriptContext } from '../claim-context';
 import { schema } from '../db';
 import type { Env } from '../env';
+import { ACTIONABLE_REFERENCE_ROLES } from '../references';
 import {
   isTrustedPublicShowSlug,
   publicClaimFields,
   publicRoute,
+  REFERENCE_SCAN_CEILING,
   WITHHELD_PUBLIC_SHOW_SLUGS,
 } from './public';
 
@@ -195,5 +198,110 @@ describe('claim transcript context', () => {
     expect(seen.params[0]).toEqual(
       expect.arrayContaining(['published', ...WITHHELD_PUBLIC_SHOW_SLUGS])
     );
+  });
+});
+
+/**
+ * D1 stub that records every statement the routes emit. The reference listing
+ * is a six-table join whose cost lives in the SQL, not in the JS that follows,
+ * so the assertions below read the statement itself.
+ */
+function recordingD1(
+  seen: { statements: { sql: string; params: unknown[] }[] },
+  person: string[][]
+) {
+  return {
+    prepare: (sql: string) => ({
+      bind: (...params: unknown[]) => {
+        seen.statements.push({ params, sql });
+        const rows = sql.includes('from "people"') && !sql.includes('join') ? person : [];
+        return {
+          all: async () => ({ results: [] }),
+          first: async () => null,
+          raw: async () => rows,
+          run: async () => ({}),
+        };
+      },
+    }),
+  } as unknown as D1Database;
+}
+
+async function referenceStatements(path: string) {
+  const seen = { statements: [] as { sql: string; params: unknown[] }[] };
+  const env = { DB: recordingD1(seen, [['person-7']]), RAW: {} } as unknown as Env;
+  await publicRoute.request(path, {}, env);
+  return seen.statements.filter((entry) => entry.sql.includes('from "claim_references"'));
+}
+
+describe('published reference listing is bounded', () => {
+  const listingPaths = ['/stats', '/recommendation-groups', '/recommendations'];
+
+  it.each(listingPaths)(
+    'gives %s a LIMIT so no listing is an unbounded join scan',
+    async (path) => {
+      const [statement] = await referenceStatements(path);
+
+      expect(statement).toBeDefined();
+      expect(statement?.sql).toContain('limit ?');
+      expect(statement?.params).toContain(REFERENCE_SCAN_CEILING);
+    }
+  );
+
+  it('orders totally, so the bounded window is well defined under ties', async () => {
+    const [statement] = await referenceStatements('/recommendation-groups');
+
+    expect(statement?.sql).toContain(
+      'order by "claims"."said_on" desc, "claims"."created_at" asc, "claim_references"."id" asc'
+    );
+  });
+
+  it('keeps a rail far above the stored corpus so it cannot truncate a response', () => {
+    // D1 held 1,316 named-reference rows at 2026-08-29 (PROJECT_STATUS.md) and
+    // the primary-evidence join yields at most one row per reference.
+    expect(REFERENCE_SCAN_CEILING).toBeGreaterThan(1316 * 10);
+  });
+});
+
+describe('published reference listing keeps its public gates', () => {
+  it('still filters to published claims inside trusted shows on actionable roles', async () => {
+    const [statement] = await referenceStatements('/recommendation-groups');
+
+    expect(statement?.params).toEqual(
+      expect.arrayContaining([
+        'primary',
+        'published',
+        ...ACTIONABLE_REFERENCE_ROLES,
+        ...WITHHELD_PUBLIC_SHOW_SLUGS,
+      ])
+    );
+    expect(statement?.params).not.toContain('mentions');
+  });
+
+  it('nulls person identity unless the speaker is verified', async () => {
+    const [statement] = await referenceStatements('/recommendation-groups');
+
+    for (const column of ['"claims"."person_id"', '"people"."name"']) {
+      expect(statement?.sql).toContain(
+        `case when "claims"."attribution_status" = 'verified_speaker' then ${column} else null end`
+      );
+    }
+  });
+
+  it('keeps the indexed person-filtered variant on its own narrow path', async () => {
+    const [statement] = await referenceStatements('/recommendations?person=someone');
+
+    expect(statement?.sql).toContain('"claims"."person_id" = ?');
+    expect(statement?.params).toContain('person-7');
+  });
+
+  it('still 404s the unverified-speaker sentinel slug before any listing runs', async () => {
+    const seen = { statements: [] as { sql: string; params: unknown[] }[] };
+    const env = { DB: recordingD1(seen, []), RAW: {} } as unknown as Env;
+
+    const response = await publicRoute.request(`/people/${UNVERIFIED_SPEAKER_SLUG}`, {}, env);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: 'not_found' });
+    expect(seen.statements).toHaveLength(0);
   });
 });

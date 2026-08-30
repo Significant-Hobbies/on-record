@@ -418,6 +418,25 @@ export const recommendationFields = {
   transcriptKind: schema.episodes.transcriptKind,
 };
 
+/**
+ * Ceiling on the rows one reference listing may pull out of D1.
+ *
+ * `publishedReferences` fans a six-table join out of `claim_references`, and
+ * the checks that decide what the public actually sees — quote support, kind
+ * normalisation, dedupe — all run in JS after the read. So the statement
+ * cannot carry the caller's own limit: trimming before sanitising would drop
+ * rows the caller is entitled to. What it can carry is a rail set well above
+ * the whole corpus, so no public listing is ever an unbounded `ORDER BY` over
+ * a join.
+ *
+ * D1 holds 1,316 named-reference rows today (PROJECT_STATUS.md, 2026-08-29)
+ * and the primary-evidence join yields at most one row per reference, so this
+ * is about fifteen times the reachable maximum and cannot truncate a response.
+ * Reaching it would mean the corpus outgrew this shape and these endpoints
+ * need real pagination — raising the rail instead would just hide that.
+ */
+export const REFERENCE_SCAN_CEILING = 20_000;
+
 async function publishedReferences(
   d1: D1Database,
   filters: { personId?: string; kind?: string; name?: string; role?: string },
@@ -453,7 +472,16 @@ async function publishedReferences(
       )
     )
     .where(and(...clauses))
-    .orderBy(desc(schema.claims.saidOn), asc(schema.claims.createdAt));
+    // `said_on` and `created_at` tie freely — a whole ingest batch can share
+    // both. A limit over a tied order is not a well-defined window, so the
+    // reference id breaks remaining ties and makes the order total. Without
+    // it the rows returned are whatever the query plan happened to emit.
+    .orderBy(
+      desc(schema.claims.saidOn),
+      asc(schema.claims.createdAt),
+      asc(schema.claimReferences.id)
+    )
+    .limit(REFERENCE_SCAN_CEILING);
   const seen = new Set<string>();
   return rows
     .flatMap((row) => {
@@ -523,7 +551,7 @@ publicRoute.get('/recommendation-groups', async (c) => {
   const recommendations = await publishedReferences(
     c.env.DB,
     { kind: c.req.query('kind'), role: c.req.query('role') },
-    Number.MAX_SAFE_INTEGER
+    REFERENCE_SCAN_CEILING
   );
   const q = c.req.query('q')?.trim().toLocaleLowerCase('en-US');
   const groups = groupRecommendationReferences(recommendations).filter(
@@ -563,7 +591,7 @@ publicRoute.get('/stats', async (c) => {
     .innerJoin(schema.episodes, eq(schema.segments.episodeId, schema.episodes.id))
     .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
     .where(trustedShowFilter());
-  const references = await publishedReferences(c.env.DB, {}, Number.MAX_SAFE_INTEGER);
+  const references = await publishedReferences(c.env.DB, {}, REFERENCE_SCAN_CEILING);
   return c.json({
     catalogEpisodes: catalog?.catalogEpisodes ?? 0,
     episodes: counts?.episodes ?? 0,
