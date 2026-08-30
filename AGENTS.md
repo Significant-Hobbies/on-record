@@ -37,6 +37,26 @@ and record durable follow-up in this repository's GitHub Issues.
   `ADMIN_TOKEN`.
 - Prefer missing data over confident misinformation.
 
+## Public list endpoints must be bounded
+
+Every public list endpoint backed by D1 carries a `LIMIT`. No listing may end
+in an unbounded `ORDER BY` over a join: the sort has to materialise every
+matching row before the first one can be returned, so the cost tracks the
+corpus rather than the page. Pagination is part of the endpoint, not a later
+refinement, and a limit is only meaningful over a total order — add a unique
+tiebreaker when the sort keys can tie.
+
+Check any new query shape with `EXPLAIN QUERY PLAN` against a local D1 before
+shipping it (`wrangler d1 execute <db> --local`, never `--remote`). A `SCAN`
+on the outer loop of a join usually means no index matched the filter and the
+planner had no cheap entry point; the fix belongs in a new migration, and it
+is worth confirming, because an index that helps one shape can push the
+planner off a good plan for another.
+
+`wrangler d1 insights <db> --sort-by reads` is what surfaces a regression, and
+`queryEfficiency` is the number to read: below roughly 0.1 the query is
+scanning far more than it returns.
+
 ## Kept in sync with Mashup
 
 `mashup/` transcribes podcast audio the same way this project does:

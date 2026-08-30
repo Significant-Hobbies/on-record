@@ -258,7 +258,10 @@ export const claimEvidence = sqliteTable(
     }).notNull(),
     timestampS: real('timestamp_s'),
   },
-  (t) => [index('claim_evidence_claim_idx').on(t.claimId)]
+  (t) => [
+    index('claim_evidence_claim_idx').on(t.claimId),
+    index('claim_evidence_claim_role_idx').on(t.claimId, t.role),
+  ]
 );
 
 export const claimTopics = sqliteTable(
@@ -292,6 +295,7 @@ export const claimReferences = sqliteTable(
   (t) => [
     index('claim_references_claim_idx').on(t.claimId),
     index('claim_references_kind_role_idx').on(t.kind, t.role),
+    index('claim_references_role_claim_idx').on(t.role, t.claimId),
     uniqueIndex('claim_references_unique').on(t.claimId, t.kind, t.role, t.name),
   ]
 );
