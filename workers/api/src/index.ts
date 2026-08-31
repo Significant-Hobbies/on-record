@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cache } from 'hono/cache';
 import { cors } from 'hono/cors';
 import type { Env } from './env';
 import { adminRoute } from './routes/admin';
@@ -6,6 +7,11 @@ import { publicRoute } from './routes/public';
 
 const app = new Hono<{ Bindings: Env }>();
 const publicCors = cors({ origin: '*' });
+const publicReferenceCache = cache({
+  cacheControl: 'public, max-age=300',
+  cacheName: 'on-record-public-references-v1',
+  onCacheNotAvailable: false,
+});
 
 app.use('*', async (c, next) => {
   const isAdminPath = c.req.path === '/admin' || c.req.path.startsWith('/admin/');
@@ -17,6 +23,15 @@ app.use('*', async (c, next) => {
   }
   return next();
 });
+
+// These public routes all fan into the bounded reference listing. The corpus
+// changes in release batches, while the same anonymous URLs are requested
+// repeatedly by the SSR site and API clients. Reuse each response briefly so
+// normal reads do not rerun the six-table join on every request.
+app.use('/api/stats', publicReferenceCache);
+app.use('/api/recommendations', publicReferenceCache);
+app.use('/api/recommendation-groups', publicReferenceCache);
+app.use('/api/people/*', publicReferenceCache);
 
 app.get('/', (c) => c.json({ env: c.env.ENVIRONMENT ?? 'unknown', name: 'on-record-api' }));
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
