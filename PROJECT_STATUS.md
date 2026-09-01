@@ -40,6 +40,11 @@ review-report.
 
 ## Timeline
 
+- **2026-09-01 — Dedicated Clarity project wired locally:** Added High Signal
+  Podcasts' own project to the public Astro shell without changing the evidence
+  pipeline or authored footer. The web production build and Fleet-wide source
+  audit pass; production deployment is pending the dispatch-only release gate.
+
 - 2026-08-24 — Session 1 scaffold: schema, API worker, ingest pipeline, CI
 - 2026-08-24 — GitHub repo Significant-Hobbies/on-record; local D1 migrate; Karpathy episode captions segmented
 - 2026-08-24 — First published claims from Karpathy/Dwarkesh via Infisical Free_ai → free-ai gateway

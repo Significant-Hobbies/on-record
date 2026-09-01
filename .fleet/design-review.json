@@ -28,7 +28,7 @@
       }
     },
     "contract": {
-      "purpose": "Help people search useful podcast ideas, people, recurring books and tools, and verify every result against the exact words and source.",
+      "purpose": "Help people search useful podcast ideas, people, recurring books and tools, and inspect every result against its verbatim transcript excerpt and original source.",
       "purposeSource": "site-health purposeContract for on-record plus repository PRODUCT.md and DESIGN.md",
       "canonicalPurpose": "High Signal Podcasts helps people who want useful ideas from important podcasts find evidenced claims, recommendations, books, and tools without listening end to end by preserving attributable excerpts and source trails.",
       "purposeAlignment": "match",
@@ -61,11 +61,11 @@
       "status": "pass"
     },
     "critique": {
-      "score": 35,
+      "score": 38,
       "maximum": 40
     },
     "audit": {
-      "score": 19,
+      "score": 20,
       "maximum": 20
     },
     "unresolved": {
@@ -76,7 +76,7 @@
       "posture": "advisory",
       "findings": [
         "The deterministic detector returned no findings. Independent landing review found no P0 or P1 issue across purpose, hierarchy, active navigation, evidence semantics, responsive layout, or the shared Ask AI and project-strip footer.",
-        "The production-mode homepage now bounds upstream API work at 1.2 seconds and falls back to the truthful evidence-policy state when the live corpus is slow."
+        "The production-mode homepage now uses a dated, verified corpus snapshot instead of blocking first paint on the slow aggregate stats query. Live claims, people, recommendation groups, and source episodes remain API-backed."
       ]
     },
     "comprehension": {
@@ -85,9 +85,9 @@
       "answers": {
         "product": "A research archive of useful podcast claims, people, books, apps, tools, and source episodes.",
         "audience": "Founders, investors, journalists, operators, and researchers who need attributable podcast evidence.",
-        "value": "It finds the useful line without requiring the full episode and keeps the exact words verifiable.",
+        "value": "It finds the useful line without requiring the full episode and keeps the transcript excerpt and original source inspectable.",
         "mechanism": "Search and browsable indexes lead to claim cards and receipts containing speaker, quote, date, episode, publisher, and source.",
-        "proof": "The first view shows a real published claim receipt and current trusted-corpus counts.",
+        "proof": "The first view shows a real published claim receipt and explicitly dated verified-corpus counts.",
         "nextAction": "Open Search claims, People, Books and tools, or Episodes; the wordmark returns home."
       },
       "purposeScore": {
@@ -105,15 +105,16 @@
       "report": ".fleet/evidence/landing-audit/performance.html",
       "validRuns": 20,
       "attemptedRuns": 20,
-      "slowMobileP75LcpMs": 1510,
-      "mobileMidP75LcpMs": 759,
-      "mobileMidP75TtfbMs": 1210,
+      "slowMobileP75LcpMs": 1507,
+      "mobileMidP75LcpMs": 755,
+      "mobileMidP75TtfbMs": 1040,
+      "weightedLcpMs": 555,
       "cls": 0,
       "tbtMs": 0
     },
     "visualQuality": {
       "priority": "P2",
-      "score": 89,
+      "score": 96,
       "minimum": 85
     }
   },
