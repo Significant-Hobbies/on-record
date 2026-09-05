@@ -277,11 +277,9 @@ publicRoute.get('/sources', async (c) => {
     .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
     .where(and(...filters));
   const publishers = await database
-    .selectDistinct({ name: schema.shows.name, slug: schema.shows.slug })
+    .select({ name: schema.shows.name, slug: schema.shows.slug })
     .from(schema.shows)
-    .innerJoin(schema.episodes, eq(schema.shows.id, schema.episodes.showId))
-    .innerJoin(schema.claims, eq(schema.episodes.id, schema.claims.episodeId))
-    .where(and(eq(schema.claims.reviewStatus, 'published'), trustedShowFilter()))
+    .where(and(eq(schema.shows.hasPublishedClaims, true), trustedShowFilter()))
     .orderBy(schema.shows.name);
   return c.json({ publishers, sources: rows, total: count?.total ?? rows.length });
 });
