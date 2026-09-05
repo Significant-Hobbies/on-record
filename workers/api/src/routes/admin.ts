@@ -2,7 +2,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { requireAdmin } from '../auth';
 import { isClaimType } from '../claim-types';
-import { bumpPublicCacheGeneration, db, schema } from '../db';
+import { bumpPublicCacheGeneration, db, markShowHasPublishedClaims, schema } from '../db';
 import type { Env } from '../env';
 import { newId } from '../ids';
 import { adminClaimsRoute } from './admin-claims';
@@ -250,14 +250,20 @@ adminRoute.post('/claims/:id/status', async (c) => {
   await c.env.DB.prepare('DELETE FROM claims_fts WHERE claim_id = ?').bind(id).run();
   if (reviewStatusIsIndexed(body.reviewStatus)) {
     const [claim] = await database
-      .select({ assertion: schema.claims.assertion, quote: schema.claims.quote })
+      .select({
+        assertion: schema.claims.assertion,
+        quote: schema.claims.quote,
+        showId: schema.episodes.showId,
+      })
       .from(schema.claims)
+      .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
       .where(eq(schema.claims.id, id))
       .limit(1);
     if (claim) {
       await c.env.DB.prepare('INSERT INTO claims_fts (claim_id, assertion, quote) VALUES (?, ?, ?)')
         .bind(id, claim.assertion, claim.quote)
         .run();
+      await markShowHasPublishedClaims(c.env.DB, claim.showId);
     }
   }
   await bumpPublicCacheGeneration(c.env.DB);

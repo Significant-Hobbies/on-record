@@ -40,6 +40,9 @@ export const shows = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date()),
     feedUrl: text('feed_url'),
+    hasPublishedClaims: integer('has_published_claims', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     hostPersonIds: text('host_person_ids', { mode: 'json' }).$type<string[]>(),
     id: text('id').primaryKey(),
     name: text('name').notNull(),

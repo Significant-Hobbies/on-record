@@ -1,5 +1,5 @@
 import * as schema from '@on-record/db';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 
 export function db(d1: D1Database) {
@@ -7,6 +7,13 @@ export function db(d1: D1Database) {
 }
 
 export { schema };
+
+export async function markShowHasPublishedClaims(d1: D1Database, showId: string): Promise<void> {
+  await db(d1)
+    .update(schema.shows)
+    .set({ hasPublishedClaims: true })
+    .where(and(eq(schema.shows.id, showId), eq(schema.shows.hasPublishedClaims, false)));
+}
 
 // Every request behind the public cache reads this once to build its Cache
 // API key, so it has to stay a single indexed point read - the whole reason
