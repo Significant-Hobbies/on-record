@@ -43,6 +43,10 @@ const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personNam
 <Layout
   title={claim ? `${speakerLabel}: ${claim.assertion}` : 'Claim receipt'}
   description={claim ? `Podcast transcript excerpt from ${speakerUnverified ? 'a speaker whose identity is not verified' : claim.personName ?? 'a verified speaker'}, linked to ${claim.episodeTitle ?? 'the source episode'}.` : 'Published claim receipt.'}
+  breadcrumb={[
+    { name: 'Search claims', path: '/search' },
+    { name: claim ? 'Claim receipt' : 'Claim', path: `/claims/${id}` },
+  ]}
 >
   {missing || !claim ? (
     <div class="empty-state page-empty">

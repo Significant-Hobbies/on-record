@@ -1,10 +1,25 @@
 ---
 import '../styles/global.css';
 
+type BreadcrumbEntry = { name: string; path: string };
+
 const {
   title = 'High Signal Podcasts',
   description = 'Attributable podcast claims, recommendations, books, and tools with verbatim transcript evidence and source trails.',
   robots = 'index,follow,max-image-preview:large,max-snippet:-1',
+  // Schema.org type for this page's WebPage node. Use 'CollectionPage' for an
+  // index of many items (/people, /sources, /recommendations) and
+  // 'ProfilePage' for a single entity's record (/people/<slug>).
+  pageType = 'WebPage',
+  // Crumbs after Home, in order, ending with this page. Omit on pages with no
+  // useful trail (the homepage, 404).
+  breadcrumb = [] as BreadcrumbEntry[],
+  // '@id' of an entity this page is primarily about (e.g. a Person node
+  // emitted via jsonLd below). Rendered as WebPage.about.
+  about,
+  // Extra/override nodes merged into '@graph' after the per-page WebPage and
+  // BreadcrumbList (e.g. methodology's HowTo, a person profile's Person node).
+  jsonLd = [] as Record<string, unknown>[],
 } = Astro.props;
 const siteUrl = 'https://podcasts.highsignal.app';
 const canonical = new URL(Astro.url.pathname, siteUrl).toString();
@@ -15,6 +30,37 @@ const nav = [
   { href: '/recommendations', label: 'Books & tools', note: 'Repeated named items' },
   { href: '/sources', label: 'Episodes', note: 'Source intelligence' },
 ];
+
+const webPageId = `${canonical}#webpage`;
+const breadcrumbId = `${canonical}#breadcrumb`;
+const breadcrumbTrail: BreadcrumbEntry[] = breadcrumb.length
+  ? [{ name: 'Home', path: '/' }, ...breadcrumb]
+  : [];
+
+const webPageNode: Record<string, unknown> = {
+  '@type': pageType,
+  '@id': webPageId,
+  name: title,
+  description,
+  url: canonical,
+  isPartOf: { '@id': `${siteUrl}/#website` },
+  ...(about ? { about: { '@id': about } } : {}),
+  ...(breadcrumbTrail.length ? { breadcrumb: { '@id': breadcrumbId } } : {}),
+};
+
+const breadcrumbNode = breadcrumbTrail.length
+  ? {
+      '@type': 'BreadcrumbList',
+      '@id': breadcrumbId,
+      itemListElement: breadcrumbTrail.map((crumb, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: crumb.name,
+        item: new URL(crumb.path, siteUrl).toString(),
+      })),
+    }
+  : null;
+
 const structuredData = JSON.stringify({
   '@context': 'https://schema.org',
   '@graph': [
@@ -61,17 +107,9 @@ const structuredData = JSON.stringify({
         encodingFormat: 'application/json',
       },
     },
-    {
-      '@type': 'HowTo',
-      '@id': `${siteUrl}/#method`,
-      name: 'How High Signal Podcasts publishes evidence',
-      description: 'The three-stage process used to turn public podcast records into auditable claims.',
-      step: [
-        { '@type': 'HowToStep', position: 1, name: 'Ingest the public record', text: 'Turn publisher transcripts and available captions into bounded source segments.' },
-        { '@type': 'HowToStep', position: 2, name: 'Extract attributable claims', text: 'Keep names, ideas, books, apps, and tools tied to the words that support them.' },
-        { '@type': 'HowToStep', position: 3, name: 'Publish auditable rows', text: 'Keep low-confidence speakers and unsupported interpretations out of the public index.' },
-      ],
-    },
+    webPageNode,
+    ...(breadcrumbNode ? [breadcrumbNode] : []),
+    ...jsonLd,
   ],
 });
 ---
