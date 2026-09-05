@@ -347,3 +347,14 @@ export const ingestRuns = sqliteTable(
   },
   (t) => [index('ingest_runs_started_idx').on(t.startedAt)]
 );
+
+// The Cache API cannot enumerate or wildcard-delete keys, and the public
+// routes take enough query-parameter combinations (search, pagination,
+// filters) that no fixed list of keys covers every cached variant. A single
+// row here tracks a generation counter instead: every cached response's key
+// embeds it, so bumping it on publish makes every prior cache entry - every
+// route, every colo - unreachable at once, with no purge call required.
+export const publicCacheState = sqliteTable('public_cache_state', {
+  generation: integer('generation').notNull().default(1),
+  id: integer('id').primaryKey(),
+});
