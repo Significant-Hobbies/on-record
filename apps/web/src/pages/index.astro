@@ -14,36 +14,46 @@ import { formatClock, formatSaidOn } from '../lib/time';
 
 const env = runtimeEnvFromLocals(Astro.locals);
 const landingApiOptions = { timeoutMs: 1200 };
-const verifiedStats: Stats = {
-  catalogEpisodes: 8414,
-  episodes: 1190,
-  people: 935,
-  publishedClaims: 11624,
-  publishedReferences: 294,
-  transcriptEpisodes: 1209,
+// Fallback only: used when the live /api/stats call fails. Refreshed to the
+// figures /api/stats returned on 2026-09-05 (see issue #12) — this is not a
+// caption of record, it is just what to show if the live fetch errors.
+const fallbackStats: Stats = {
+  catalogEpisodes: 8509,
+  episodes: 1208,
+  people: 956,
+  publishedClaims: 30562,
+  publishedReferences: 1141,
+  transcriptEpisodes: 1226,
   trustedShows: 23,
   trustPolicy: {
     withheldShows: 2,
     wording: 'Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts.',
   },
 };
-const stats: Stats = verifiedStats;
+let stats: Stats = fallbackStats;
+let statsUnavailable = false;
 let people: Person[] = [];
 let claims: Claim[] = [];
 let groups: RecommendationGroup[] = [];
 let sources: Source[] = [];
 
 const results = await Promise.allSettled([
+  apiGet<Stats>('/api/stats', env, landingApiOptions),
   apiGet<{ people: Person[] }>('/api/people?limit=8', env, landingApiOptions),
   apiGet<{ claims: Claim[] }>('/api/search', env, landingApiOptions),
   apiGet<{ groups: RecommendationGroup[] }>('/api/recommendation-groups?limit=8', env, landingApiOptions),
   apiGet<{ sources: Source[] }>('/api/sources?limit=5', env, landingApiOptions),
 ]);
 
-if (results[0].status === 'fulfilled') people = results[0].value.people ?? [];
-if (results[1].status === 'fulfilled') claims = results[1].value.claims ?? [];
-if (results[2].status === 'fulfilled') groups = results[2].value.groups ?? [];
-if (results[3].status === 'fulfilled') sources = results[3].value.sources ?? [];
+if (results[0].status === 'fulfilled') {
+  stats = results[0].value;
+} else {
+  statsUnavailable = true;
+}
+if (results[1].status === 'fulfilled') people = results[1].value.people ?? [];
+if (results[2].status === 'fulfilled') claims = results[2].value.claims ?? [];
+if (results[3].status === 'fulfilled') groups = results[3].value.groups ?? [];
+if (results[4].status === 'fulfilled') sources = results[4].value.sources ?? [];
 
 const readsCleanlyAsAnExample = (claim: Claim) => {
   const quote = claim.quote.trim();
@@ -191,7 +201,9 @@ const heroSearchAgentAttributes = {
     </p>
     <p>
       {stats.trustPolicy?.wording ?? 'Unresolved speakers are withheld from every public count.'}
-      {' Counts last verified 26 Aug 2026.'}
+      {statsUnavailable
+        ? ' Live counts were unavailable for this page load; the figures above are a cached fallback.'
+        : ' Live counts, read from the API on every page load.'}
     </p>
   </section>
 
