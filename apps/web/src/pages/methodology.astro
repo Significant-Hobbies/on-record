@@ -1,7 +1,64 @@
 ---
 import Layout from '../layouts/Base.astro';
+
+const siteUrl = 'https://podcasts.highsignal.app';
+const pageUrl = `${siteUrl}/methodology`;
+
+// Single source of truth for both the visible numbered list below and the
+// HowTo structured data passed to Layout — the two must never drift apart.
+const steps = [
+  {
+    name: 'Discover',
+    text: 'Daily GitHub Actions read podcast RSS as the primary catalog; the YouTube channel feed enriches matching episodes by title and date. An unmatched YouTube upload is admitted only when RSS returned nothing or a show is explicitly configured to use YouTube as a source.',
+  },
+  {
+    name: 'Transcripts',
+    text: "A canonical speaker-labelled publisher page is used first where one is supported, then RSS podcast:transcript files, then YouTube captions, then opt-in Whisper. Publisher pages are accepted only after domain, redirect, title, and structure checks, so an operational failure stays retryable and only a checked, genuine absence is recorded as no_transcript.",
+  },
+  {
+    name: 'Segment',
+    text: 'Each transcript is cut into roughly 3,000-character windows at cue and speaker boundaries. A transcript replacement is exact: stale trailing segments are removed, and it is rejected outright once a published claim already references that episode.',
+  },
+  {
+    name: 'Attribute',
+    text: 'Publisher speaker labels become people only through manually reviewed label mappings; every other turn stays unknown. A row whose speaker the transcript does not establish says so explicitly and is excluded from person counts rather than guessed.',
+  },
+  {
+    name: 'Extract',
+    text: 'Cheap triage keeps recommendations, positions, predictions, evaluations, explanations, and commitments, and drops questions, filler, ads, and context-dependent fragments. Deterministic rules classify complete claims; a batched extraction model classifies the ambiguous remainder. Neither path invents or rewords the excerpt — the stored assertion is the same source quote.',
+  },
+  {
+    name: 'Validate',
+    text: 'Before a claim can be judged, its quote is looked up verbatim inside the stored transcript segment text. A claim without an exact match never advances past draft, so it never reaches the public index.',
+  },
+  {
+    name: 'Judge',
+    text: 'Extraction confidence and speaker confidence are banded into low, medium, and high. High-confidence, quote-validated claims publish immediately; medium-confidence claims are held for review; low-confidence and unknown-speaker claims stay in draft. A high-confidence quote with an unresolved speaker can publish labeled speaker_unverified, but it is excluded from person and distinct-recommender counts.',
+  },
+  {
+    name: 'Publish',
+    text: 'A published row keeps its speaker, verbatim excerpt, date, attribution status, and source link attached. The website is server-rendered from the API, so a newly published claim appears without a rebuild.',
+  },
+];
+
+const howTo = {
+  '@type': 'HowTo',
+  '@id': `${pageUrl}#method`,
+  name: 'How High Signal Podcasts publishes evidence',
+  description: 'The eight-stage pipeline that turns public podcast records into auditable, attributable claims.',
+  step: steps.map((step, index) => ({
+    '@type': 'HowToStep',
+    position: index + 1,
+    name: step.name,
+    text: step.text,
+  })),
+};
 ---
-<Layout title="Methodology: High Signal Podcasts">
+<Layout
+  title="Methodology: High Signal Podcasts"
+  breadcrumb={[{ name: 'Methodology', path: '/methodology' }]}
+  jsonLd={[howTo]}
+>
   <h1>Methodology</h1>
   <p>
     High Signal Podcasts indexes public statements as claims. A published row always has a
@@ -11,13 +68,29 @@ import Layout from '../layouts/Base.astro';
     from captions on the same video; publisher and RSS transcript clocks are not assumed to match a
     separate YouTube edit.
   </p>
-  <p>
-  Daily GitHub Actions discover new episodes, take publisher or YouTube captions, and skip
-    filler with a cheap filter. Strong, complete claim excerpts can be classified by explicit
-    rules; named recommendations and ambiguous candidates use the extraction model. The Worker
-    then validates every quote and named reference against the stored segment. The website is
-    server-rendered from the API, so new published claims appear without a rebuild.
-  </p>
+
+  <section class="method-strip" aria-labelledby="method-heading">
+    <div class="method-intro">
+      <p class="eyebrow">The pipeline</p>
+      <h2 id="method-heading">Eight stages, each one a gate.</h2>
+      <p>
+        Every published claim passes through all eight stages in order. A claim that fails a gate
+        does not get published at a lower confidence anyway — it stops at that stage.
+      </p>
+    </div>
+    <ol class="method-list">
+      {steps.map((step, index) => (
+        <li>
+          <span>{String(index + 1).padStart(2, '0')}</span>
+          <div>
+            <strong>{step.name}</strong>
+            <p>{step.text}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  </section>
+
   <p>Missing evidence is shown as missing. We do not invent an answer.</p>
   <p>
     Transcript excerpts can preserve errors made by a publisher or caption provider. The original

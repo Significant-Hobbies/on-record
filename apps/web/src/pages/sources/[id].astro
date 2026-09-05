@@ -28,6 +28,10 @@ const claimTypes = claims.reduce<Record<string, number>>((counts, claim) => {
 <Layout
   title={`${source?.title ?? 'Episode'} — High Signal Podcasts`}
   description={source ? `Attributable claims and transcript excerpts from ${source.title}, with links to the original source.` : 'Episode evidence record.'}
+  breadcrumb={[
+    { name: 'Episodes', path: '/sources' },
+    { name: source?.title ?? 'Episode', path: `/sources/${id}` },
+  ]}
 >
   {missing || !source ? (
     <div class="empty-state page-empty">

@@ -101,6 +101,8 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
 <Layout
   title="Grouped recommendations: High Signal Podcasts"
   description="Books, apps, tools, and other named podcast references grouped by distinct verified people, with every count linked to source evidence."
+  pageType="CollectionPage"
+  breadcrumb={[{ name: 'Books & tools', path: '/recommendations' }]}
 >
   <header class="collection-header">
     <p class="eyebrow">Evidence index / named items</p>
