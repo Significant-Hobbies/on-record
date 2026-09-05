@@ -2,7 +2,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { requireAdmin } from '../auth';
 import { isClaimType } from '../claim-types';
-import { db, markShowHasPublishedClaims, schema } from '../db';
+import { bumpPublicCacheGeneration, db, markShowHasPublishedClaims, schema } from '../db';
 import type { Env } from '../env';
 import { newId } from '../ids';
 import { adminClaimsRoute } from './admin-claims';
@@ -266,6 +266,7 @@ adminRoute.post('/claims/:id/status', async (c) => {
       await markShowHasPublishedClaims(c.env.DB, claim.showId);
     }
   }
+  await bumpPublicCacheGeneration(c.env.DB);
   return c.json({ ok: true });
 });
 

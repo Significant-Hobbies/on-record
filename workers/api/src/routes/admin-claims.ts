@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { attributionStatusFor, type AttributionStatus } from '../attribution';
 import { isClaimType } from '../claim-types';
-import { db, markShowHasPublishedClaims, schema } from '../db';
+import { bumpPublicCacheGeneration, db, markShowHasPublishedClaims, schema } from '../db';
 import { youtubeDeepLink } from '../deep-link';
 import type { Env } from '../env';
 import { dedupeHash, newId } from '../ids';
@@ -350,6 +350,7 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
     .where(eq(schema.episodes.id, episodeId));
   if (published > 0) {
     await markShowHasPublishedClaims(c.env.DB, episode.showId);
+    await bumpPublicCacheGeneration(c.env.DB);
   }
   return c.json({ published, rejectedQuote, rejectedSpeaker, results });
 });
@@ -423,6 +424,7 @@ async function unpublish(
     .where(eq(schema.claims.id, claimId));
   // It must leave the search index too, or a retracted claim keeps surfacing.
   await d1.prepare('DELETE FROM claims_fts WHERE claim_id = ?').bind(claimId).run();
+  await bumpPublicCacheGeneration(d1);
 }
 
 /**
