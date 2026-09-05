@@ -31,7 +31,11 @@ app.use('*', async (c, next) => {
 app.use('/api/stats', publicReferenceCache);
 app.use('/api/recommendations', publicReferenceCache);
 app.use('/api/recommendation-groups', publicReferenceCache);
+app.use('/api/people', publicReferenceCache);
 app.use('/api/people/*', publicReferenceCache);
+app.use('/api/sources', publicReferenceCache);
+app.use('/api/search', publicReferenceCache);
+app.use('/api/topics/*', publicReferenceCache);
 
 app.get('/', (c) => c.json({ env: c.env.ENVIRONMENT ?? 'unknown', name: 'on-record-api' }));
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
