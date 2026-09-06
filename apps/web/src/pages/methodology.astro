@@ -96,4 +96,76 @@ const howTo = {
     Transcript excerpts can preserve errors made by a publisher or caption provider. The original
     episode remains the final authority, and every receipt keeps that source attached for review.
   </p>
+
+  <section class="closing-cta" aria-labelledby="cadence-heading">
+    <p class="eyebrow">Update schedule</p>
+    <h2 id="cadence-heading">How often does the index update?</h2>
+    <p>Two cadences: discovery is daily, extraction is weekly.</p>
+    <table class="data-table">
+      <thead><tr><th>Stage</th><th>Schedule</th><th>What runs</th></tr></thead>
+      <tbody>
+        <tr><td>Discovery and transcripts</td><td>Daily, 06:00 UTC</td><td>discover, then transcripts</td></tr>
+        <tr><td>Claim extraction</td><td>Weekly, Sundays 07:00 UTC</td><td>extract, all segments</td></tr>
+      </tbody>
+    </table>
+    <p>An episode can appear in the catalogue within a day, while its claims stay unpublished until the next Sunday run.</p>
+  </section>
+
+  <section class="closing-cta" aria-labelledby="disqualify-heading">
+    <p class="eyebrow">The refusal conditions</p>
+    <h2 id="disqualify-heading">What disqualifies a claim.</h2>
+    <p>Enforced in <code>judgeClaim</code> in the API worker.</p>
+    <table class="data-table">
+      <thead><tr><th>Condition</th><th>Outcome</th></tr></thead>
+      <tbody>
+        <tr><td>Quote not found in stored segment</td><td><strong>Never published</strong> - <code>quote_not_verbatim</code></td></tr>
+        <tr><td>Quote shorter than 40 characters</td><td>Cannot be anchored</td></tr>
+        <tr><td>Speaker is unknown</td><td><strong>Never published</strong> - <code>unknown_speaker</code></td></tr>
+        <tr><td>Both confidences >= 0.85</td><td>Published</td></tr>
+        <tr><td>Both >= 0.65, not both >= 0.85</td><td><strong>Held</strong></td></tr>
+        <tr><td>Either below 0.65</td><td>Stays a draft</td></tr>
+        <tr><td>Unverified speaker, extraction >= 0.85</td><td>Published, labelled unverified</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="method-strip" aria-labelledby="example-heading">
+    <div class="method-intro">
+      <p class="eyebrow">One published claim, traced</p>
+      <h2 id="example-heading">Worked example.</h2>
+      <p>Verified live on 5 September 2026.</p>
+    </div>
+    <div>
+      <blockquote class="claim-quote">
+        <p>"I think the products that are doing this, they have a very sharp sense of how well their application is performing, and people don't talk about it, because this is their moat."</p>
+        <footer><p>- <strong>Shreya Shankar</strong>, on <em>Lenny's Podcast</em>, 25 September 2025.</p>
+        <p><a href="/sources/bf0352db-a396-4a20-8560-531245782a65">Open the episode</a> . <a href="/people/shreya-shankar">All claims by this speaker</a></p></footer>
+      </blockquote>
+      <p>Follow it yourself: <code>GET /api/claims/e7240228-46cd-41e6-bb59-0a67d8cb5dca</code> returns the claim, its evidence row, and its references. The claim's <code>assertion</code>, its <code>quote</code>, and the evidence row's <code>quote</code> are all the same string - that identity is what "verbatim" means here.</p>
+      <p>The row carries <code>transcriptKind: publisher_json</code> - the publisher's own transcript, with speakers already named. That field is on every claim, and it tells you how much the attribution rests on.</p>
+    </div>
+  </section>
+
+  <section class="closing-cta" aria-labelledby="no-claim-heading">
+    <p class="eyebrow">Honest boundaries</p>
+    <h2 id="no-claim-heading">What we do not claim.</h2>
+    <ul>
+      <li><strong>We verify attribution, not accuracy.</strong> Whether they were right is not checked.</li>
+      <li><strong>"Verbatim" means against the transcript, not the audio.</strong> Publisher mistakes survive.</li>
+      <li><strong>The date is the episode's publication date.</strong> Not the recording date.</li>
+      <li><strong>Timed links are conditional.</strong> Only where captions carry timing.</li>
+      <li><strong>Absence is shown as absence.</strong> No generated answers.</li>
+    </ul>
+  </section>
+
+  <section class="closing-cta" aria-labelledby="api-heading">
+    <p class="eyebrow">Check it yourself</p>
+    <h2 id="api-heading">Where the data is.</h2>
+    <p>Everything on this page is checkable through the documented read-only API. The website and public API <a href="/pricing">currently require no account, API key, subscription or checkout</a> - which describes the product today and is not a promise of a permanent pricing model.</p>
+    <pre><code>GET https://api.podcasts.highsignal.app/api/stats
+GET https://api.podcasts.highsignal.app/api/claims/{"{id}"}
+GET https://api.podcasts.highsignal.app/api/search?q=agents</code></pre>
+    <p><a href="/evidence">What a published claim looks like, with a real example</a></p>
+  </section>
+
 </Layout>
