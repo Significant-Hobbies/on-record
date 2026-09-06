@@ -218,24 +218,33 @@ const structuredData = JSON.stringify({
       </footer>
     </div>
     <script is:inline>
-      (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-      })(window,document,"clarity","script","ybch0p6cta");
-      window.clarity("set", "project_id", "on-record");
+      // Lazy-load non-critical third-party scripts (Clarity, SaaS Maker widgets)
+      // after the page is interactive so they never compete for bandwidth on the
+      // critical render path. Issue #11: these total ~72KB and were pushing mobile
+      // LCP past 2.5s on slow 4G by stealing bandwidth from the render-blocking CSS.
+      (function () {
+        var idle = window.requestIdleCallback || function (cb) { return setTimeout(cb, 1500); };
+        idle(function () {
+          // Clarity
+          (function (c, l, a, r, i, t, y) {
+            c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments); };
+            t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i;
+            y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
+          })(window, document, "clarity", "script", "ybch0p6cta");
+          window.clarity("set", "project_id", "on-record");
+          // SaaS Maker widgets
+          var s1 = document.createElement("script");
+          s1.src = "https://sassmaker.com/project-strip.js";
+          s1.dataset.project = "on-record";
+          s1.defer = true;
+          document.body.appendChild(s1);
+          var s2 = document.createElement("script");
+          s2.src = "https://sassmaker.com/ai-chat-footer.js";
+          s2.dataset.name = "High Signal Podcasts";
+          s2.defer = true;
+          document.body.appendChild(s2);
+        });
+      })();
     </script>
-    <script
-      is:inline
-      src="https://sassmaker.com/project-strip.js"
-      data-project="on-record"
-      defer
-    ></script>
-    <script
-      is:inline
-      src="https://sassmaker.com/ai-chat-footer.js"
-      data-name="High Signal Podcasts"
-      defer
-    ></script>
   </body>
 </html>
