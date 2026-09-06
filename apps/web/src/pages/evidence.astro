@@ -1,0 +1,161 @@
+---
+import Layout from '../layouts/Base.astro';
+
+const siteUrl = 'https://podcasts.highsignal.app';
+const pageUrl = `${siteUrl}/evidence`;
+
+const quotation = {
+  '@type': 'Quotation',
+  '@id': `${pageUrl}#quotation`,
+  text: "It's unfortunate that they work so well. It's unfortunate that scaling works so well, because it's too easy for people to just sweep these problems under the carpet.",
+  creator: {
+    '@type': 'Person',
+    '@id': `${siteUrl}/people/llion-jones#person`,
+    name: 'Llion Jones',
+  },
+  isBasedOn: {
+    '@type': 'PodcastEpisode',
+    '@id': `${siteUrl}/sources/fc3e5569-88f3-4299-8b0e-69347247c23a#episode`,
+    name: 'He Co-Invented the Transformer. Now: Continuous Thought Machines',
+    partOfSeries: {
+      '@type': 'PodcastSeries',
+      name: 'Machine Learning Street Talk',
+    },
+  },
+  datePublished: '2025-11-23',
+};
+---
+
+<Layout
+  title="Evidence: High Signal Podcasts"
+  description="Podcast claims with the evidence attached. Not a summarizer."
+  breadcrumb={[{ name: 'Evidence', path: '/evidence' }]}
+  jsonLd={[quotation]}
+>
+  <section class="info-page">
+    <p class="eyebrow">The evidence contract</p>
+    <h1>Podcast claims with the evidence attached.</h1>
+    <p class="lede">High Signal Podcasts indexes what was actually said on a podcast and links every claim back to its source: the episode, the speaker, the date, and a verbatim transcript excerpt. <strong>It is not a summarizer</strong> - no claim here is model-written prose about an episode. A claim is published only if its quote validates verbatim against the stored transcript segment; if it does not match, it is never published, and no confidence score can override that. As of 5 September 2026 the index holds 30,562 published claims across 1,208 episodes from 23 trusted shows.</p>
+  </section>
+
+  <section class="method-strip" aria-labelledby="example-heading">
+    <div class="method-intro">
+      <p class="eyebrow">One real claim, end to end</p>
+      <h2 id="example-heading">What a claim is here.</h2>
+      <p>Verified live on 2026-09-05. Every field is checkable via the public API.</p>
+    </div>
+    <div>
+      <blockquote class="claim-quote">
+        <p>"It's unfortunate that they work so well. It's unfortunate that scaling works so well, because it's too easy for people to just sweep these problems under the carpet."</p>
+        <footer><p>- <strong>Llion Jones</strong>, on <em>Machine Learning Street Talk</em>, said 23 November 2025. Attribution: <strong>verified speaker</strong>.</p></footer>
+      </blockquote>
+      <dl class="receipt-grid">
+        <div><dt>Speaker</dt><dd>Llion Jones, <code>verified_speaker</code></dd></div>
+        <div><dt>Show</dt><dd>Machine Learning Street Talk</dd></div>
+        <div><dt>Date said</dt><dd>2025-11-23</dd></div>
+        <div><dt>Quote</dt><dd>byte-identical to the stored evidence row</dd></div>
+        <div><dt>Transcript kind</dt><dd><code>publisher_html</code></dd></div>
+        <div><dt>Episode</dt><dd>resolves to a page on this site with the excerpt</dd></div>
+      </dl>
+      <p>The claim's own record is public: <code>GET /api/claims/27d6cf86-8403-4185-8c1d-056448739ecd</code> returns the claim, its evidence row, and its references. The <code>quote</code> field on the claim and the <code>quote</code> field on the evidence row are the same string - that identity is what "verbatim" means here.</p>
+    </div>
+  </section>
+
+  <section class="closing-cta" aria-labelledby="gate-heading">
+    <p class="eyebrow">The refusal conditions</p>
+    <h2 id="gate-heading">The gate, exactly.</h2>
+    <p>Conditions under which the pipeline <strong>refuses</strong> to publish. Enforced in <code>judgeClaim</code> in the API worker.</p>
+    <table class="data-table">
+      <thead><tr><th>Condition</th><th>Outcome</th></tr></thead>
+      <tbody>
+        <tr><td>Quote does not validate verbatim</td><td><strong>Never published</strong> - <code>quote_not_verbatim</code></td></tr>
+        <tr><td>Speaker is unknown</td><td><strong>Never published</strong> - <code>unknown_speaker</code></td></tr>
+        <tr><td>Both confidences >= 0.85</td><td>Published</td></tr>
+        <tr><td>Both >= 0.65, not both >= 0.85</td><td><strong>Held</strong></td></tr>
+        <tr><td>Either below 0.65</td><td>Draft</td></tr>
+        <tr><td>Unverified speaker, extraction >= 0.85</td><td>Published, labelled <code>high_confidence_unverified_speaker</code></td></tr>
+      </tbody>
+    </table>
+    <ol>
+      <li><strong>A high score cannot rescue a bad quote.</strong> The verbatim check runs first.</li>
+      <li><strong>Unverified speakers do not inflate the people index.</strong> Person aggregates count only <code>verified_speaker</code> rows - covered by a test.</li>
+    </ol>
+  </section>
+
+  <section class="method-strip" aria-labelledby="negative-heading">
+    <div class="method-intro">
+      <p class="eyebrow">The negative space</p>
+      <h2 id="negative-heading">What we do not do.</h2>
+      <p>The negative space is load-bearing. It is what makes "evidence" a category rather than a slogan.</p>
+    </div>
+    <div>
+      <ul class="method-list">
+        <li><span>-</span><div><strong>No summarization.</strong><p>Nothing on this site is model-written prose describing an episode. Every published string in a claim is a quote.</p></div></li>
+        <li><span>-</span><div><strong>No inference about what a speaker meant.</strong><p>The index records what was said, not its intent.</p></div></li>
+        <li><span>-</span><div><strong>No fact-checking verdicts.</strong><p>We verify <em>attribution</em> - that this person said this, in this episode, on this date. We do not adjudicate whether they were right. That is why this site does not use <code>ClaimReview</code> markup anywhere.</p></div></li>
+        <li><span>-</span><div><strong>No ranking of speakers.</strong><p>There is no authority score and no leaderboard.</p></div></li>
+        <li><span>-</span><div><strong>Absence is shown as absence.</strong><p>An empty search returns explicit insufficient evidence rather than a generated answer.</p></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="closing-cta" aria-labelledby="caveats-heading">
+    <p class="eyebrow">Honest boundaries</p>
+    <h2 id="caveats-heading">What this does not guarantee.</h2>
+    <ul>
+      <li><strong>Transcript errors survive.</strong> An excerpt can faithfully reproduce a mistake made by a publisher or caption provider. The original episode remains the final authority.</li>
+      <li><strong>The date is the episode's publication date.</strong> Not the same as the date the words were spoken.</li>
+      <li><strong>Timed links are conditional.</strong> A timestamped link appears only when the excerpt came from captions on that same video.</li>
+    </ul>
+  </section>
+
+  <section class="method-strip" aria-labelledby="corpus-heading">
+    <div class="method-intro">
+      <p class="eyebrow">Live figures</p>
+      <h2 id="corpus-heading">What the corpus contains.</h2>
+      <p>Read live from the public API on 5 September 2026. Each figure names its scope.</p>
+    </div>
+    <div>
+      <table class="data-table">
+        <thead><tr><th>Figure</th><th>Value</th><th>Scope</th></tr></thead>
+        <tbody>
+          <tr><td>Published claims</td><td><strong>30,562</strong></td><td>trusted shows only</td></tr>
+          <tr><td>Episodes with claims</td><td><strong>1,208</strong></td><td>site-wide</td></tr>
+          <tr><td>Attributable people</td><td><strong>956</strong></td><td>verified-speaker only</td></tr>
+          <tr><td>Episodes catalogued</td><td><strong>8,509</strong></td><td>includes no-claim episodes</td></tr>
+          <tr><td>Episodes with transcripts</td><td><strong>1,226</strong></td><td>resolved, extraction pending</td></tr>
+          <tr><td>Trusted shows</td><td><strong>23</strong></td><td>active and trusted</td></tr>
+          <tr><td>Published references</td><td><strong>1,141</strong></td><td>individual reference rows</td></tr>
+          <tr><td>Shows withheld</td><td><strong>2</strong></td><td>unsafe diarization</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Why the catalogue is seven times the published set.</strong> 8,509 episodes catalogued; 1,226 have transcripts; 1,208 have published claims. The gap is the gate doing its job - an episode with no usable transcript produces no claims, and summarising from a description is the thing this index exists not to do.</p>
+    </div>
+  </section>
+
+  <section class="closing-cta" aria-labelledby="verify-heading">
+    <p class="eyebrow">Check it yourself</p>
+    <h2 id="verify-heading">How to check any claim.</h2>
+    <p>The public API is read-only. The website and API <a href="/pricing">currently require no account, API key, subscription or checkout</a> - which describes the product today and is not a promise of a permanent pricing model.</p>
+    <pre><code>GET https://api.podcasts.highsignal.app/api/stats
+GET https://api.podcasts.highsignal.app/api/claims/{"{id}"}
+GET https://api.podcasts.highsignal.app/api/search?q=agents</code></pre>
+    <p><a href="/methodology">How episodes are discovered, transcribed and extracted</a></p>
+  </section>
+
+  <section class="method-strip" aria-labelledby="browse-heading">
+    <div class="method-intro">
+      <p class="eyebrow">The index</p>
+      <h2 id="browse-heading">Browse the index.</h2>
+    </div>
+    <div>
+      <ul class="method-list">
+        <li><span>></span><div><a href="/sources"><strong>Episodes</strong></a><p>Every episode with published evidence</p></div></li>
+        <li><span>></span><div><a href="/people"><strong>People</strong></a><p>Speakers with verified attribution</p></div></li>
+        <li><span>></span><div><a href="/recommendations"><strong>Books and tools</strong></a><p>Named references pulled from claims</p></div></li>
+        <li><span>></span><div><a href="/developers"><strong>Public API</strong></a><p>Machine access to all of it</p></div></li>
+      </ul>
+    </div>
+  </section>
+
+</Layout>
