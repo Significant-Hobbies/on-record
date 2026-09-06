@@ -57,3 +57,23 @@ The segment endpoint upserts the incoming anchors and removes any stale indexes
 left by an older, longer segmentation. It rejects duplicate or invalid indexes
 and refuses replacement when the episode already has claims, preserving every
 claim-to-segment evidence anchor.
+
+## A8 — D1 read replication, entered through the Sessions API
+
+`on-record-db` is APAC-primary, and issue #11 measured every uncached public
+response paying that distance. Read replication is enabled (`auto`) and costs
+nothing beyond the same `rows_read`/`rows_written` billing, so the only real
+decision was consistency, not price.
+
+Each request opens one session (`workers/api/src/session.ts`) and every query
+it makes runs through it, which is what buys sequential consistency: public
+reads anchor `first-unconstrained` and may be answered by any replica already
+caught up; admin reads anchor `first-primary` so a moderator sees their own
+publish. Writes always land on the primary regardless, so cache-generation
+bumps and publish paths are unaffected. The session bookmark is returned and
+accepted on the `x-d1-bookmark` header, so a client that echoes it never reads
+backwards.
+
+The cost is that a public read may see a replica a beat behind — including the
+cache generation. That is the same trade already accepted by the in-isolate
+generation memo, against a cached response TTL of an hour.

@@ -5,18 +5,50 @@ import { publicCacheGeneration } from './db';
 import type { Env } from './env';
 import { adminRoute } from './routes/admin';
 import { publicRoute } from './routes/public';
+import { anchorFor, D1_BOOKMARK_HEADER, envWithSession, openSession } from './session';
 
 const app = new Hono<{ Bindings: Env }>();
-const publicCors = cors({ origin: '*' });
+const publicCors = cors({ origin: '*', exposeHeaders: [D1_BOOKMARK_HEADER] });
 const publicReferenceCache = cache({
   cacheControl: 'public, max-age=3600',
   cacheName: async (c) => `on-record-public-references-v2-${await publicCacheGeneration(c.env.DB)}`,
   onCacheNotAvailable: false,
 });
 
+const isAdminPath = (path: string) => path === '/admin' || path.startsWith('/admin/');
+
+// This has to be the first middleware registered: the response cache below
+// reads the generation out of D1 while building its cache key, before it even
+// looks for a hit, and that read should go through the session like every
+// other one. See session.ts for why public reads are unconstrained and admin
+// reads are anchored to the primary.
 app.use('*', async (c, next) => {
-  const isAdminPath = c.req.path === '/admin' || c.req.path.startsWith('/admin/');
-  if (!isAdminPath) {
+  // `c.env` is absent on routes reached without bindings at all (the 404
+  // fallback, and the tests that exercise it), so this must not assume one.
+  const session = openSession(
+    c.env?.DB,
+    anchorFor(c.req.header(D1_BOOKMARK_HEADER), isAdminPath(c.req.path))
+  );
+  if (session) {
+    c.env = envWithSession(c.env, session);
+  }
+  await next();
+  // A request that answered entirely from cache runs no query and has no
+  // bookmark to report. Header writes are guarded because a response handed
+  // back by the Cache API is not guaranteed to be mutable, and a missing
+  // bookmark header is never worth failing a served response over.
+  const bookmark = session?.getBookmark();
+  if (bookmark) {
+    try {
+      c.res.headers.set(D1_BOOKMARK_HEADER, bookmark);
+    } catch {
+      // immutable response headers - nothing to do
+    }
+  }
+});
+
+app.use('*', async (c, next) => {
+  if (!isAdminPath(c.req.path)) {
     return publicCors(c, next);
   }
   if (c.req.method === 'OPTIONS') {
