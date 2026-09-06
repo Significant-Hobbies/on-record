@@ -565,31 +565,41 @@ publicRoute.get('/recommendation-groups', async (c) => {
 
 publicRoute.get('/stats', async (c) => {
   const database = db(c.env.DB);
-  const [counts] = await database
-    .select({
-      episodes: sql<number>`count(distinct ${schema.claims.episodeId})`,
-      people: sql<number>`count(distinct case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.claims.personId} end)`,
-      publishedClaims: sql<number>`count(*)`,
-    })
-    .from(schema.claims)
-    .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
-    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-    .where(and(eq(schema.claims.reviewStatus, 'published'), trustedShowFilter()));
-  const [catalog] = await database
-    .select({
-      catalogEpisodes: sql<number>`count(distinct ${schema.episodes.id})`,
-      trustedShows: sql<number>`count(distinct ${schema.shows.id})`,
-    })
-    .from(schema.episodes)
-    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-    .where(and(eq(schema.shows.active, true), trustedShowFilter()));
-  const [transcripts] = await database
-    .select({ transcriptEpisodes: sql<number>`count(distinct ${schema.segments.episodeId})` })
-    .from(schema.segments)
-    .innerJoin(schema.episodes, eq(schema.segments.episodeId, schema.episodes.id))
-    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-    .where(trustedShowFilter());
-  const references = await publishedReferences(c.env.DB, {}, REFERENCE_SCAN_CEILING);
+  // Four independent reads that share no inputs. Awaited one after another
+  // they cost four serial D1 round trips, and `on-record-db` runs in APAC
+  // with read replication disabled, so a round trip is ~90ms from a colo in
+  // that region and more from anywhere else. That made this the slowest
+  // endpoint on the homepage fan-out at ~1.48s of origin time on a cache
+  // miss - past the 1200ms the landing page allows before it falls back to
+  // stale figures (issue #11). Issued together the endpoint costs one round
+  // trip plus the slowest query rather than the sum of all four.
+  const [[counts], [catalog], [transcripts], references] = await Promise.all([
+    database
+      .select({
+        episodes: sql<number>`count(distinct ${schema.claims.episodeId})`,
+        people: sql<number>`count(distinct case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.claims.personId} end)`,
+        publishedClaims: sql<number>`count(*)`,
+      })
+      .from(schema.claims)
+      .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .where(and(eq(schema.claims.reviewStatus, 'published'), trustedShowFilter())),
+    database
+      .select({
+        catalogEpisodes: sql<number>`count(distinct ${schema.episodes.id})`,
+        trustedShows: sql<number>`count(distinct ${schema.shows.id})`,
+      })
+      .from(schema.episodes)
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .where(and(eq(schema.shows.active, true), trustedShowFilter())),
+    database
+      .select({ transcriptEpisodes: sql<number>`count(distinct ${schema.segments.episodeId})` })
+      .from(schema.segments)
+      .innerJoin(schema.episodes, eq(schema.segments.episodeId, schema.episodes.id))
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .where(trustedShowFilter()),
+    publishedReferences(c.env.DB, {}, REFERENCE_SCAN_CEILING),
+  ]);
   return c.json({
     catalogEpisodes: catalog?.catalogEpisodes ?? 0,
     episodes: counts?.episodes ?? 0,

@@ -305,3 +305,42 @@ describe('published reference listing keeps its public gates', () => {
     expect(seen.statements).toHaveLength(0);
   });
 });
+
+/**
+ * D1 stub that reports how many statements were ever in flight at once.
+ * `/stats` needs four independent reads and D1 round trips dominate their
+ * cost, so whether they overlap is the whole difference between one round
+ * trip and four (issue #11).
+ */
+function concurrencyD1(seen: { peak: number }) {
+  let inFlight = 0;
+  const settle = async <T>(value: T): Promise<T> => {
+    inFlight += 1;
+    seen.peak = Math.max(seen.peak, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    inFlight -= 1;
+    return value;
+  };
+  return {
+    prepare: () => ({
+      bind: () => ({
+        all: async () => settle({ results: [] }),
+        first: async () => settle(null),
+        raw: async () => settle([] as unknown[][]),
+        run: async () => settle({}),
+      }),
+    }),
+  } as unknown as D1Database;
+}
+
+describe('stats issues its independent reads together', () => {
+  it('overlaps all four D1 reads instead of awaiting them in turn', async () => {
+    const seen = { peak: 0 };
+    const env = { DB: concurrencyD1(seen), RAW: {} } as unknown as Env;
+
+    const response = await publicRoute.request('/stats', {}, env);
+
+    expect(response.status).toBe(200);
+    expect(seen.peak).toBe(4);
+  });
+});
