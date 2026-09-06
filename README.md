@@ -42,14 +42,16 @@ still need operator approval.
 
 ## Trusted production corpus
 
-Production contains 25 shows and 10,325 episode rows. The public trusted 23-show
-subset exposes 8,414 catalog episodes, 1,209 transcript episodes, 11,624
-published claims from 935 people across 1,190 source episodes, and 294
-quote-safe named-reference evidences in 281 canonical groups. D1 retains 300
-reference rows before the public quote-safety pass. Of the transcript episodes,
-1,092 (90.3%) have at least 10 claims and 19 have none. TBPN and Odd Lots remain
-stored but are withheld from all public routes because their diarized speaker
-labels are not safe to map to people yet.
+Production contains 25 shows and 10,325 episode rows (last verified 26 Aug
+2026). The public trusted 23-show subset exposes 8,509 catalog episodes, 1,226
+transcript episodes, 30,562 published claims from 956 people across 1,208
+source episodes, and 1,141 quote-safe named-reference evidences in 958
+canonical groups (as of 2026-09-06; read live from `/api/stats` and
+`/api/recommendation-groups`). D1 retains 300 reference rows before the public
+quote-safety pass (last verified 26 Aug 2026). Of the transcript episodes,
+1,092 (90.3%) have at least 10 claims and 19 have none (last verified 26 Aug
+2026). TBPN and Odd Lots remain stored but are withheld from all public routes
+because their diarized speaker labels are not safe to map to people yet.
 
 Build the narrow reviewed v9 bundle with `pnpm release:build-reviewed`, or the
 full trusted corpus bundle with `pnpm release:build-trusted`. The trusted bundle
