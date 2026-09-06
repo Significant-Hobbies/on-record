@@ -22,5 +22,13 @@
   ],
   "vars": {
     "PUBLIC_API_BASE": "https://api.podcasts.highsignal.app"
-  }
+  },
+  // Server-side page renders call the API through this binding instead of
+  // making a public HTTPS round trip to the same colo. See apps/web/src/lib/api.ts.
+  "services": [
+    {
+      "binding": "API",
+      "service": "on-record-api"
+    }
+  ]
 }

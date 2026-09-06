@@ -36,6 +36,13 @@ guest's answer to the preceding host.
 Astro SSR on `on-record.significanthobbies.com` (Session 2) has no D1
 binding. Draft and held claims must not leak from public routes.
 
+Server-side renders reach the API through a service binding (`API`) rather
+than a public HTTPS request to `api.podcasts.highsignal.app`, which was ~69ms
+of the homepage's origin time for a call to a worker in the same colo (#11).
+The boundary is unchanged: still no D1 binding, still only the public API
+surface, and the request URL stays the public one so `hono/cache` keys the
+same Cache API entries whichever way the request arrived.
+
 ## A5 — Append-only claim ledger
 
 Episodes move through a linear status column. Episode `guid` and claim
