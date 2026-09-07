@@ -43,7 +43,7 @@ function fixture(size = 0) {
   } as unknown as D1Database;
   const corpusSql = `
 WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<${Math.max(size, 1)})
-INSERT INTO segments (id,episode_id,idx,start_s,end_s,text) SELECT 's'||i,'e1',i,0,1,'Synthetic transcript' FROM n;
+INSERT INTO segments (id,episode_id,idx,start_s,end_s,text) SELECT 's'||i,'e1',i,0,1,'I personally use Cursor every day.' FROM n;
 WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<${Math.max(size, 1)})
 INSERT INTO claims (id,dedupe_hash,person_id,episode_id,segment_id,speaker_raw,claim_type,assertion,quote,extraction_confidence,speaker_confidence,confidence_band,review_status,pipeline_version,created_at,said_on)
 SELECT 'c'||i,'c'||i,'p1','e1','s'||(i/2),'Synthetic speaker','recommendation',
@@ -85,9 +85,9 @@ function add(
   if (row.segment_id) {
     sqlite
       .prepare(
-        "INSERT OR IGNORE INTO segments (id,episode_id,idx,start_s,end_s,text) VALUES (?, 'e1', (SELECT count(*) FROM segments), 0, 1, 'Synthetic transcript')"
+        "INSERT OR IGNORE INTO segments (id,episode_id,idx,start_s,end_s,text) VALUES (?, 'e1', (SELECT count(*) FROM segments), 0, 1, ?)"
       )
-      .run(row.segment_id);
+      .run(row.segment_id, row.quote);
   }
   sqlite
     .prepare(
