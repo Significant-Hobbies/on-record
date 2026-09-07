@@ -87,3 +87,14 @@ responsive research UI and API trust boundary are qualified and live. The
 previous release used a time-travel backup, uploaded all 1,208 reviewed R2
 objects, applied an incremental no-delete D1 bundle, and deployed API and web
 through the dispatch-only workflow.
+
+<!-- portfolio-retained-work:2026-09-07 -->
+## Retained work from the portfolio review
+
+These are unresolved requirements retained at the owner’s request. They are not completed features. This project is inactive; this list is reference material, not an active roadmap.
+
+### /api/stats costs ~1s on a cache miss: the publishedReferences six-table scan
+
+Reduce cache-miss stats query cost and inspect a bounded query plan without changing published-count semantics.
+
+Original requirements and discussion: [#24](https://github.com/Significant-Hobbies/on-record/issues/24).
