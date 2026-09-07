@@ -1,0 +1,52 @@
+[
+  {
+    "results": [
+      {
+        "id": 15,
+        "parent": 0,
+        "notused": 88,
+        "detail": "SEARCH claim_references USING INDEX claim_references_role_claim_idx (role=?)"
+      },
+      {
+        "id": 46,
+        "parent": 0,
+        "notused": 31,
+        "detail": "SEARCH claims USING INDEX sqlite_autoindex_claims_1 (id=?)"
+      },
+      {
+        "id": 53,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH episodes USING INDEX sqlite_autoindex_episodes_1 (id=?)"
+      },
+      {
+        "id": 58,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH shows USING INDEX sqlite_autoindex_shows_1 (id=?)"
+      },
+      {
+        "id": 70,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH people USING INDEX sqlite_autoindex_people_1 (id=?)"
+      },
+      {
+        "id": 75,
+        "parent": 0,
+        "notused": 61,
+        "detail": "SEARCH claim_evidence USING INDEX claim_evidence_claim_role_idx (claim_id=? AND role=?)"
+      },
+      {
+        "id": 128,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR ORDER BY"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 1
+    }
+  }
+]

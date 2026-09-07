@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, like, lte, notInArray, or, sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
+import type { SQLiteSelect } from 'drizzle-orm/sqlite-core';
 import { Hono } from 'hono';
 import { UNVERIFIED_SPEAKER_SLUG } from '../attribution';
 import {
@@ -435,84 +436,127 @@ export const recommendationFields = {
  */
 export const REFERENCE_SCAN_CEILING = 20_000;
 
-async function publishedReferences(
-  d1: D1Database,
-  filters: { personId?: string; kind?: string; name?: string; role?: string },
-  limit = 200
-) {
-  const database = db(d1);
+type ReferenceFilters = { personId?: string; kind?: string; name?: string; role?: string };
+
+const referenceCountFields = {
+  claimId: recommendationFields.claimId,
+  kind: recommendationFields.kind,
+  name: recommendationFields.name,
+  personId: recommendationFields.personId,
+  quote: recommendationFields.quote,
+  role: recommendationFields.role,
+  promptVersion: recommendationFields.promptVersion,
+  segmentId: recommendationFields.segmentId,
+};
+
+function publishedReferenceRows<T extends SQLiteSelect>(query: T, personId?: string) {
   const clauses: SQL[] = [
     eq(schema.claims.reviewStatus, 'published'),
     inArray(schema.claimReferences.role, [...ACTIONABLE_REFERENCE_ROLES]),
     trustedShowFilter(),
   ];
-  if (filters.personId) {
-    clauses.push(eq(schema.claims.personId, filters.personId));
+  if (personId) {
+    clauses.push(eq(schema.claims.personId, personId));
   }
-  if (filters.kind && !isReferenceKind(filters.kind)) {
-    return [];
-  }
-  if (filters.role && !isActionableReferenceRole(filters.role)) {
-    return [];
-  }
-  const rows = await database
-    .select(recommendationFields)
-    .from(schema.claimReferences)
-    .innerJoin(schema.claims, eq(schema.claimReferences.claimId, schema.claims.id))
-    .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
-    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-    .innerJoin(schema.people, eq(schema.claims.personId, schema.people.id))
-    .innerJoin(
-      schema.claimEvidence,
-      and(
-        eq(schema.claimEvidence.claimId, schema.claims.id),
-        eq(schema.claimEvidence.role, 'primary')
+  return (
+    query
+      .innerJoin(schema.claims, eq(schema.claimReferences.claimId, schema.claims.id))
+      .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .innerJoin(schema.people, eq(schema.claims.personId, schema.people.id))
+      .innerJoin(
+        schema.claimEvidence,
+        and(
+          eq(schema.claimEvidence.claimId, schema.claims.id),
+          eq(schema.claimEvidence.role, 'primary')
+        )
       )
-    )
-    .where(and(...clauses))
-    // `said_on` and `created_at` tie freely — a whole ingest batch can share
-    // both. A limit over a tied order is not a well-defined window, so the
-    // reference id breaks remaining ties and makes the order total. Without
-    // it the rows returned are whatever the query plan happened to emit.
-    .orderBy(
-      desc(schema.claims.saidOn),
-      asc(schema.claims.createdAt),
-      asc(schema.claimReferences.id)
-    )
-    .limit(REFERENCE_SCAN_CEILING);
+      .where(and(...clauses))
+      // `said_on` and `created_at` tie freely — a whole ingest batch can share
+      // both. A limit over a tied order is not a well-defined window, so the
+      // reference id breaks remaining ties and makes the order total. Without
+      // it the rows returned are whatever the query plan happened to emit.
+      .orderBy(
+        desc(schema.claims.saidOn),
+        asc(schema.claims.createdAt),
+        asc(schema.claimReferences.id)
+      )
+      .limit(REFERENCE_SCAN_CEILING)
+  );
+}
+
+type ReferenceCandidate = {
+  claimId: string;
+  kind: string;
+  name: string;
+  personId: string | null;
+  quote: string;
+  role: string;
+  promptVersion: string | null;
+  segmentId: string | null;
+};
+
+function publicReference(row: ReferenceCandidate, filters: ReferenceFilters, seen: Set<string>) {
+  const [reference] = sanitizeReferences(
+    [{ kind: row.kind, name: row.name, role: row.role }],
+    row.quote,
+    row.quote,
+    row.promptVersion?.startsWith('extract-book-answers-') ?? false
+  );
+  if (
+    !reference ||
+    (filters.kind && reference.kind !== filters.kind) ||
+    (filters.role && reference.role !== filters.role) ||
+    (filters.name &&
+      canonicalReferenceName(reference.name) !== canonicalReferenceName(filters.name))
+  ) {
+    return null;
+  }
+  const key = `${row.segmentId ?? row.claimId}|${row.personId}|${reference.kind}|${reference.role}|${canonicalReferenceName(reference.name)}`;
+  if (seen.has(key)) {
+    return null;
+  }
+  seen.add(key);
+  return reference;
+}
+
+export async function publishedReferences(d1: D1Database, filters: ReferenceFilters, limit = 200) {
+  if (
+    (filters.kind && !isReferenceKind(filters.kind)) ||
+    (filters.role && !isActionableReferenceRole(filters.role))
+  ) {
+    return [];
+  }
+  const rows = await publishedReferenceRows(
+    db(d1).select(recommendationFields).from(schema.claimReferences).$dynamic(),
+    filters.personId
+  );
   const seen = new Set<string>();
   return rows
     .flatMap((row) => {
-      const [reference] = sanitizeReferences(
-        [{ kind: row.kind, name: row.name, role: row.role }],
-        row.quote,
-        row.quote,
-        row.promptVersion?.startsWith('extract-book-answers-') ?? false
-      );
+      const reference = publicReference(row, filters, seen);
       if (!reference) {
         return [];
       }
-      if (filters.kind && reference.kind !== filters.kind) {
-        return [];
-      }
-      if (filters.role && reference.role !== filters.role) {
-        return [];
-      }
-      if (
-        filters.name &&
-        canonicalReferenceName(reference.name) !== canonicalReferenceName(filters.name)
-      ) {
-        return [];
-      }
-      const key = `${row.segmentId ?? row.claimId}|${row.personId}|${reference.kind}|${reference.role}|${canonicalReferenceName(reference.name)}`;
-      if (seen.has(key)) {
-        return [];
-      }
-      seen.add(key);
       const { promptVersion: _promptVersion, segmentId: _segmentId, ...publicRow } = row;
       return [{ ...publicRow, ...reference, assertion: referenceAssertion(reference) }];
     })
     .slice(0, limit);
+}
+
+/** Same bounded window and JS public gates, without transporting display-only columns. */
+export async function publishedReferenceCount(d1: D1Database): Promise<number> {
+  const rows = await publishedReferenceRows(
+    db(d1).select(referenceCountFields).from(schema.claimReferences).$dynamic()
+  );
+  const seen = new Set<string>();
+  let count = 0;
+  for (const row of rows) {
+    if (publicReference(row, {}, seen)) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 async function personIdForSlug(d1: D1Database, slug?: string): Promise<string | undefined | null> {
@@ -565,14 +609,8 @@ publicRoute.get('/recommendation-groups', async (c) => {
 
 publicRoute.get('/stats', async (c) => {
   const database = db(c.env.DB);
-  // Four independent reads that share no inputs. Awaited one after another
-  // they cost four serial D1 round trips, and `on-record-db` runs in APAC
-  // with read replication disabled, so a round trip is ~90ms from a colo in
-  // that region and more from anywhere else. That made this the slowest
-  // endpoint on the homepage fan-out at ~1.48s of origin time on a cache
-  // miss - past the 1200ms the landing page allows before it falls back to
-  // stale figures (issue #11). Issued together the endpoint costs one round
-  // trip plus the slowest query rather than the sum of all four.
+  // Keep the four independent reads concurrent. The reference count retains
+  // the public gates/window but avoids display-only columns and row formatting.
   const [[counts], [catalog], [transcripts], references] = await Promise.all([
     database
       .select({
@@ -598,14 +636,14 @@ publicRoute.get('/stats', async (c) => {
       .innerJoin(schema.episodes, eq(schema.segments.episodeId, schema.episodes.id))
       .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
       .where(trustedShowFilter()),
-    publishedReferences(c.env.DB, {}, REFERENCE_SCAN_CEILING),
+    publishedReferenceCount(c.env.DB),
   ]);
   return c.json({
     catalogEpisodes: catalog?.catalogEpisodes ?? 0,
     episodes: counts?.episodes ?? 0,
     people: counts?.people ?? 0,
     publishedClaims: counts?.publishedClaims ?? 0,
-    publishedReferences: references.length,
+    publishedReferences: references,
     transcriptEpisodes: transcripts?.transcriptEpisodes ?? 0,
     trustedShows: catalog?.trustedShows ?? 0,
     trustPolicy: {

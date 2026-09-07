@@ -95,6 +95,14 @@ These are unresolved requirements retained at the owner’s request. They are no
 
 ### /api/stats costs ~1s on a cache miss: the publishedReferences six-table scan
 
-Reduce cache-miss stats query cost and inspect a bounded query plan without changing published-count semantics.
+Local repair: stats now reads only the eight fields required for the existing
+quote, speaker, trust and deduplication gates. The synthetic capped corpus keeps
+full/count parity; median local harness time fell 179ms to 125ms and encoded rows
+shrunk 84.7%. Actual local D1 EXPLAIN uses covering people/evidence indexes; the
+sort remains. [Reproduction and precise limits](docs/operations/reference-count-performance-2026-09-07.md).
+
+Remaining: authorized deployment and a fresh live cache-miss/rows-read comparison.
+Local timing does not close the live performance gate. Task reconciliation:
+1 open issue, 0 open PRs, 0 closures; no ingestion or roadmap reactivation.
 
 Original requirements and discussion: [#24](https://github.com/Significant-Hobbies/on-record/issues/24).

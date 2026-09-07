@@ -7,3 +7,5 @@
 - Episode duplicate audit: [operations/episode-duplicate-audit-2026-08-31.md](operations/episode-duplicate-audit-2026-08-31.md)
 - Learnings: [knowledge/learnings.md](knowledge/learnings.md)
 - Failed approaches: [knowledge/failed-approaches.md](knowledge/failed-approaches.md)
+
+- Reference count performance: [operations/reference-count-performance-2026-09-07.md](operations/reference-count-performance-2026-09-07.md)
