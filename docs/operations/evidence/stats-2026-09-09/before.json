@@ -1,0 +1,128 @@
+{
+  "observedAt": "2026-09-09T11:46:51.228Z",
+  "source": "46171bf363a17cdfe8e0ccd48c60b786fe2c020c",
+  "workerVersion": "2b864d49-439c-4bb3-92e3-85e74d9d2c9a",
+  "method": "Three unique query URLs, each requested twice sequentially; elapsed fetch plus JSON parse includes network. Fresh cache key inferred from unique URL and middleware, not explicit cache-status header.",
+  "samples": [
+    {
+      "sample": 0,
+      "repeat": 0,
+      "elapsedMs": 1816,
+      "status": 200,
+      "cfRay": "a385f45b9c4b86a7-HKG",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1226,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 0,
+      "repeat": 1,
+      "elapsedMs": 130,
+      "status": 200,
+      "cfRay": "a385f4654dfe86a7-HKG",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1226,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 1,
+      "repeat": 0,
+      "elapsedMs": 521,
+      "status": 200,
+      "cfRay": "a385f466187a86a7-HKG",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1226,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 1,
+      "repeat": 1,
+      "elapsedMs": 127,
+      "status": 200,
+      "cfRay": "a385f4696ce286a7-HKG",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1226,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 2,
+      "repeat": 0,
+      "elapsedMs": 586,
+      "status": 200,
+      "cfRay": "a385f46a2f6886a7-HKG",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1226,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 2,
+      "repeat": 1,
+      "elapsedMs": 127,
+      "status": 200,
+      "cfRay": "a385f46ddce186a7-HKG",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1226,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    }
+  ]
+}
