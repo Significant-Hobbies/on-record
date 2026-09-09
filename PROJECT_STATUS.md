@@ -1,6 +1,10 @@
 # on-record — PROJECT STATUS
 
-Last updated: 2026-08-29
+Last updated: 2026-09-09
+
+## Latest release
+
+The public stats API now counts transcript episodes using indexed existence probes, avoiding the full segment scan. PR26 is deployed from 46badc63 at 100% traffic; exact CI and full local quality passed. Twelve before/after public responses preserved all counts. Production row-read improvement remains unverified under issue24. See [release and measurement evidence](docs/operations/stats-performance-2026-09-09.md).
 
 ## Why / What
 

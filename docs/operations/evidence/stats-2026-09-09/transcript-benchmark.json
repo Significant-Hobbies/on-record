@@ -1,0 +1,17 @@
+{
+  "fixture": {
+    "episodes": 8500,
+    "segments": 780800
+  },
+  "scope": "Synthetic SQLite VM instruction estimate, not production D1 rows read",
+  "results": {
+    "before": {
+      "count": 1220,
+      "approxVmInstructions": 16399200
+    },
+    "after": {
+      "count": 1220,
+      "approxVmInstructions": 138400
+    }
+  }
+}

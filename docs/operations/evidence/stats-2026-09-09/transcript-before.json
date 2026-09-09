@@ -1,0 +1,127 @@
+{
+  "observedAt": "2026-09-09T12:00:08.627Z",
+  "source": "825dd42a0484e7e23bde360aebe86cc819e0a43f",
+  "method": "Unique URL per pair; inferred fresh cache key then repeated identical URL. Elapsed includes network and JSON parsing.",
+  "samples": [
+    {
+      "sample": 0,
+      "repeat": 0,
+      "elapsedMs": 1828,
+      "status": 200,
+      "cfRay": "a38607d1dcb6f8c6-SIN",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1227,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 0,
+      "repeat": 1,
+      "elapsedMs": 103,
+      "status": 200,
+      "cfRay": "a38607dadaa8f8c6-SIN",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1227,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 1,
+      "repeat": 0,
+      "elapsedMs": 792,
+      "status": 200,
+      "cfRay": "a38607db7d11f8c6-SIN",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1227,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 1,
+      "repeat": 1,
+      "elapsedMs": 108,
+      "status": 200,
+      "cfRay": "a38607e06e29f8c6-SIN",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1227,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 2,
+      "repeat": 0,
+      "elapsedMs": 717,
+      "status": 200,
+      "cfRay": "a38607e118c9f8c6-SIN",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1227,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    },
+    {
+      "sample": 2,
+      "repeat": 1,
+      "elapsedMs": 103,
+      "status": 200,
+      "cfRay": "a38607e59f8ef8c6-SIN",
+      "body": {
+        "catalogEpisodes": 8553,
+        "episodes": 1208,
+        "people": 956,
+        "publishedClaims": 30562,
+        "publishedReferences": 1141,
+        "transcriptEpisodes": 1227,
+        "trustedShows": 23,
+        "trustPolicy": {
+          "withheldShows": 2,
+          "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+        }
+      }
+    }
+  ]
+}

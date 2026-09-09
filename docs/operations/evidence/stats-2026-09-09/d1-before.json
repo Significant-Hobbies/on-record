@@ -1,0 +1,112 @@
+[
+  {
+    "query": "select count(distinct \"segments\".\"episode_id\") from \"segments\" inner join \"episodes\" on \"segments\".\"episode_id\" = \"episodes\".\"id\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" where \"shows\".\"slug\" not in (?, ?)",
+    "avgRowsRead": 786205,
+    "totalRowsRead": 55034400,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 241.15802857142853,
+    "totalDurationMs": 16881.061999999998,
+    "numberOfTimesRun": 70,
+    "queryEfficiency": 0.0000012719328928205748
+  },
+  {
+    "query": "select count(distinct \"claims\".\"episode_id\"), count(distinct case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"claims\".\"person_id\" end), count(*) from \"claims\" inner join \"episodes\" on \"claims\".\"episode_id\" = \"episodes\".\"id\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" where (\"claims\".\"review_status\" = ? and \"shows\".\"slug\" not in (?, ?))",
+    "avgRowsRead": 91686,
+    "totalRowsRead": 4767672,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 87.64732307692307,
+    "totalDurationMs": 4557.6608,
+    "numberOfTimesRun": 52,
+    "queryEfficiency": 0.000010906790567807518
+  },
+  {
+    "query": "select \"claims\".\"assertion\", \"claims\".\"attribution_status\", \"claims\".\"id\", case when \"episodes\".\"transcript_kind\" = 'youtube_captions' then \"claim_evidence\".\"deep_link_url\" else null end, \"episodes\".\"title\", \"claim_references\".\"kind\", \"claim_references\".\"name\", case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"claims\".\"person_id\" else null end, case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"people\".\"name\" else null end, \"claims\".\"quote\", \"claim_references\".\"role\", \"claims\".\"said_on\", \"claims\".\"prompt_version\", \"claims\".\"segment_id\", \"shows\".\"name\", \"episodes\".\"source_url\", case when \"episodes\".\"transcript_kind\" = 'youtube_captions' then \"claims\".\"timestamp_s\" else null end, \"episodes\".\"transcript_kind\" from \"claim_references\" inner join \"claims\" on \"claim_references\".\"claim_id\" = \"claims\".\"id\" inner join \"episodes\" on \"claims\".\"episode_id\" = \"episodes\".\"id\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" inner join \"people\" on \"claims\".\"person_id\" = \"people\".\"id\" inner join \"claim_evidence\" on (\"claim_evidence\".\"claim_id\" = \"claims\".\"id\" and \"claim_evidence\".\"role\" = ?) where (\"claims\".\"review_status\" = ? and \"claim_references\".\"role\" in (?, ?, ?, ?, ?, ?) and \"shows\".\"slug\" not in (?, ?)) order by \"claims\".\"said_on\" desc, \"claims\".\"created_at\" asc, \"claim_references\".\"id\" asc limit ?",
+    "avgRowsRead": 10371,
+    "totalRowsRead": 1721586,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 51.26902168674699,
+    "totalDurationMs": 8510.6576,
+    "numberOfTimesRun": 166,
+    "queryEfficiency": 0.12486741876386076
+  },
+  {
+    "query": "select \"claims\".\"assertion\", \"claims\".\"attribution_status\", \"claims\".\"claim_type\", (\n    case when \"episodes\".\"transcript_kind\" = 'youtube_captions' then (\n      select \"claim_evidence\".\"deep_link_url\"\n      from \"claim_evidence\"\n      where \"claim_evidence\".\"claim_id\" = \"claims\".\"id\"\n        and \"claim_evidence\".\"role\" = 'primary'\n      limit ?\n    ) else null end\n  ), \"episodes\".\"id\", \"episodes\".\"title\", \"claims\".\"id\", case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"people\".\"id\" else null end, case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"people\".\"name\" else null end, case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"people\".\"org\" else null end, case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"people\".\"slug\" else null end, case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"people\".\"title\" else null end, \"claims\".\"quote\", \"claims\".\"review_status\", \"claims\".\"said_on\", \"shows\".\"name\", \"shows\".\"slug\", \"episodes\".\"source_url\", \"claims\".\"stance\", case when \"episodes\".\"transcript_kind\" = 'youtube_captions' then \"claims\".\"timestamp_s\" else null end, \"episodes\".\"transcript_kind\" from \"claims\" inner join \"people\" on \"claims\".\"person_id\" = \"people\".\"id\" inner join \"episodes\" on \"claims\".\"episode_id\" = \"episodes\".\"id\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" where (\"claims\".\"review_status\" = ? and \"people\".\"status\" = ? and \"shows\".\"slug\" not in (?, ?)) order by \"claims\".\"said_on\" desc, \"claims\".\"created_at\" desc limit ?",
+    "avgRowsRead": 152810,
+    "totalRowsRead": 1680910,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 112.24320909090908,
+    "totalDurationMs": 1234.6752999999999,
+    "numberOfTimesRun": 11,
+    "queryEfficiency": 0.0003272037170342255
+  },
+  {
+    "query": "select \"people\".\"bio\", count(distinct \"claims\".\"id\"), \"people\".\"id\", \"people\".\"links\", \"people\".\"name\", \"people\".\"org\", \"people\".\"slug\", count(distinct \"claims\".\"episode_id\"), \"people\".\"status\", \"people\".\"title\" from \"people\" inner join \"claims\" on \"people\".\"id\" = \"claims\".\"person_id\" inner join \"episodes\" on \"claims\".\"episode_id\" = \"episodes\".\"id\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" where (\"people\".\"status\" = ? and \"claims\".\"review_status\" = ? and \"claims\".\"attribution_status\" = ? and \"shows\".\"slug\" not in (?, ?)) group by \"people\".\"id\" order by count(distinct \"claims\".\"id\") desc, \"people\".\"name\" limit ?",
+    "avgRowsRead": 147278,
+    "totalRowsRead": 1472780,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 155.82769,
+    "totalDurationMs": 1558.2768999999998,
+    "numberOfTimesRun": 10,
+    "queryEfficiency": 0.00012221784652154428
+  },
+  {
+    "query": "select count(distinct \"claims\".\"episode_id\") from \"claims\" inner join \"episodes\" on \"claims\".\"episode_id\" = \"episodes\".\"id\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" where (\"claims\".\"review_status\" = ? and \"shows\".\"slug\" not in (?, ?))",
+    "avgRowsRead": 91686,
+    "totalRowsRead": 1466976,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 114.40320625,
+    "totalDurationMs": 1830.4513,
+    "numberOfTimesRun": 16,
+    "queryEfficiency": 0.000010906790567807518
+  },
+  {
+    "query": "select count(distinct \"claims\".\"id\"), count(distinct case when \"claims\".\"attribution_status\" = 'verified_speaker' then \"claims\".\"person_id\" end), \"episodes\".\"duration_s\", \"episodes\".\"id\", \"episodes\".\"published_at\", \"shows\".\"name\", \"shows\".\"slug\", \"episodes\".\"source_url\", \"episodes\".\"status\", \"episodes\".\"title\", \"episodes\".\"transcript_kind\" from \"episodes\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" inner join \"claims\" on \"episodes\".\"id\" = \"claims\".\"episode_id\" where (\"claims\".\"review_status\" = ? and \"shows\".\"slug\" not in (?, ?)) group by \"episodes\".\"id\" order by \"episodes\".\"published_at\" desc limit ?",
+    "avgRowsRead": 123456,
+    "totalRowsRead": 1358016,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 164.37896363636366,
+    "totalDurationMs": 1808.1686000000002,
+    "numberOfTimesRun": 11,
+    "queryEfficiency": 0.00008100051840331778
+  },
+  {
+    "query": "select count(distinct \"people\".\"id\") from \"people\" inner join \"claims\" on \"people\".\"id\" = \"claims\".\"person_id\" inner join \"episodes\" on \"claims\".\"episode_id\" = \"episodes\".\"id\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" where (\"people\".\"status\" = ? and \"claims\".\"review_status\" = ? and \"claims\".\"attribution_status\" = ? and \"shows\".\"slug\" not in (?, ?))",
+    "avgRowsRead": 117382,
+    "totalRowsRead": 234764,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 112.24485000000001,
+    "totalDurationMs": 224.48970000000003,
+    "numberOfTimesRun": 2,
+    "queryEfficiency": 0.000008519193743504115
+  },
+  {
+    "query": "select count(distinct \"episodes\".\"id\"), count(distinct \"shows\".\"id\") from \"episodes\" inner join \"shows\" on \"episodes\".\"show_id\" = \"shows\".\"id\" where (\"shows\".\"active\" = ? and \"shows\".\"slug\" not in (?, ?))",
+    "avgRowsRead": 8591,
+    "totalRowsRead": 171832,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 17.92067,
+    "totalDurationMs": 358.4134,
+    "numberOfTimesRun": 20,
+    "queryEfficiency": 0.00011640088464672332
+  },
+  {
+    "query": "select \"audio_url\", \"created_at\", \"description\", \"duration_s\", \"guid\", \"id\", \"pipeline_version\", \"published_at\", \"raw_hash\", \"raw_r2_key\", \"show_id\", \"source_url\", \"status\", \"status_detail\", \"title\", \"transcript_kind\", \"updated_at\", \"youtube_video_id\" from \"episodes\" where \"episodes\".\"status\" = ? order by \"episodes\".\"published_at\" desc limit ? offset ?",
+    "avgRowsRead": 4211,
+    "totalRowsRead": 160018,
+    "avgRowsWritten": 0,
+    "totalRowsWritten": 0,
+    "avgDurationMs": 8.118347368421054,
+    "totalDurationMs": 308.4972,
+    "numberOfTimesRun": 38,
+    "queryEfficiency": 0.04749465685110425
+  }
+]
