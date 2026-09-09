@@ -631,11 +631,16 @@ publicRoute.get('/stats', async (c) => {
       .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
       .where(and(eq(schema.shows.active, true), trustedShowFilter())),
     database
-      .select({ transcriptEpisodes: sql<number>`count(distinct ${schema.segments.episodeId})` })
-      .from(schema.segments)
-      .innerJoin(schema.episodes, eq(schema.segments.episodeId, schema.episodes.id))
+      .select({ transcriptEpisodes: sql<number>`count(*)` })
+      .from(schema.episodes)
       .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-      .where(trustedShowFilter()),
+      .where(
+        and(
+          trustedShowFilter(),
+          // Probe the episode index once instead of counting every transcript segment.
+          sql`exists (select 1 from ${schema.segments} where ${schema.segments.episodeId} = ${schema.episodes.id})`
+        )
+      ),
     publishedReferenceCount(c.env.DB),
   ]);
   return c.json({

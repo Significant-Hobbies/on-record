@@ -105,6 +105,38 @@ function add(
 }
 
 describe('published reference count over real SQLite joins', () => {
+  it('counts transcript episodes once, preserving trust and inactive-show semantics', async () => {
+    const { sqlite, d1, statements } = fixture();
+    try {
+      sqlite.exec(`
+INSERT INTO shows (id,slug,name,active,created_at) VALUES ('inactive','inactive','Inactive trusted',0,0);
+INSERT INTO episodes (id,show_id,guid,title,source_url,created_at,updated_at) VALUES
+ ('empty','trusted','empty','No transcript','https://example.invalid/empty',0,0),
+ ('inactive','inactive','inactive','Inactive transcript','https://example.invalid/inactive',0,0);
+WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<9999)
+INSERT INTO segments (id,episode_id,idx,start_s,end_s,text) SELECT 's'||i,'e1',i,0,1,'Synthetic transcript' FROM n;
+INSERT INTO segments (id,episode_id,idx,start_s,end_s,text) VALUES
+ ('withheld','e2',0,0,1,'Withheld transcript'),('inactive','inactive',0,0,1,'Inactive transcript');
+`);
+      const response = await publicRoute.request('/stats', {}, { DB: d1 } as Env);
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as { transcriptEpisodes: number }).transcriptEpisodes).toBe(
+        2
+      );
+      const query = statements.find(({ sql }) => sql.includes('exists (select 1'));
+      expect(query).toBeDefined();
+      const plan = sqlite
+        .prepare(`EXPLAIN QUERY PLAN ${query!.sql}`)
+        .all(...(query!.params as string[]));
+      expect(JSON.stringify(plan)).toMatch(
+        /SEARCH segments(?: EXISTS)? USING COVERING INDEX segments_episode/
+      );
+      expect(JSON.stringify(plan)).not.toContain('SCAN segments');
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it('matches the public list through trust, quote, role, speaker, prompt and dedupe gates', async () => {
     const { sqlite, d1 } = fixture();
     try {
