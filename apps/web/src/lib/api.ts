@@ -1,4 +1,6 @@
-const fallback = 'http://127.0.0.1:8787';
+const fallback = import.meta.env.DEV
+  ? 'http://127.0.0.1:8787'
+  : 'https://api.podcasts.highsignal.app';
 
 /**
  * The API worker, bound directly rather than reached over the public internet.
