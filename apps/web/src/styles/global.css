@@ -731,6 +731,20 @@ h3 {
   font-weight: 700;
 }
 
+.repository-link {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.repository-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
 .collection-header {
   padding: clamp(4rem, 8vw, 7rem) 0 clamp(2rem, 5vw, 4rem);
 }

@@ -1,6 +1,6 @@
 # on-record — PROJECT STATUS
 
-Last updated: 2026-09-09
+Last updated: 2026-09-12
 
 ## Latest release
 
@@ -43,6 +43,8 @@ review-report.
 - free-ai gateway for extraction
 
 ## Timeline
+
+- **2026-09-12 — Repository link:** The shared public footer now uses an accessible GitHub icon with a 44px touch target.
 
 - **2026-09-01 — Dedicated Clarity project wired locally:** Added High Signal
   Podcasts' own project to the public Astro shell without changing the evidence
