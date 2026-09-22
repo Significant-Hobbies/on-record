@@ -6,6 +6,7 @@ import type { Env } from './env';
 import { adminRoute } from './routes/admin';
 import { publicRoute } from './routes/public';
 import { anchorFor, D1_BOOKMARK_HEADER, envWithSession, openSession } from './session';
+import { observeRequest } from './telemetry';
 
 const app = new Hono<{ Bindings: Env }>();
 const publicCors = cors({ origin: '*', exposeHeaders: [D1_BOOKMARK_HEADER] });
@@ -16,6 +17,16 @@ const publicReferenceCache = cache({
 });
 
 const isAdminPath = (path: string) => path === '/admin' || path.startsWith('/admin/');
+
+// Endpoint telemetry is registered first so the duration covers the whole
+// middleware chain. It only reads an env key and c.req.routePath (populated
+// during dispatch, read after next()), so it cannot disturb the session or
+// cache ordering below.
+app.use('*', async (c, next) => {
+  const startedAt = Date.now();
+  await next();
+  observeRequest(c, startedAt);
+});
 
 // This has to be the first middleware registered: the response cache below
 // reads the generation out of D1 while building its cache key, before it even

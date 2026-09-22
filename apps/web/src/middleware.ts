@@ -1,4 +1,5 @@
 import { defineMiddleware } from 'astro:middleware';
+import { observeRequest } from './lib/telemetry';
 
 const agentView = {
   name: 'High Signal Podcasts',
@@ -47,6 +48,7 @@ const markdownRoutes = new Map([
 ]);
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  const startedAt = Date.now();
   if (context.url.pathname === '/' && context.url.searchParams.get('mode') === 'agent') {
     return Response.json(agentView, {
       headers: {
@@ -74,5 +76,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     links.push(`<${markdown}>; rel="alternate"; type="text/markdown"`);
   }
   response.headers.set('Link', links.join(', '));
+  observeRequest(context, response, startedAt);
   return response;
 });
