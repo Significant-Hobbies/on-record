@@ -141,6 +141,14 @@ const structuredData = JSON.stringify({
     <meta name="twitter:image" content={`${siteUrl}/og-card.png`} />
     <script is:inline type="application/ld+json" set:html={structuredData}></script>
     <script is:inline src="/app-health-log.js" defer></script>
+    <script
+      is:inline
+      defer
+      src="https://health.sassmaker.com/tracker.js"
+      data-key="ahk_pub_db413e341e42eaa468c007ef3679d90b3bac6995cbd0e5173387a391e0ef7801"
+      data-project="app-import-6f248272142aa1453804c04c5d9da08f1fb42286c4a47f3f37e862cd37dc447d"
+      data-identity="persistent"
+    ></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to the evidence</a>
@@ -202,17 +210,26 @@ const structuredData = JSON.stringify({
           <p>Published claims keep the speaker, verbatim excerpt, date, and source trail attached.</p>
           <p>The public index currently needs no account or checkout. No permanent pricing model is claimed.</p>
         </div>
+        <div class="footer-capture">
+          <saas-maker-newsletter-capture
+            product-name="High Signal Podcasts"
+            catalog-id="on-record"
+            kind="newsletter"
+            source="footer"
+            privacy-url="https://podcasts.highsignal.app/privacy"
+          ></saas-maker-newsletter-capture>
+        </div>
         <div class="footer-links">
-          <a href="/search">Search evidence</a>
+          <a href="/search" data-app-health-event="cta.search_evidence">Search evidence</a>
           <a href="/people">People index</a>
-          <a href="/recommendations">Books & tools</a>
+          <a href="/recommendations" data-app-health-event="cta.browse_books_tools">Books & tools</a>
           <a href="/evidence">Evidence policy</a>
           <a href="/developers">Public API</a>
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
           <a href="/pricing">Access state</a>
           <a href="/contact">Contact</a>
-          <a href="https://highsignal.app">High Signal Daily Brief ↗</a>
+          <a href="https://highsignal.app" data-app-health-event="cta.daily_brief">High Signal Daily Brief ↗</a>
           <a
             class="repository-link"
             href="https://github.com/Significant-Hobbies/on-record"
@@ -253,8 +270,22 @@ const structuredData = JSON.stringify({
           s2.dataset.name = "High Signal Podcasts";
           s2.defer = true;
           document.body.appendChild(s2);
+          var s3 = document.createElement("script");
+          s3.type = "module";
+          s3.src = "https://sassmaker.com/newsletter-capture.js";
+          document.body.appendChild(s3);
         });
       })();
+    </script>
+    <script is:inline>
+      document.addEventListener('click', function (event) {
+        var target = event.target;
+        var link = target && target.closest ? target.closest('[data-app-health-event]') : null;
+        var name = link && link.getAttribute('data-app-health-event');
+        if (name && window.appHealth && typeof window.appHealth.track === 'function') {
+          window.appHealth.track(name);
+        }
+      });
     </script>
   </body>
 </html>
