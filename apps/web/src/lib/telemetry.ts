@@ -13,18 +13,16 @@ type WorkerRuntime = {
   ctx?: { waitUntil: (promise: Promise<unknown>) => void };
 };
 
-export function observeRequest(
-  context: APIContext,
-  response: Response,
-  startedAt: number
-): void {
+export function observeRequest(context: APIContext, response: Response, startedAt: number): void {
   const runtime = (context.locals as { runtime?: WorkerRuntime }).runtime;
   const env = runtime?.env as Record<string, unknown> | undefined;
   const ctx = runtime?.ctx;
   const key =
     typeof env?.APP_HEALTH_INGEST_KEY === 'string' ? env.APP_HEALTH_INGEST_KEY.trim() : '';
   const pattern = context.routePattern;
-  if (!key || !ctx || !pattern) return;
+  if (!(key && ctx && pattern)) {
+    return;
+  }
   // Astro templates use [param]; normalize to :param to match worker routes.
   const route = pattern.replace(/\[[^\]]+\]/g, ':param');
   const batch = {

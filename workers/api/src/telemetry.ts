@@ -12,7 +12,9 @@ export function observeRequest(c: Context, startedAt: number): void {
   const key =
     typeof c.env?.APP_HEALTH_INGEST_KEY === 'string' ? c.env.APP_HEALTH_INGEST_KEY.trim() : '';
   const route = c.req.routePath && c.req.routePath !== '*' ? c.req.routePath : null;
-  if (!key || !route) return;
+  if (!(key && route)) {
+    return;
+  }
   const batch = {
     batch_id: crypto.randomUUID(),
     schema_version: 'v1',
