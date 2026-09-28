@@ -67,6 +67,9 @@ importers:
       '@on-record/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@saas-maker/app-health':
+        specifier: https://github.com/sass-maker/app-health/releases/download/node-v0.4.0/saas-maker-app-health-0.4.0.tgz
+        version: https://github.com/sass-maker/app-health/releases/download/node-v0.4.0/saas-maker-app-health-0.4.0.tgz(hono@4.12.34)
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260425.1)
@@ -1778,6 +1781,18 @@ packages:
     resolution: {integrity: sha512-/gDJaRs4gl0NPIwqCz+6PkpmhhjRAD2j6P4rSNHBzUkO3naEx2mIU0pRle1vUNRQ7mE/+8OOeXLTv/J56FKiQg==}
     cpu: [x64]
     os: [win32]
+
+  '@saas-maker/app-health@https://github.com/sass-maker/app-health/releases/download/node-v0.4.0/saas-maker-app-health-0.4.0.tgz':
+    resolution: {tarball: https://github.com/sass-maker/app-health/releases/download/node-v0.4.0/saas-maker-app-health-0.4.0.tgz}
+    version: 0.4.0
+    peerDependencies:
+      express: '>=4.19.0 <6'
+      hono: '>=4.10.0 <5'
+    peerDependenciesMeta:
+      express:
+        optional: true
+      hono:
+        optional: true
 
   '@shikijs/core@3.23.0':
     resolution: {integrity: sha512-NSWQz0riNb67xthdm5br6lAkvpDJRTgB36fxlo37ZzM2yq0PQFFzbd8psqC2XMPgCzo1fW6cVi18+ArJ44wqgA==}
@@ -4714,6 +4729,10 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.62.5':
     optional: true
+
+  '@saas-maker/app-health@https://github.com/sass-maker/app-health/releases/download/node-v0.4.0/saas-maker-app-health-0.4.0.tgz(hono@4.12.34)':
+    optionalDependencies:
+      hono: 4.12.34
 
   '@shikijs/core@3.23.0':
     dependencies:
