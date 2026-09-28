@@ -145,9 +145,10 @@ const structuredData = JSON.stringify({
       is:inline
       defer
       src="https://health.sassmaker.com/tracker.js"
-      data-key="ahk_pub_db413e341e42eaa468c007ef3679d90b3bac6995cbd0e5173387a391e0ef7801"
+      data-key="ahk_pub_2e51725a491003afdd3a8a50357e2228e54c5062e8b58c34d7e22a42283744c8"
       data-project="app-import-6f248272142aa1453804c04c5d9da08f1fb42286c4a47f3f37e862cd37dc447d"
-      data-identity="persistent"
+      data-endpoint="https://ingest.sassmaker.com/v1/browser"
+      data-identity="session"
     ></script>
   </head>
   <body>
@@ -286,6 +287,13 @@ const structuredData = JSON.stringify({
           window.appHealth.track(name);
         }
       });
+      document.addEventListener('submit', function (event) {
+        var form = event.target;
+        var name = form && form.getAttribute ? form.getAttribute('data-app-health-event') : null;
+        if (name && window.appHealth && typeof window.appHealth.track === 'function') {
+          window.appHealth.track(name);
+        }
+      }, true);
     </script>
   </body>
 </html>

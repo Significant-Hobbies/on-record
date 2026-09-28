@@ -132,7 +132,7 @@ const heroSearchAgentAttributes = {
         books, apps, and tools. Every result keeps the speaker, verbatim transcript excerpt,
         episode, and source attached.
       </p>
-      <form class="hero-search" method="get" action="/search" {...heroSearchAgentAttributes}>
+      <form class="hero-search" method="get" action="/search" {...heroSearchAgentAttributes} data-app-health-event="search.query_submitted">
         <label class="visually-hidden" for="hero-search">Search people, ideas, books, and tools</label>
         <input
           id="hero-search"
@@ -170,7 +170,7 @@ const heroSearchAgentAttributes = {
             <span><b>Publisher</b>{heroClaim.showName ?? 'Podcast publisher'}</span>
           </div>
           <div class="evidence-card-actions">
-            <a href={`/claims/${heroClaim.id}`}>Inspect receipt</a>
+            <a href={`/claims/${heroClaim.id}`} data-app-health-event="cta.inspect_receipt">Inspect receipt</a>
             {(heroClaim.deepLinkUrl || heroClaim.sourceUrl) && (
               <a
                 href={heroClaim.transcriptKind === 'youtube_captions' ? heroClaim.deepLinkUrl ?? heroClaim.sourceUrl : heroClaim.sourceUrl}
