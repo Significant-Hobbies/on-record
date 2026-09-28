@@ -285,6 +285,26 @@ const structuredData = JSON.stringify({
         var name = link && link.getAttribute('data-app-health-event');
         if (name && window.appHealth && typeof window.appHealth.track === 'function') {
           window.appHealth.track(name);
+          if (
+            !(link instanceof HTMLAnchorElement) ||
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey ||
+            link.target === '_blank' ||
+            link.hasAttribute('download')
+          ) return;
+          event.preventDefault();
+          var navigated = false;
+          var navigate = function () {
+            if (navigated) return;
+            navigated = true;
+            window.location.assign(link.href);
+          };
+          setTimeout(navigate, 5000);
+          Promise.resolve(window.appHealth.flush?.()).catch(function () {}).finally(navigate);
         }
       });
       document.addEventListener('submit', function (event) {
