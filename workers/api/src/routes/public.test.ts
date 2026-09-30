@@ -1,13 +1,11 @@
-import { getTableColumns } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { UNVERIFIED_SPEAKER_SLUG } from '../attribution';
 import { claimTranscriptContext } from '../claim-context';
-import { schema } from '../db';
 import type { Env } from '../env';
 import { ACTIONABLE_REFERENCE_ROLES } from '../references';
 import {
   isTrustedPublicShowSlug,
-  publicClaimFields,
+  publicClaimDetailFields,
   publicRoute,
   REFERENCE_SCAN_CEILING,
   WITHHELD_PUBLIC_SHOW_SLUGS,
@@ -38,10 +36,8 @@ type Row = Record<string, unknown>;
  * each stubbed table returns positional rows in its own select-list order.
  */
 function stubD1(tables: { claim?: Row[]; segment?: Row[] }, seen: { params: unknown[][] }) {
-  const claimColumns = Object.keys(publicClaimFields);
+  const claimColumns = Object.keys(publicClaimDetailFields);
   const segmentColumns = ['episodeId', 'idx'];
-  const evidenceColumns = Object.keys(getTableColumns(schema.claimEvidence));
-  const referenceColumns = Object.keys(getTableColumns(schema.claimReferences));
 
   function plan(sql: string): { columns: string[]; rows: Row[] } {
     if (sql.includes('from "segments"')) {
@@ -50,10 +46,7 @@ function stubD1(tables: { claim?: Row[]; segment?: Row[] }, seen: { params: unkn
     if (sql.includes('from "claims"')) {
       return { columns: claimColumns, rows: tables.claim ?? [] };
     }
-    if (sql.includes('from "claim_evidence"')) {
-      return { columns: evidenceColumns, rows: [] };
-    }
-    return { columns: referenceColumns, rows: [] };
+    return { columns: [], rows: [] };
   }
 
   return {

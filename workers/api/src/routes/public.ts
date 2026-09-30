@@ -77,6 +77,35 @@ export const publicClaimFields = {
   transcriptKind: schema.episodes.transcriptKind,
 };
 
+export const publicClaimDetailFields = {
+  ...publicClaimFields,
+  evidenceJson: sql<string>`coalesce((
+    select json_group_array(json_object(
+      'claimId', claim_evidence.claim_id,
+      'deepLinkUrl', claim_evidence.deep_link_url,
+      'episodeId', claim_evidence.episode_id,
+      'id', claim_evidence.id,
+      'quote', claim_evidence.quote,
+      'role', claim_evidence.role,
+      'timestampS', claim_evidence.timestamp_s
+    ))
+    from claim_evidence
+    where claim_evidence.claim_id = ${schema.claims.id}
+  ), '[]')`,
+  referencesJson: sql<string>`coalesce((
+    select json_group_array(json_object(
+      'claimId', claim_references.claim_id,
+      'id', claim_references.id,
+      'kind', claim_references.kind,
+      'name', claim_references.name,
+      'role', claim_references.role
+    ))
+    from claim_references
+    where claim_references.claim_id = ${schema.claims.id}
+      and claim_references.role in ('recommends', 'uses', 'likes', 'owns', 'built', 'avoids')
+  ), '[]')`,
+};
+
 const publicSourceFields = {
   durationS: schema.episodes.durationS,
   id: schema.episodes.id,
@@ -208,25 +237,41 @@ async function transcriptContextForClaim(
 
 publicRoute.get('/claims/:id', async (c) => {
   const id = c.req.param('id');
-  const [claim] = await publicClaims(c.env.DB, [eq(schema.claims.id, id)], 1);
-  if (!claim) {
+  const [detail] = await db(c.env.DB)
+    .select(publicClaimDetailFields)
+    .from(schema.claims)
+    .innerJoin(schema.people, eq(schema.claims.personId, schema.people.id))
+    .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+    .where(
+      and(
+        eq(schema.claims.id, id),
+        eq(schema.claims.reviewStatus, 'published'),
+        eq(schema.people.status, 'active'),
+        trustedShowFilter()
+      )
+    )
+    .limit(1);
+  if (!detail) {
     return c.json({ error: 'not_found' }, 404);
   }
-  const [rawEvidence, rawReferences] = await Promise.all([
-    db(c.env.DB)
-      .select()
-      .from(schema.claimEvidence)
-      .where(eq(schema.claimEvidence.claimId, claim.id)),
-    db(c.env.DB)
-      .select()
-      .from(schema.claimReferences)
-      .where(
-        and(
-          eq(schema.claimReferences.claimId, claim.id),
-          inArray(schema.claimReferences.role, [...ACTIONABLE_REFERENCE_ROLES])
-        )
-      ),
-  ]);
+  const { evidenceJson, referencesJson, ...claim } = detail;
+  const rawEvidence = JSON.parse(evidenceJson ?? '[]') as Array<{
+    claimId: string;
+    deepLinkUrl: string | null;
+    episodeId: string;
+    id: string;
+    quote: string;
+    role: 'primary' | 'corroboration' | 'contradiction';
+    timestampS: number | null;
+  }>;
+  const rawReferences = JSON.parse(referencesJson ?? '[]') as Array<{
+    claimId: string;
+    id: string;
+    kind: string;
+    name: string;
+    role: string;
+  }>;
   const evidence = rawEvidence.map((row) => ({
     ...row,
     deepLinkUrl: claim.transcriptKind === 'youtube_captions' ? row.deepLinkUrl : null,
