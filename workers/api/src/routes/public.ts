@@ -212,24 +212,26 @@ publicRoute.get('/claims/:id', async (c) => {
   if (!claim) {
     return c.json({ error: 'not_found' }, 404);
   }
-  const rawEvidence = await db(c.env.DB)
-    .select()
-    .from(schema.claimEvidence)
-    .where(eq(schema.claimEvidence.claimId, claim.id));
+  const [rawEvidence, rawReferences] = await Promise.all([
+    db(c.env.DB)
+      .select()
+      .from(schema.claimEvidence)
+      .where(eq(schema.claimEvidence.claimId, claim.id)),
+    db(c.env.DB)
+      .select()
+      .from(schema.claimReferences)
+      .where(
+        and(
+          eq(schema.claimReferences.claimId, claim.id),
+          inArray(schema.claimReferences.role, [...ACTIONABLE_REFERENCE_ROLES])
+        )
+      ),
+  ]);
   const evidence = rawEvidence.map((row) => ({
     ...row,
     deepLinkUrl: claim.transcriptKind === 'youtube_captions' ? row.deepLinkUrl : null,
     timestampS: claim.transcriptKind === 'youtube_captions' ? row.timestampS : null,
   }));
-  const rawReferences = await db(c.env.DB)
-    .select()
-    .from(schema.claimReferences)
-    .where(
-      and(
-        eq(schema.claimReferences.claimId, claim.id),
-        inArray(schema.claimReferences.role, [...ACTIONABLE_REFERENCE_ROLES])
-      )
-    );
   const references = rawReferences.flatMap((reference) =>
     sanitizeReferences([reference], claim.quote)
   );
