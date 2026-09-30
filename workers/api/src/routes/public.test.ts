@@ -5,7 +5,7 @@ import type { Env } from '../env';
 import { ACTIONABLE_REFERENCE_ROLES } from '../references';
 import {
   isTrustedPublicShowSlug,
-  publicClaimDetailFields,
+  publicClaimFields,
   publicRoute,
   REFERENCE_SCAN_CEILING,
   WITHHELD_PUBLIC_SHOW_SLUGS,
@@ -36,7 +36,7 @@ type Row = Record<string, unknown>;
  * each stubbed table returns positional rows in its own select-list order.
  */
 function stubD1(tables: { claim?: Row[]; segment?: Row[] }, seen: { params: unknown[][] }) {
-  const claimColumns = Object.keys(publicClaimDetailFields);
+  const claimColumns = [...Object.keys(publicClaimFields), 'evidenceJson', 'referencesJson'];
   const segmentColumns = ['episodeId', 'idx'];
 
   function plan(sql: string): { columns: string[]; rows: Row[] } {

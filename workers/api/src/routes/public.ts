@@ -77,7 +77,7 @@ export const publicClaimFields = {
   transcriptKind: schema.episodes.transcriptKind,
 };
 
-export const publicClaimDetailFields = {
+const publicClaimDetailFields = {
   ...publicClaimFields,
   evidenceJson: sql<string>`coalesce((
     select json_group_array(json_object(
@@ -102,7 +102,10 @@ export const publicClaimDetailFields = {
     ))
     from claim_references
     where claim_references.claim_id = ${schema.claims.id}
-      and claim_references.role in ('recommends', 'uses', 'likes', 'owns', 'built', 'avoids')
+      and claim_references.role in (${sql.join(
+        ACTIONABLE_REFERENCE_ROLES.map((role) => sql`${role}`),
+        sql`, `
+      )})
   ), '[]')`,
 };
 
