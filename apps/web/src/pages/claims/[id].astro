@@ -10,11 +10,13 @@ let claim: Claim | null = null;
 let evidence: Array<{ deepLinkUrl?: string | null; quote: string }> = [];
 let references: Array<{ kind: string; role: string; name: string }> = [];
 let context: TranscriptContext | null = null;
+let contextUnavailable = false;
 let missing = false;
 try {
   const payload = await apiGet<{
     claim: Claim;
     context?: TranscriptContext | null;
+    contextStatus?: 'unavailable';
     evidence: Array<{ deepLinkUrl?: string | null; quote: string }>;
     references: Array<{ kind: string; role: string; name: string }>;
   }>(`/api/claims/${id}?context=1`, runtimeEnvFromLocals(Astro.locals));
@@ -22,6 +24,7 @@ try {
   evidence = payload.evidence ?? [];
   references = payload.references ?? [];
   context = payload.context ?? null;
+  contextUnavailable = payload.contextStatus === 'unavailable';
 } catch {
   missing = true;
 }
@@ -103,6 +106,9 @@ const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personNam
               Stored transcript either side of the excerpt. The highlighted words are the published quote; the surrounding text is unedited source, never generated.
             </p>
           </div>
+        )}
+        {contextUnavailable && (
+          <p class="context-note">Transcript context is temporarily unavailable. The published claim and source link remain available.</p>
         )}
         <div class="receipt-actions">
           {link && (

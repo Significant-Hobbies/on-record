@@ -30,6 +30,16 @@ function segmentsKey(episodeId: string): string {
   return `episodes/${episodeId}/segments.json`;
 }
 
+export function isSegmentStoreUnavailableError(error: unknown): error is Error {
+  return error instanceof Error && error.name === 'SegmentStoreUnavailableError';
+}
+
+function segmentStoreUnavailableError(cause: unknown): Error {
+  const error = new Error('Transcript segment store unavailable', { cause });
+  error.name = 'SegmentStoreUnavailableError';
+  return error;
+}
+
 export async function putSegmentBodies(
   bucket: R2Bucket,
   episodeId: string,
@@ -52,7 +62,15 @@ export async function getSegmentBodies(
   bucket: R2Bucket,
   episodeId: string
 ): Promise<Map<number, SegmentBody>> {
-  const object = await bucket.get(segmentsKey(episodeId));
+  let object: R2ObjectBody | null;
+  try {
+    object = await bucket.get(segmentsKey(episodeId));
+  } catch (error) {
+    // Callers keep their existing failure behavior. The public context route
+    // recognizes this typed dependency failure and marks enrichment unavailable.
+    console.warn('[on-record] transcript_context.segment_store_unavailable');
+    throw segmentStoreUnavailableError(error);
+  }
   if (!object) {
     return new Map();
   }
