@@ -1,5 +1,3 @@
-/// <reference path="../../../../apps/web/node_modules/astro/client.d.ts" />
-
 // The API test imports the web helper without Astro's generated environment types.
 declare global {
   interface ImportMetaEnv {
