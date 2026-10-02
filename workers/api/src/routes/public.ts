@@ -13,6 +13,7 @@ import { db, schema } from '../db';
 import type { Env } from '../env';
 import { sanitizeFtsQuery } from '../fts';
 import { canonicalReferenceName, groupRecommendationReferences } from '../recommendation-groups';
+import { isSegmentStoreUnavailableError } from '../segment-store';
 import {
   ACTIONABLE_REFERENCE_ROLES,
   isActionableReferenceRole,
@@ -286,8 +287,23 @@ publicRoute.get('/claims/:id', async (c) => {
   if (!wantsTranscriptContext(c.req.query('context'))) {
     return c.json({ claim, evidence, references });
   }
-  const context = await transcriptContextForClaim(c.env, claim);
-  return c.json({ claim, context, evidence, references });
+  let context: ClaimTranscriptContext | null = null;
+  let contextStatus: 'unavailable' | undefined;
+  try {
+    context = await transcriptContextForClaim(c.env, claim);
+  } catch (error) {
+    if (!isSegmentStoreUnavailableError(error)) {
+      throw error;
+    }
+    contextStatus = 'unavailable';
+  }
+  return c.json({
+    claim,
+    context,
+    ...(contextStatus ? { contextStatus } : {}),
+    evidence,
+    references,
+  });
 });
 
 publicRoute.get('/sources', async (c) => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { UNVERIFIED_SPEAKER_SLUG } from '../attribution';
 import { claimTranscriptContext } from '../claim-context';
 import type { Env } from '../env';
@@ -35,7 +35,11 @@ type Row = Record<string, unknown>;
  * D1 stub. Drizzle reads `.select(fields)` through `stmt.bind(...).raw()`, so
  * each stubbed table returns positional rows in its own select-list order.
  */
-function stubD1(tables: { claim?: Row[]; segment?: Row[] }, seen: { params: unknown[][] }) {
+function stubD1(
+  tables: { claim?: Row[]; segment?: Row[] },
+  seen: { params: unknown[][] },
+  options: { failSegmentQuery?: boolean } = {}
+) {
   const claimColumns = [...Object.keys(publicClaimFields), 'evidenceJson', 'referencesJson'];
   const segmentColumns = ['episodeId', 'idx'];
 
@@ -58,7 +62,12 @@ function stubD1(tables: { claim?: Row[]; segment?: Row[] }, seen: { params: unkn
         return {
           all: async () => ({ results: rows }),
           first: async () => rows[0] ?? null,
-          raw: async () => positional,
+          raw: async () => {
+            if (options.failSegmentQuery && sql.includes('from "segments"')) {
+              throw new Error('segment lookup failed');
+            }
+            return positional;
+          },
           run: async () => ({}),
         };
       },
@@ -162,6 +171,68 @@ describe('claim transcript context', () => {
     expect(response.status).toBe(200);
     expect(payload.claim.id).toBe('claim-1');
     expect(payload.context).toBeNull();
+  });
+
+  it('keeps the claim receipt available and marks context unavailable when R2 is unavailable', async () => {
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const raw = {
+      get: async () => {
+        throw new Error('Please enable R2 through the Cloudflare Dashboard. (1234567890)');
+      },
+    } as unknown as R2Bucket;
+
+    try {
+      const response = await getClaim('/claims/claim-1?context=1', {
+        d1: stubD1({ claim: [publishedClaim], segment: [segmentRow] }, { params: [] }),
+        raw,
+      });
+      const payload = (await response.json()) as {
+        claim: { id: string };
+        context: unknown;
+        contextStatus?: string;
+      };
+
+      expect(response.status).toBe(200);
+      expect(payload.claim.id).toBe('claim-1');
+      expect(payload.context).toBeNull();
+      expect(payload.contextStatus).toBe('unavailable');
+      expect(log).toHaveBeenCalledWith('[on-record] transcript_context.segment_store_unavailable');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('does not turn a claim lookup failure into an unavailable-context response', async () => {
+    const d1 = {
+      prepare: () => ({
+        bind: () => ({
+          raw: async () => {
+            throw new Error('claim lookup failed');
+          },
+        }),
+      }),
+    } as unknown as D1Database;
+
+    const response = await getClaim('/claims/claim-1?context=1', {
+      d1,
+      raw: stubR2(null, { count: 0 }),
+    });
+
+    expect(response.status).toBe(500);
+  });
+
+  it('keeps a transcript-context D1 failure as a server error', async () => {
+    const d1 = stubD1(
+      { claim: [publishedClaim], segment: [segmentRow] },
+      { params: [] },
+      { failSegmentQuery: true }
+    );
+    const response = await getClaim('/claims/claim-1?context=1', {
+      d1,
+      raw: stubR2(episodeBody, { count: 0 }),
+    });
+
+    expect(response.status).toBe(500);
   });
 
   it('does not touch R2 unless context is explicitly requested', async () => {
