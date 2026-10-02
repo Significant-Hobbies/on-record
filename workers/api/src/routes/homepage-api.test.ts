@@ -4,6 +4,9 @@ declare global {
     readonly DEV: boolean;
     readonly PUBLIC_API_BASE?: string;
   }
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
 }
 
 import { describe, expect, it, vi } from 'vitest';
