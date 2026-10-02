@@ -87,6 +87,99 @@ export type Claim = {
   transcriptKind?: string | null;
 };
 
+type HomepageEvidence = {
+  status: 'ready' | 'empty' | 'unavailable';
+  origin: 'recent' | 'search';
+  heroClaim?: Claim;
+  latestClaims: Claim[];
+};
+
+// Validate the public response, rather than treating a malformed success as an
+// empty corpus. Quote/transcript validation remains the API's publication gate.
+function homepageClaims(payload: unknown): Claim[] {
+  const claims = (payload as { claims?: unknown } | null)?.claims;
+  if (!Array.isArray(claims) || claims.length > 50) {
+    throw new Error('Invalid claim response');
+  }
+  for (const claim of claims) {
+    if (
+      !(
+        claim &&
+        ['id', 'assertion', 'claimType', 'quote'].every(
+          (key) => typeof claim[key] === 'string' && claim[key].trim().length > 0
+        )
+      ) ||
+      claim.reviewStatus !== 'published' ||
+      !['verified_speaker', 'speaker_unverified'].includes(claim.attributionStatus) ||
+      ![
+        'personName',
+        'personSlug',
+        'episodeId',
+        'episodeTitle',
+        'showName',
+        'sourceUrl',
+        'deepLinkUrl',
+        'transcriptKind',
+        'saidOn',
+      ].every(
+        (key) => claim[key] === null || claim[key] === undefined || typeof claim[key] === 'string'
+      ) ||
+      (claim.timestampS !== null &&
+        claim.timestampS !== undefined &&
+        (typeof claim.timestampS !== 'number' || !Number.isFinite(claim.timestampS)))
+    ) {
+      throw new Error('Invalid public claim');
+    }
+  }
+  return claims;
+}
+
+export async function homepageEvidence(
+  runtimeEnv?: RuntimeEnv,
+  options: { timeoutMs?: number } = {}
+): Promise<HomepageEvidence> {
+  let claims: Claim[];
+  let origin: HomepageEvidence['origin'] = 'recent';
+  try {
+    claims = homepageClaims(await apiGet<unknown>('/api/search', runtimeEnv, options));
+  } catch {
+    // Reuse the existing FTS route's bounded public corpus. This is a topical
+    // sample, not a cached or necessarily recent stream; the page labels it.
+    origin = 'search';
+    try {
+      claims = homepageClaims(await apiGet<unknown>('/api/search?q=AI', runtimeEnv, options));
+    } catch {
+      return { status: 'unavailable', origin, latestClaims: [] };
+    }
+    if (!claims.length) {
+      return { status: 'unavailable', origin, latestClaims: [] };
+    }
+  }
+  const readsCleanly = (claim: Claim) => {
+    const quote = claim.quote.trim();
+    return (
+      quote.length >= 80 &&
+      quote.length <= 220 &&
+      !/^(and|but|because|so|yeah|you know|i think)\b/i.test(quote)
+    );
+  };
+  const heroClaim =
+    claims.find((claim) => claim.transcriptKind === 'youtube_captions' && readsCleanly(claim)) ??
+    claims.find(readsCleanly) ??
+    claims.find((claim) => claim.deepLinkUrl || claim.sourceUrl) ??
+    claims[0];
+  const remaining = claims.filter((claim) => claim.id !== heroClaim?.id);
+  return {
+    status: claims.length ? 'ready' : 'empty',
+    origin,
+    heroClaim,
+    latestClaims: [
+      ...remaining.filter(readsCleanly),
+      ...remaining.filter((claim) => !readsCleanly(claim)),
+    ].slice(0, 4),
+  };
+}
+
 export type Source = {
   id: string;
   title: string;
