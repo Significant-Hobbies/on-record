@@ -23,6 +23,9 @@ class Settings:
     podcast_index_secret: str
     pipeline_version: str = "claims-v1"
     prompt_version: str = "extract-v4"
+    # OpenAI-compatible gateways that attribute usage per project reject calls
+    # without one; plain providers ignore the header. Empty sends nothing.
+    ai_project_id: str = ""
 
 
 def settings() -> Settings:
@@ -33,6 +36,7 @@ def settings() -> Settings:
         ai_base_url=os.environ.get("AI_BASE_URL", "").rstrip("/"),
         ai_api_key=os.environ.get("AI_API_KEY", ""),
         ai_model=os.environ.get("AI_MODEL", ""),
+        ai_project_id=os.environ.get("AI_PROJECT_ID", "").strip(),
         extract_model=os.environ.get("ON_RECORD_EXTRACT_MODEL", "")
         or os.environ.get("AI_MODEL", ""),
         # Optional deliberate override for extraction experiments.

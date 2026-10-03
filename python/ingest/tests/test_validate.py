@@ -874,3 +874,38 @@ def test_batch_request_schema_requires_the_exact_segment_id():
     body = build_body(cfg, "system", "user", schema=BATCH_CLAIMS_SCHEMA)
     item = body["response_format"]["json_schema"]["schema"]["properties"]["claims"]["items"]
     assert "segment_id" in item["required"]
+
+
+def test_gateway_project_id_is_sent_only_when_configured(monkeypatch):
+    from dataclasses import replace
+
+    import httpx
+
+    from on_record_ingest.config import settings as load
+    from on_record_ingest.extract import claims as claims_module
+
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("x-gateway-project-id"))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        claims_module.httpx,
+        "Client",
+        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw),
+    )
+    remote = replace(
+        load(),
+        ai_base_url="https://gateway.example.test/v1",
+        ai_api_key="k",
+        ai_model="m",
+        extract_model="m",
+        force_model="",
+    )
+
+    claims_module._chat(replace(remote, ai_project_id="on-record"), "u", "s")
+    claims_module._chat(replace(remote, ai_project_id=""), "u", "s")
+
+    assert seen == ["on-record", None]

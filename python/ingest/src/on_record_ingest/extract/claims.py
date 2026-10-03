@@ -254,6 +254,8 @@ def _chat(
         headers["Authorization"] = f"Bearer {settings.ai_api_key}"
     elif not is_local(settings):
         raise RuntimeError("AI_API_KEY is required for remote inference")
+    if settings.ai_project_id and not is_local(settings):
+        headers["X-Gateway-Project-Id"] = settings.ai_project_id
     body = build_body(settings, system_prompt, user_prompt, max_tokens, schema)
     last_error: Exception | None = None
     payload: dict[str, Any] = {}

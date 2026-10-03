@@ -1,10 +1,76 @@
 from __future__ import annotations
 
+import logging
+import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
 
 from .config import Settings
+
+LOGGER = logging.getLogger("on_record_ingest")
+
+TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
+
+
+def _is_idempotent(request: httpx.Request) -> bool:
+    """Reads, and upserts the worker keys by natural id, are safe to resend."""
+    return request.method == "GET" or (
+        request.method == "POST" and request.url.path.endswith("/upsert")
+    )
+
+
+class RetryTransientTransport(httpx.BaseTransport):
+    """Resend idempotent admin calls that hit a transient worker or D1 error.
+
+    One stray 500 from the API worker used to abort a whole 40-minute ingest
+    stage; the next request almost always succeeds. Writes that are not
+    upserts are never resent, and a persistent error still surfaces.
+    """
+
+    def __init__(
+        self,
+        inner: httpx.BaseTransport,
+        attempts: int = 3,
+        backoff_s: float = 2.0,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._inner = inner
+        self._attempts = attempts
+        self._backoff_s = backoff_s
+        self._sleep = sleep
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        if not _is_idempotent(request):
+            return self._inner.handle_request(request)
+        request.read()
+        for attempt in range(1, self._attempts + 1):
+            last = attempt == self._attempts
+            try:
+                response = self._inner.handle_request(request)
+            except httpx.TransportError as exc:
+                if last:
+                    raise
+                LOGGER.warning(
+                    "api %s %s failed (%s); retrying", request.method, request.url.path, exc
+                )
+            else:
+                if last or response.status_code not in TRANSIENT_STATUSES:
+                    return response
+                response.read()
+                response.close()
+                LOGGER.warning(
+                    "api %s %s returned %s; retrying",
+                    request.method,
+                    request.url.path,
+                    response.status_code,
+                )
+            self._sleep(self._backoff_s * attempt)
+        raise AssertionError("unreachable")
+
+    def close(self) -> None:
+        self._inner.close()
 
 
 class ApiClient:
@@ -15,6 +81,7 @@ class ApiClient:
             headers={"Authorization": f"Bearer {settings.admin_token}"},
             timeout=60.0,
             follow_redirects=True,
+            transport=RetryTransientTransport(httpx.HTTPTransport()),
         )
 
     def close(self) -> None:
