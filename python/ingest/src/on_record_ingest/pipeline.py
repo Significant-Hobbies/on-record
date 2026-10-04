@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import re
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -106,7 +107,7 @@ STAGES = (
 
 
 def _since(days: int) -> datetime:
-    return datetime.now(timezone.utc) - timedelta(days=days)
+    return datetime.now(UTC) - timedelta(days=days)
 
 
 def load_roster(api: ApiClient) -> dict[str, str]:
@@ -315,7 +316,7 @@ def cwt_speaker_map(
     """Map only unique publisher labels onto the reviewed episode roster."""
     aliases = _publisher_aliases(detail, people_by_id)
     if any("tyler-cowen" in slugs for slugs in aliases.values()):
-        for key in {"cowen", "t cowen", "tyler", "tyler cowen"}:
+        for key in ("cowen", "t cowen", "tyler", "tyler cowen"):
             aliases.setdefault(key, set()).add("tyler-cowen")
     return {key: next(iter(slugs)) for key, slugs in aliases.items() if len(slugs) == 1}
 
@@ -588,6 +589,92 @@ def transcript_video_id(kind: str, cues: list[dict[str, float | str]], existing:
     return str(found) if found else None
 
 
+# A transcript fetch that fails (YouTube RequestBlocked, a publisher 403) used to
+# be retried on every daily run, so the unresolvable backlog grew until the job
+# hit its time limit. Attempts are recorded in the episode's free-text
+# status_detail column (no schema change) and retried on this schedule.
+ATTEMPT_PREFIX = "transcript-attempts:"
+BACKOFF_DAYS = (1, 3, 7, 14)
+DEFAULT_MAX_EPISODES = 100
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def default_max_episodes() -> int:
+    """Per-run transcript cap: INGEST_MAX_EPISODES, else 100. 0 means no cap."""
+    raw = os.environ.get("INGEST_MAX_EPISODES", "").strip()
+    try:
+        return max(0, int(raw)) if raw else DEFAULT_MAX_EPISODES
+    except ValueError:
+        return DEFAULT_MAX_EPISODES
+
+
+def export_max_episodes(value: int | None) -> None:
+    """Let --max-episodes override the environment cap run_transcripts reads."""
+    if value is not None:
+        os.environ["INGEST_MAX_EPISODES"] = str(value)
+
+
+def backoff_for(attempts: int) -> timedelta:
+    """1d after the first failure, then 3d, 7d, and 14d from then on."""
+    return timedelta(days=BACKOFF_DAYS[min(max(attempts, 1), len(BACKOFF_DAYS)) - 1])
+
+
+def transcript_attempts(episode: dict[str, Any]) -> tuple[int, datetime | None]:
+    """(failed attempts, last attempt time) recorded on the episode, if any."""
+    detail = str(episode.get("statusDetail") or "")
+    if not detail.startswith(ATTEMPT_PREFIX):
+        return 0, None
+    try:
+        data = json.loads(detail[len(ATTEMPT_PREFIX) :])
+        attempts = int(data["attempts"])
+        last = datetime.fromisoformat(str(data["lastAttemptAt"]).replace("Z", "+00:00"))
+    except (ValueError, KeyError, TypeError):
+        return 0, None
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)
+    return attempts, last
+
+
+def attempt_detail(attempts: int, now: datetime) -> str:
+    stamp = now.astimezone(UTC).isoformat()
+    return ATTEMPT_PREFIX + json.dumps({"attempts": attempts, "lastAttemptAt": stamp})
+
+
+def in_backoff(episode: dict[str, Any], now: datetime) -> bool:
+    attempts, last = transcript_attempts(episode)
+    return bool(attempts and last and now < last + backoff_for(attempts))
+
+
+def plan_transcript_batch(
+    episodes: list[dict[str, Any]], now: datetime, max_episodes: int, honor_backoff: bool = True
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Pick this run's work: (batch, skipped in backoff, left over by the cap).
+
+    Never-attempted episodes go first, then retries; each group newest first.
+    """
+    eligible = [e for e in episodes if not (honor_backoff and in_backoff(e, now))]
+    skipped = len(episodes) - len(eligible)
+    eligible.sort(key=lambda e: (transcript_attempts(e)[0] > 0, -_epoch_ms(e.get("publishedAt"))))
+    if max_episodes > 0 and len(eligible) > max_episodes:
+        return eligible[:max_episodes], skipped, len(eligible) - max_episodes
+    return eligible, skipped, 0
+
+
+def record_transcript_failure(api: ApiClient, episode: dict[str, Any], now: datetime) -> None:
+    attempts, _ = transcript_attempts(episode)
+    try:
+        api.set_episode_status(
+            episode["id"],
+            status=episode.get("status") or "discovered",
+            statusDetail=attempt_detail(attempts + 1, now),
+        )
+    except Exception as exc:
+        LOGGER.warning("could not record transcript attempt for %s: %s", episode["id"], exc)
+
+
 @dataclass(frozen=True)
 class TranscriptOpts:
     dry_run: bool
@@ -632,6 +719,8 @@ def run_transcript_episode(
         TranscriptionUnavailable,
     ) as exc:
         LOGGER.warning("episode %s left for a later pass: %s", episode["id"], exc)
+        if not opts.dry_run:
+            record_transcript_failure(api, episode, _now())
         return False
     if opts.dry_run:
         LOGGER.info("transcripts dry-run %s kind=%s cues=%s", episode["id"], kind, len(cues))
@@ -655,12 +744,18 @@ def run_transcripts(
     cfg: Settings | None = None,
     show_id: str | None = None,
 ) -> int:
+    now = _now()
+    cap = default_max_episodes()
+    skipped = remaining = 0
     if episode_id:
         episode = api.get_episode(episode_id)["episode"]
         episodes = [episode] if force or episode.get("status") == "discovered" else []
     else:
         list_kwargs = {"show_id": show_id} if show_id else {}
         episodes = api.list_episodes(status=None if force else "discovered", **list_kwargs)
+        episodes, skipped, remaining = plan_transcript_batch(
+            episodes, now, cap, honor_backoff=not force
+        )
     people_by_id: dict[str, dict[str, Any]] = {}
     if any(
         is_acquired_site_url(str(episode.get("sourceUrl") or ""))
@@ -674,6 +769,13 @@ def run_transcripts(
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
         for episode in episodes:
             count += int(run_transcript_episode(api, cfg, episode, client, opts, people_by_id))
+    LOGGER.info(
+        "transcripts summary processed=%s resolved=%s skipped_backoff=%s remaining_backlog=%s",
+        len(episodes),
+        count,
+        skipped,
+        remaining,
+    )
     return count
 
 
@@ -1793,6 +1895,12 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-segments", type=int, default=0)
     parser.add_argument("--skip-segments", type=int, default=0)
+    parser.add_argument(
+        "--max-episodes",
+        type=int,
+        default=None,
+        help="cap episodes tried per transcripts run (default $INGEST_MAX_EPISODES or 100; 0 = no cap)",
+    )
     parser.add_argument("--limit", type=int, default=0, help="cap how many items a stage handles")
     parser.add_argument(
         "--skip-episodes",
@@ -1833,6 +1941,7 @@ def main(argv: list[str] | None = None) -> int:
     # stay visible; HTTP failures still surface through exceptions and warnings.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     args = _argument_parser().parse_args(argv)
+    export_max_episodes(args.max_episodes)
     cfg = load_settings()
     api = ApiClient(cfg)
     try:
