@@ -121,3 +121,63 @@ def test_failed_fetch_increments_attempts(monkeypatch):
         json.loads(api.statuses[0][1]["statusDetail"][len(pipeline.ATTEMPT_PREFIX) :])["attempts"]
         == 3
     )
+
+
+def _no_source(monkeypatch):
+    monkeypatch.setattr(pipeline, "discovery_payload", lambda api, ep: {})
+    monkeypatch.setattr(
+        pipeline,
+        "transcript_request",
+        lambda api, ep, raw, people: {
+            "publisherTranscriptUrl": None,
+            "cwtPublisherTranscriptUrl": None,
+            "sourceUrl": "",
+            "youtubeVideoId": None,
+            "audioUrl": None,
+            "speakers": 1,
+        },
+    )
+    monkeypatch.setattr(pipeline, "_now", lambda: NOW)
+
+
+def _run_one(api, ep, **opts):
+    o = pipeline.TranscriptOpts(
+        dry_run=opts.get("dry_run", False), force=opts.get("force", False), whisper=False
+    )
+    return pipeline.run_transcript_episode(api, None, ep, None, o)
+
+
+def test_no_source_episode_records_attempt_and_backs_off(monkeypatch):
+    _no_source(monkeypatch)
+    api = _Api([])
+    assert _run_one(api, _ep("a", 1)) is False
+    episode_id, fields = api.statuses[0]
+    assert episode_id == "a" and fields["status"] == "discovered"
+    detail = json.loads(fields["statusDetail"][len(pipeline.ATTEMPT_PREFIX) :])
+    assert detail["attempts"] == 1
+    recorded = {"id": "a", "status": "discovered", "statusDetail": fields["statusDetail"]}
+    assert pipeline.in_backoff(recorded, NOW + timedelta(hours=12))
+    assert not pipeline.in_backoff(recorded, NOW + timedelta(days=1, minutes=1))
+
+
+def test_no_source_repeat_escalates_backoff(monkeypatch):
+    _no_source(monkeypatch)
+    api = _Api([])
+    _run_one(api, _ep("a", 1, attempts=2, ago_days=4))
+    assert (
+        json.loads(api.statuses[0][1]["statusDetail"][len(pipeline.ATTEMPT_PREFIX) :])["attempts"]
+        == 3
+    )
+
+
+def test_no_source_dry_run_does_not_record(monkeypatch):
+    _no_source(monkeypatch)
+    api = _Api([])
+    assert _run_one(api, _ep("a", 1), dry_run=True) is False
+    assert api.statuses == []
+
+
+def test_force_still_bypasses_backoff_for_no_source(monkeypatch):
+    episodes = [_ep("a", 1, attempts=1, ago_days=0.1)]
+    batch, skipped, _ = pipeline.plan_transcript_batch(episodes, NOW, 10, honor_backoff=False)
+    assert len(batch) == 1 and skipped == 0

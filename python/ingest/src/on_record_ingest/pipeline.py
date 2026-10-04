@@ -675,6 +675,11 @@ def record_transcript_failure(api: ApiClient, episode: dict[str, Any], now: date
         LOGGER.warning("could not record transcript attempt for %s: %s", episode["id"], exc)
 
 
+def record_attempt_unless_dry(api: ApiClient, episode: dict[str, Any], dry_run: bool) -> None:
+    if not dry_run:
+        record_transcript_failure(api, episode, _now())
+
+
 @dataclass(frozen=True)
 class TranscriptOpts:
     dry_run: bool
@@ -705,8 +710,10 @@ def run_transcript_episode(
     ):
         # Nothing to try yet. no_transcript means "we looked and there
         # is none", so leave this episode alone for a later pass rather
-        # than retiring it on the strength of a throttled discovery.
+        # than retiring it on the strength of a throttled discovery. Count it
+        # as an attempt so it backs off instead of re-entering the cap each run.
         LOGGER.debug("transcripts %s no source yet", episode["id"])
+        record_attempt_unless_dry(api, episode, opts.dry_run)
         return False
     try:
         kind, cues = resolve_cues(request, client, opts.whisper, int(request["speakers"]))
@@ -719,8 +726,7 @@ def run_transcript_episode(
         TranscriptionUnavailable,
     ) as exc:
         LOGGER.warning("episode %s left for a later pass: %s", episode["id"], exc)
-        if not opts.dry_run:
-            record_transcript_failure(api, episode, _now())
+        record_attempt_unless_dry(api, episode, opts.dry_run)
         return False
     if opts.dry_run:
         LOGGER.info("transcripts dry-run %s kind=%s cues=%s", episode["id"], kind, len(cues))
