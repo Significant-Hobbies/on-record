@@ -97,8 +97,10 @@ def test_run_transcripts_caps_records_failures_and_logs(monkeypatch, caplog):
         return True
 
     monkeypatch.setattr(pipeline, "run_transcript_episode", fake)
+    monkeypatch.setattr(pipeline, "_now", lambda: NOW)
+    monkeypatch.setenv("INGEST_MAX_EPISODES", "3")
     with caplog.at_level(logging.INFO, logger="on_record_ingest"):
-        count = pipeline.run_transcripts(api, None, False, False, max_episodes=3, now=NOW)
+        count = pipeline.run_transcripts(api, None, False, False)
     assert tried == ["e4", "e3", "e2"]
     assert count == 2
     episode_id, fields = api.statuses[0]

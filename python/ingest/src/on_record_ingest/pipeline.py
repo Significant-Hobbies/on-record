@@ -598,6 +598,10 @@ BACKOFF_DAYS = (1, 3, 7, 14)
 DEFAULT_MAX_EPISODES = 100
 
 
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
 def default_max_episodes() -> int:
     """Per-run transcript cap: INGEST_MAX_EPISODES, else 100. 0 means no cap."""
     raw = os.environ.get("INGEST_MAX_EPISODES", "").strip()
@@ -710,7 +714,7 @@ def run_transcript_episode(
     ) as exc:
         LOGGER.warning("episode %s left for a later pass: %s", episode["id"], exc)
         if not opts.dry_run:
-            record_transcript_failure(api, episode, datetime.now(UTC))
+            record_transcript_failure(api, episode, _now())
         return False
     if opts.dry_run:
         LOGGER.info("transcripts dry-run %s kind=%s cues=%s", episode["id"], kind, len(cues))
@@ -733,11 +737,9 @@ def run_transcripts(
     whisper: bool = False,
     cfg: Settings | None = None,
     show_id: str | None = None,
-    max_episodes: int | None = None,
-    now: datetime | None = None,
 ) -> int:
-    now = now or datetime.now(UTC)
-    cap = default_max_episodes() if max_episodes is None else max_episodes
+    now = _now()
+    cap = default_max_episodes()
     skipped = remaining = 0
     if episode_id:
         episode = api.get_episode(episode_id)["episode"]
@@ -1933,6 +1935,9 @@ def main(argv: list[str] | None = None) -> int:
     # stay visible; HTTP failures still surface through exceptions and warnings.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     args = _argument_parser().parse_args(argv)
+    if args.max_episodes is not None:
+        # run_transcripts reads the cap from the environment (see default_max_episodes).
+        os.environ["INGEST_MAX_EPISODES"] = str(args.max_episodes)
     cfg = load_settings()
     api = ApiClient(cfg)
     try:
@@ -1968,7 +1973,6 @@ def main(argv: list[str] | None = None) -> int:
                 args.whisper,
                 cfg,
                 target_show_id,
-                args.max_episodes,
             )
         extracted = 0
         if args.stage in {"all", "extract", "publish"}:
