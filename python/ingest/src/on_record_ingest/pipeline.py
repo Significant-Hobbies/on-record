@@ -611,6 +611,12 @@ def default_max_episodes() -> int:
         return DEFAULT_MAX_EPISODES
 
 
+def export_max_episodes(value: int | None) -> None:
+    """Let --max-episodes override the environment cap run_transcripts reads."""
+    if value is not None:
+        os.environ["INGEST_MAX_EPISODES"] = str(value)
+
+
 def backoff_for(attempts: int) -> timedelta:
     """1d after the first failure, then 3d, 7d, and 14d from then on."""
     return timedelta(days=BACKOFF_DAYS[min(max(attempts, 1), len(BACKOFF_DAYS)) - 1])
@@ -1935,9 +1941,7 @@ def main(argv: list[str] | None = None) -> int:
     # stay visible; HTTP failures still surface through exceptions and warnings.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     args = _argument_parser().parse_args(argv)
-    if args.max_episodes is not None:
-        # run_transcripts reads the cap from the environment (see default_max_episodes).
-        os.environ["INGEST_MAX_EPISODES"] = str(args.max_episodes)
+    export_max_episodes(args.max_episodes)
     cfg = load_settings()
     api = ApiClient(cfg)
     try:
