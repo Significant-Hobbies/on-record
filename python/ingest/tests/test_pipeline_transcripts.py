@@ -524,7 +524,9 @@ def test_temporary_caption_failure_does_not_retire_episode(monkeypatch):
     )
     count = pipeline.run_transcripts(api, episode_id="episode-1", force=True, dry_run=False)
     assert count == 0
-    assert api.status is None
+    # Not retired: still discovered, with the failed attempt recorded for backoff.
+    assert api.status["status"] == "discovered"
+    assert api.status["statusDetail"].startswith(pipeline.ATTEMPT_PREFIX)
 
 
 def test_temporary_publisher_failure_does_not_retire_episode(monkeypatch):
@@ -538,7 +540,9 @@ def test_temporary_publisher_failure_does_not_retire_episode(monkeypatch):
     )
     count = pipeline.run_transcripts(api, episode_id="episode-1", force=True, dry_run=False)
     assert count == 0
-    assert api.status is None
+    # Not retired: still discovered, with the failed attempt recorded for backoff.
+    assert api.status["status"] == "discovered"
+    assert api.status["statusDetail"].startswith(pipeline.ATTEMPT_PREFIX)
 
 
 def test_resolved_publisher_speakers_never_reenter_identification(monkeypatch):
