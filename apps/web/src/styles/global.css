@@ -699,6 +699,11 @@ h3 {
   font-size: 1.15rem;
 }
 
+.closing-cta pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .site-footer {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
