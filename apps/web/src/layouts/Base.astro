@@ -199,7 +199,15 @@ const structuredData = JSON.stringify({
       <main id="main">
         <slot />
       </main>
-      <footer class="site-footer">
+      <fleet-footer-extension data-fleet-footer-project="on-record" product-name="High Signal Podcasts" art-src="https://sassmaker.com/footer-art/on-record.webp" theme="light">
+<saas-maker-newsletter-capture slot="capture"
+            product-name="High Signal Podcasts"
+            catalog-id="on-record"
+            kind="newsletter"
+            source="footer"
+            privacy-url="https://podcasts.highsignal.app/privacy"
+          ></saas-maker-newsletter-capture>
+<footer slot="navigation" data-fleet-footer-navigation class="site-footer">
         <div>
           <p class="footer-kicker">High Signal / Podcasts</p>
           <p class="footer-statement">
@@ -211,15 +219,7 @@ const structuredData = JSON.stringify({
           <p>Published claims keep the speaker, verbatim excerpt, date, and source trail attached.</p>
           <p>The public index currently needs no account or checkout. No permanent pricing model is claimed.</p>
         </div>
-        <div class="footer-capture">
-          <saas-maker-newsletter-capture
-            product-name="High Signal Podcasts"
-            catalog-id="on-record"
-            kind="newsletter"
-            source="footer"
-            privacy-url="https://podcasts.highsignal.app/privacy"
-          ></saas-maker-newsletter-capture>
-        </div>
+        
         <div class="footer-links">
           <a href="/search" data-app-health-event="cta.search_evidence">Search evidence</a>
           <a href="/people">People index</a>
@@ -244,6 +244,7 @@ const structuredData = JSON.stringify({
           </a>
         </div>
       </footer>
+</fleet-footer-extension>
     </div>
     <script is:inline>
       // Lazy-load non-critical third-party scripts (Clarity, SaaS Maker widgets)
