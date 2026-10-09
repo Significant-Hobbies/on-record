@@ -11,12 +11,13 @@
     "deploy": "wrangler deploy --tag \"$(git rev-parse HEAD)\""
   },
   "dependencies": {
-    "astro": "^5.13.2"
+    "astro": "7.3.5"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.4",
-    "@astrojs/cloudflare": "^12.6.8",
+    "@astrojs/check": "0.9.10",
+    "@astrojs/cloudflare": "14.1.7",
+    "@cloudflare/workers-types": "4.20260425.1",
     "typescript": "6.0.3",
-    "wrangler": "4.85.0"
+    "wrangler": "4.149.0"
   }
 }

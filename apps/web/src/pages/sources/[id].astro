@@ -1,7 +1,8 @@
 ---
 import ClaimCard from '../../components/ClaimCard.astro';
 import Layout from '../../layouts/Base.astro';
-import { apiGet, runtimeEnvFromLocals, type Claim, type Source } from '../../lib/api';
+import { apiGet, type Claim, type Source } from '../../lib/api';
+import { runtimeEnv } from '../../lib/runtime';
 import { formatSaidOn } from '../../lib/time';
 
 const { id } = Astro.params;
@@ -11,7 +12,7 @@ let missing = false;
 try {
   const payload = await apiGet<{ source: Source; claims: Claim[] }>(
     `/api/sources/${id}`,
-    runtimeEnvFromLocals(Astro.locals)
+    runtimeEnv()
   );
   source = payload.source;
   claims = payload.claims ?? [];

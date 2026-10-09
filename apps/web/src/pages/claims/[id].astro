@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Base.astro';
-import { apiGet, runtimeEnvFromLocals, type Claim } from '../../lib/api';
+import { apiGet, type Claim } from '../../lib/api';
+import { runtimeEnv } from '../../lib/runtime';
 import { formatClock, whenLabel } from '../../lib/time';
 
 type TranscriptContext = { text: string; quoteStart: number; quoteEnd: number };
@@ -19,7 +20,7 @@ try {
     contextStatus?: 'unavailable';
     evidence: Array<{ deepLinkUrl?: string | null; quote: string }>;
     references: Array<{ kind: string; role: string; name: string }>;
-  }>(`/api/claims/${id}?context=1`, runtimeEnvFromLocals(Astro.locals));
+  }>(`/api/claims/${id}?context=1`, runtimeEnv());
   claim = payload.claim;
   evidence = payload.evidence ?? [];
   references = payload.references ?? [];

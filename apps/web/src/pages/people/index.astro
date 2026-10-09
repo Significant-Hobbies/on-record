@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Base.astro';
-import { apiGet, runtimeEnvFromLocals, type Person } from '../../lib/api';
+import { apiGet, type Person } from '../../lib/api';
+import { runtimeEnv } from '../../lib/runtime';
 
 const q = (Astro.url.searchParams.get('q') ?? '').trim();
 const page = Math.max(Number(Astro.url.searchParams.get('page') ?? 1) || 1, 1);
@@ -13,7 +14,7 @@ try {
   if (q) params.set('q', q);
   const payload = await apiGet<{ people: Person[]; total: number }>(
     `/api/people?${params}`,
-    runtimeEnvFromLocals(Astro.locals)
+    runtimeEnv()
   );
   people = payload.people ?? [];
   total = payload.total ?? people.length;

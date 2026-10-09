@@ -3,16 +3,16 @@ import ClaimCard from '../../components/ClaimCard.astro';
 import Layout from '../../layouts/Base.astro';
 import {
   apiGet,
-  runtimeEnvFromLocals,
   type Claim,
   type Person,
   type Recommendation,
 } from '../../lib/api';
+import { runtimeEnv } from '../../lib/runtime';
 import { whenLabel } from '../../lib/time';
 
 const { slug } = Astro.params;
 const selectedType = Astro.url.searchParams.get('type') ?? '';
-const env = runtimeEnvFromLocals(Astro.locals);
+const env = runtimeEnv();
 let person: Person | null = null;
 let claims: Claim[] = [];
 let recommendations: Recommendation[] = [];

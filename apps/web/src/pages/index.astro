@@ -4,15 +4,15 @@ import Layout from '../layouts/Base.astro';
 import {
   apiGet,
   homepageEvidence,
-  runtimeEnvFromLocals,
   type Person,
   type RecommendationGroup,
   type Source,
   type Stats,
 } from '../lib/api';
+import { runtimeEnv } from '../lib/runtime';
 import { formatClock, formatSaidOn } from '../lib/time';
 
-const env = runtimeEnvFromLocals(Astro.locals);
+const env = runtimeEnv();
 const landingApiOptions = { timeoutMs: 1200 };
 // Fallback only: used when the live /api/stats call fails. Refreshed to the
 // figures /api/stats returned on 2026-09-05 (see issue #12) — this is not a

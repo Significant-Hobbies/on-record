@@ -16,7 +16,7 @@
     "apps/web": {
       "entry": ["astro.config.mjs", "src/pages/**/*.astro", "src/lib/api.ts"],
       "project": ["src/**/*.{ts,astro}", "astro.config.mjs"],
-      "ignoreDependencies": ["@astrojs/check", "@astrojs/cloudflare", "wrangler"],
+      "ignoreDependencies": ["@astrojs/check", "@astrojs/cloudflare", "cloudflare", "wrangler"],
       "ignoreBinaries": ["wrangler"]
     },
     "workers/api": {
