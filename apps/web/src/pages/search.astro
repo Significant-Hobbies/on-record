@@ -1,7 +1,8 @@
 ---
 import ClaimCard from '../components/ClaimCard.astro';
 import Layout from '../layouts/Base.astro';
-import { apiGet, runtimeEnvFromLocals, type Claim } from '../lib/api';
+import { apiGet, type Claim } from '../lib/api';
+import { runtimeEnv } from '../lib/runtime';
 
 const claimTypes = [
   ['evaluation', 'Evaluations'],
@@ -25,7 +26,7 @@ let unavailable = false;
 try {
   const payload = await apiGet<{ claims: Claim[]; evidence?: string }>(
     `/api/search${params.size ? `?${params}` : ''}`,
-    runtimeEnvFromLocals(Astro.locals)
+    runtimeEnv()
   );
   claims = payload.claims ?? [];
 } catch {

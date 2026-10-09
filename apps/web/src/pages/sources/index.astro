@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Base.astro';
-import { apiGet, runtimeEnvFromLocals, type Source } from '../../lib/api';
+import { apiGet, type Source } from '../../lib/api';
+import { runtimeEnv } from '../../lib/runtime';
 import { formatSaidOn } from '../../lib/time';
 
 const q = (Astro.url.searchParams.get('q') ?? '').trim();
@@ -17,7 +18,7 @@ try {
   if (show) params.set('show', show);
   const payload = await apiGet<{ publishers: Array<{ name: string; slug: string }>; sources: Source[]; total: number }>(
     `/api/sources?${params}`,
-    runtimeEnvFromLocals(Astro.locals)
+    runtimeEnv()
   );
   sources = payload.sources ?? [];
   publishers = payload.publishers ?? [];

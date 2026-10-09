@@ -2,10 +2,10 @@
 import Layout from '../layouts/Base.astro';
 import {
   apiGet,
-  runtimeEnvFromLocals,
   type Recommendation,
   type RecommendationGroup,
 } from '../lib/api';
+import { runtimeEnv } from '../lib/runtime';
 import { whenLabel } from '../lib/time';
 
 const kinds = [
@@ -76,7 +76,7 @@ try {
     groups: RecommendationGroup[];
     total: number;
     evidence?: string;
-  }>(`/api/recommendation-groups?${groupQuery}`, runtimeEnvFromLocals(Astro.locals));
+  }>(`/api/recommendation-groups?${groupQuery}`, runtimeEnv());
   groups = payload.groups ?? [];
   total = payload.total ?? groups.length;
   empty = total === 0;
@@ -87,7 +87,7 @@ try {
     const occurrences = await apiGet<{
       recommendations: Recommendation[];
       evidence?: string;
-    }>(`/api/recommendations?${occurrenceQuery}`, runtimeEnvFromLocals(Astro.locals));
+    }>(`/api/recommendations?${occurrenceQuery}`, runtimeEnv());
     items = occurrences.recommendations ?? [];
   }
 } catch {

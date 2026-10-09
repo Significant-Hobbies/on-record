@@ -19,13 +19,11 @@ const fallback = import.meta.env.DEV
  */
 export type ApiFetcher = { fetch: (input: string, init?: RequestInit) => Promise<Response> };
 
-export type RuntimeEnv = { PUBLIC_API_BASE?: string; API?: ApiFetcher };
-
-export function runtimeEnvFromLocals(locals: {
-  runtime?: { env?: RuntimeEnv };
-}): RuntimeEnv | undefined {
-  return locals.runtime?.env;
-}
+export type RuntimeEnv = {
+  PUBLIC_API_BASE?: string;
+  API?: ApiFetcher;
+  APP_HEALTH_INGEST_KEY?: string;
+};
 
 export function apiBase(runtimeEnv?: RuntimeEnv): string {
   return (import.meta.env.PUBLIC_API_BASE || runtimeEnv?.PUBLIC_API_BASE || fallback).replace(
@@ -43,8 +41,7 @@ export async function apiGet<T>(
   const init = {
     signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
   };
-  // The binding only exists on the deployed worker; `astro dev` and any other
-  // non-Workers runtime fall through to a normal fetch against the same URL.
+  // Without an API binding, fall through to a normal fetch against the same URL.
   const response = runtimeEnv?.API ? await runtimeEnv.API.fetch(url, init) : await fetch(url, init);
   if (!response.ok) {
     throw new Error(`${path} failed: ${response.status}`);
