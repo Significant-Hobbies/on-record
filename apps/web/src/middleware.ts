@@ -1,4 +1,6 @@
 import { defineMiddleware } from 'astro:middleware';
+import { withEdgeCache } from './lib/edge-cache';
+import { observeStageTiming } from './lib/stage-timing';
 import { observeRequest } from './lib/telemetry';
 
 const agentView = {
@@ -63,7 +65,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     });
   }
 
-  const response = await next();
+  const result = await withEdgeCache(context, next);
+  const { response } = result;
   const links = [
     '</sitemap.xml>; rel="sitemap"; type="application/xml"',
     '</llms.txt>; rel="describedby"; type="text/plain"',
@@ -76,6 +79,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
     links.push(`<${markdown}>; rel="alternate"; type="text/markdown"`);
   }
   response.headers.set('Link', links.join(', '));
+  if (/^text\/html(?:;|$)/i.test(response.headers.get('Content-Type') ?? '')) {
+    const totalMs = Math.max(0, Date.now() - startedAt);
+    const timings = [`total;dur=${totalMs}`];
+    if (result.edgeCache === 'MISS') {
+      timings.push(`render;dur=${result.renderMs}`);
+    }
+    timings.push(`cache;desc="${result.edgeCache}"`);
+    response.headers.set('Server-Timing', timings.join(', '));
+    observeStageTiming(context, result, totalMs);
+  }
   observeRequest(context, response, startedAt);
   return response;
 });

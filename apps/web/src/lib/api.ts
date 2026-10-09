@@ -1,3 +1,5 @@
+import { markDegraded } from './degraded';
+
 const fallback = import.meta.env.DEV
   ? 'http://127.0.0.1:8787'
   : 'https://api.podcasts.highsignal.app';
@@ -41,12 +43,19 @@ export async function apiGet<T>(
   const init = {
     signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
   };
-  // Without an API binding, fall through to a normal fetch against the same URL.
-  const response = runtimeEnv?.API ? await runtimeEnv.API.fetch(url, init) : await fetch(url, init);
-  if (!response.ok) {
-    throw new Error(`${path} failed: ${response.status}`);
+  try {
+    // Without an API binding, fall through to a normal fetch against the same URL.
+    const response = runtimeEnv?.API
+      ? await runtimeEnv.API.fetch(url, init)
+      : await fetch(url, init);
+    if (!response.ok) {
+      throw new Error(`${path} failed: ${response.status}`);
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    markDegraded();
+    throw error;
   }
-  return (await response.json()) as T;
 }
 
 export type Person = {
@@ -142,6 +151,8 @@ export async function homepageEvidence(
   } catch {
     // Reuse the existing FTS route's bounded public corpus. This is a topical
     // sample, not a cached or necessarily recent stream; the page labels it.
+    // Validation failures happen outside apiGet, so mark the render degraded here.
+    markDegraded();
     origin = 'search';
     try {
       claims = homepageClaims(await apiGet<unknown>('/api/search?q=AI', runtimeEnv, options));
