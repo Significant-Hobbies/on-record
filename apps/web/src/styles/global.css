@@ -128,7 +128,6 @@ summary:focus-visible {
 }
 
 .family,
-.footer-kicker,
 .eyebrow,
 .folio {
   margin: 0;
@@ -702,52 +701,6 @@ h3 {
 .closing-cta pre {
   max-width: 100%;
   overflow-x: auto;
-}
-
-.site-footer {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: clamp(1.5rem, 5vw, 4rem);
-  padding: 2.5rem 0 1.5rem;
-  border-top: 1px solid var(--ink);
-}
-
-.footer-statement {
-  max-width: 28rem;
-  margin: 0.7rem 0 0;
-  font-size: 1.18rem;
-}
-
-.footer-contract {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.footer-contract p {
-  margin-top: 0;
-}
-
-.footer-links {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-family: var(--sans);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.repository-link {
-  display: inline-flex;
-  align-self: flex-start;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-}
-
-.repository-link:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 3px;
 }
 
 .collection-header {
@@ -2258,8 +2211,7 @@ main > h1:first-child {
     width: min(100%, 34rem);
   }
 
-  .section-heading,
-  .site-footer {
+  .section-heading {
     align-items: start;
     grid-template-columns: 1fr;
   }
@@ -2686,4 +2638,15 @@ main > h1:first-child {
   font-size: 0.9rem;
   color: var(--muted);
   margin-top: 0.75rem;
+}
+
+studio-footer[data-theme='paper'] {
+  --font-display: var(--serif);
+  --font-text: var(--sans);
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --muted-foreground: var(--muted);
+  --brand: var(--accent);
+  --brand-ink: var(--accent-dark);
+  display: block;
 }

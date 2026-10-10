@@ -16,7 +16,8 @@
       "!**/pnpm-lock.yaml",
       "!**/*.astro",
       "!**/*.svg",
-      "!**/*.css"
+      "!**/*.css",
+      "!**/apps/web/public/footer.js"
     ]
   },
   "formatter": {
