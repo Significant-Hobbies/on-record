@@ -264,20 +264,34 @@ const structuredData = JSON.stringify({
       ></saas-maker-newsletter-capture>
     </fleet-footer-extension>
     <script is:inline>
-      // Lazy-load non-critical third-party scripts (Clarity, SaaS Maker widgets)
+      // Queue Clarity calls immediately; load it on interaction or after 90 seconds.
+      (function (c, l, a, r, i) {
+        c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments); };
+        var done = false;
+        var events = ["pointerdown", "keydown", "touchstart", "scroll"];
+        function go() {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          events.forEach(function (event) { c.removeEventListener(event, go); });
+          var t = l.createElement(r);
+          t.async = 1;
+          t.src = "https://www.clarity.ms/tag/" + i;
+          var y = l.getElementsByTagName(r)[0];
+          y.parentNode.insertBefore(t, y);
+        }
+        events.forEach(function (event) { c.addEventListener(event, go, { passive: true, once: true }); });
+        var timer = setTimeout(go, 90000);
+      })(window, document, "clarity", "script", "ybch0p6cta");
+      window.clarity("set", "project_id", "on-record");
+
+      // Lazy-load non-critical SaaS Maker widgets
       // after the page is interactive so they never compete for bandwidth on the
       // critical render path. Issue #11: these total ~72KB and were pushing mobile
       // LCP past 2.5s on slow 4G by stealing bandwidth from the render-blocking CSS.
       (function () {
         var idle = window.requestIdleCallback || function (cb) { return setTimeout(cb, 1500); };
         idle(function () {
-          // Clarity
-          (function (c, l, a, r, i, t, y) {
-            c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments); };
-            t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i;
-            y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
-          })(window, document, "clarity", "script", "ybch0p6cta");
-          window.clarity("set", "project_id", "on-record");
           // SaaS Maker widgets
           var s1 = document.createElement("script");
           s1.src = "https://sassmaker.com/project-strip.js?v=precise-b0adaa67";
