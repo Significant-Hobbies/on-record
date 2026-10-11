@@ -1,4 +1,7 @@
 ---
+import ResultsLoading from '../../components/states/ResultsLoading.astro';
+import ErrorState from '../../components/states/ErrorState.astro';
+import EmptyState from '../../components/states/EmptyState.astro';
 import Layout from '../../layouts/Base.astro';
 import { apiGet, type Person } from '../../lib/api';
 import { runtimeEnv } from '../../lib/runtime';
@@ -37,8 +40,8 @@ function pageHref(nextPage: number) {
   breadcrumb={[{ name: 'People', path: '/people' }]}
 >
   <header class="collection-header people-header">
-    <p class="eyebrow">Trusted corpus / people</p>
-    <h1>People, through what they actually said.</h1>
+    <p class="eyebrow">trusted corpus / people</p>
+    <h1>people, through what they actually said.</h1>
     <p class="lede">
       Open a speaker’s evidence record to see their claims, recommendations, books, apps, and tools—without scrubbing through every episode.
     </p>
@@ -51,24 +54,20 @@ function pageHref(nextPage: number) {
 
   <section class="index-toolbar" aria-label="Filter people">
     <form method="get" class="index-search">
-      <label for="people-query">Find a person or organization</label>
+      <label for="people-query">find a person or organization</label>
       <div>
         <input id="people-query" type="search" name="q" value={q} placeholder="Lenny Rachitsky, Figma, OpenAI…" />
-        <button type="submit">Find person</button>
+        <button type="submit">find person</button>
       </div>
     </form>
     <p>{q ? `${total} matches for “${q}”` : `${total} people, ranked by published evidence`}</p>
   </section>
 
+  <div data-results>
   {unavailable ? (
-    <p class="empty">The trusted people index is temporarily unavailable.</p>
+    <ErrorState description="The trusted people index is temporarily unavailable." />
   ) : people.length === 0 ? (
-    <div class="empty-state">
-      <p class="eyebrow">No published match</p>
-      <h2>Try a broader name or organization.</h2>
-      <p>People only appear after at least one exact-speaker claim passes the evidence gate.</p>
-      <a class="button button-secondary" href="/people">Clear search</a>
-    </div>
+    <EmptyState title="Try a broader name or organization." href="/people" action="Clear search" eyebrow="No published match" description="People only appear after at least one exact-speaker claim passes the evidence gate." />
   ) : (
     <>
       <section class="people-directory" aria-label="Published people">
@@ -90,11 +89,13 @@ function pageHref(nextPage: number) {
       </section>
       {total > pageSize && (
         <nav class="pagination" aria-label="People pages">
-          {page > 1 ? <a href={pageHref(page - 1)}>← Previous</a> : <span></span>}
+          {page > 1 ? <a href={pageHref(page - 1)}>← previous</a> : <span></span>}
           <span>Page {page} of {Math.ceil(total / pageSize)}</span>
-          {page * pageSize < total ? <a href={pageHref(page + 1)}>Next →</a> : <span></span>}
+          {page * pageSize < total ? <a href={pageHref(page + 1)}>next →</a> : <span></span>}
         </nav>
       )}
     </>
   )}
+  </div>
+  <ResultsLoading shape="cards" />
 </Layout>

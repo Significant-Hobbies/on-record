@@ -1,0 +1,383 @@
+/* SiteHeader bar and native MobileNav, adapted from @saas-maker/ui v0.1.19. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+
+.header-inner {
+  display: flex;
+  width: min(100% - 2rem, 72rem);
+  height: 64px;
+  align-items: center;
+  gap: 1.5rem;
+  margin-inline: auto;
+}
+
+.header-brand {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.brand-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.brand-tag {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+
+.header-nav {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+}
+
+.site-header ul {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.header-nav a {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.header-nav a[aria-current="page"] {
+  color: var(--foreground);
+}
+
+.header-nav a:hover,
+.mobile-menu a:hover {
+  color: var(--brand);
+}
+
+.header-mobile {
+  display: none;
+  margin-left: auto;
+}
+
+.site-header .menu-button {
+  display: inline-flex;
+  width: 40px;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--foreground);
+}
+
+.menu-button:hover {
+  background: var(--accent);
+}
+
+.mobile-menu {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.mobile-menu::backdrop {
+  background: transparent;
+}
+
+.mobile-menu-bar {
+  display: flex;
+  height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.mobile-menu nav {
+  padding: 1.5rem 1rem;
+}
+
+.mobile-menu ul {
+  flex-direction: column;
+}
+
+.mobile-menu li {
+  border-bottom: 1px solid var(--border);
+}
+
+.mobile-menu a {
+  display: block;
+  padding-block: 1rem;
+  color: var(--foreground);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+}
+
+@media (max-width: 960px) {
+  .header-nav { display: none; }
+  .header-mobile { display: block; }
+}
+
+/* The loaded view and the placeholder share a reserved results region. */
+[data-results] {
+  min-width: 0;
+  min-height: 20rem;
+}
+
+.state-empty {
+  display: flex;
+  min-width: 0;
+  min-height: 20rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.state-copy {
+  max-width: 24rem;
+}
+
+.state-copy h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
+  text-transform: lowercase;
+}
+
+.state-copy p:not(.eyebrow) {
+  margin: 0.5rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.results-skeleton {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.skeleton-row {
+  min-height: 10rem;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.skeleton-row:last-child {
+  border-bottom: 0;
+}
+
+.skeleton-text {
+  display: flex;
+  max-width: 68ch;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.skeleton-bone {
+  height: 0.875rem;
+  border-radius: var(--radius);
+  background: var(--accent);
+  animation: skeleton-pulse 2s ease-in-out infinite;
+}
+
+.skeleton-short { width: 66.6667%; }
+.skeleton-meta { width: 33.3333%; height: 0.75rem; margin-top: 1.5rem; }
+.skeleton-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; border: 0; background: transparent; }
+.skeleton-grid .skeleton-row { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+
+@keyframes skeleton-pulse {
+  50% { opacity: 0.5; }
+}
+
+@media (max-width: 880px) {
+  .skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .skeleton-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bone { animation: none; }
+}
+
+time,
+code,
+.meta,
+.claim-receipt,
+.claim-card-header,
+.claim-source-summary,
+.profile-stats dd,
+.stat b,
+.collection-totals strong {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+main p,
+main blockquote {
+  max-width: 68ch;
+}
+
+main > *,
+.hero-copy,
+.source-row-main,
+.directory-identity,
+.profile-identity > div {
+  min-width: 0;
+}
+
+studio-footer {
+  --font-display: var(--font-sans);
+  --font-text: var(--font-sans);
+  --font-accent: var(--font-sans);
+  --radius: 0.375rem;
+  display: block;
+}
+
+/* The footer's own ink attribute must inherit the family overrides on html. */
+html[data-theme="ink"][data-mode="dark"] studio-footer {
+  --font-sans: inherit;
+  --font-text: inherit;
+  --font-display: inherit;
+  --font-accent: inherit;
+  --font-mono: inherit;
+  --radius: inherit;
+  --background: inherit;
+  --foreground: inherit;
+  --surface: inherit;
+  --card: inherit;
+  --card-foreground: inherit;
+  --popover: inherit;
+  --popover-foreground: inherit;
+  --primary: inherit;
+  --primary-foreground: inherit;
+  --secondary: inherit;
+  --secondary-foreground: inherit;
+  --muted: inherit;
+  --muted-foreground: inherit;
+  --accent: inherit;
+  --accent-foreground: inherit;
+  --border: inherit;
+  --hairline: inherit;
+  --input: inherit;
+  --ring: inherit;
+  --brand: inherit;
+  --brand-foreground: inherit;
+  --brand-soft: inherit;
+  --brand-ink: inherit;
+  --accent-style: inherit;
+  --display-weight: inherit;
+  --display-tracking: inherit;
+  --display-leading: inherit;
+}
+
+.path-card h3,
+.path-card .folio,
+.text-link,
+.claim-actions a,
+.evidence-card-actions a,
+.back-link,
+.pagination {
+  text-transform: lowercase;
+}
+
+.claim-card h3 a {
+  color: var(--muted-foreground);
+}
+
+.claim-card h3 a:hover {
+  color: var(--brand);
+}
+
+.index-search,
+.named-item-search {
+  min-width: 0;
+}
+
+.index-search input,
+.named-item-search input {
+  width: 100%;
+}
+
+/* Keep the upstream footer assets intact; constrain their ornamental utilities. */
+studio-footer * {
+  box-shadow: none;
+}
+
+studio-footer [class*="rounded-"] {
+  border-radius: var(--radius);
+}
+
+studio-footer [class*="bg-gradient-"] {
+  background-image: none;
+}
+
+.evidence-path,
+.claim-actions,
+.source-profile-meta,
+.claim-page-kicker > span {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.claim-receipt {
+  color: var(--muted-foreground);
+}
+
+.claim-receipt a {
+  color: inherit;
+}
+
+.claim-receipt a:hover {
+  color: var(--brand);
+}
+
+.person-stack-card blockquote {
+  color: var(--foreground);
+}

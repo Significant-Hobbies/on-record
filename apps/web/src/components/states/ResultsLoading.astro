@@ -1,0 +1,56 @@
+---
+import Skeleton from './Skeleton.astro';
+type Props = { shape?: 'quotes' | 'cards' };
+const { shape = 'quotes' } = Astro.props;
+---
+<template data-results-skeleton><Skeleton shape={shape} /></template>
+<script is:inline>
+  (() => {
+    const region = document.querySelector('[data-results]');
+    const template = document.querySelector('[data-results-skeleton]');
+    if (!region || !template) return;
+    let timer;
+    let original;
+    function showLoading() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (original) return;
+        // Keep the outgoing view's geometry, including variable-length quotes.
+        const height = region.getBoundingClientRect().height;
+        const rows = [...region.querySelectorAll('.claim-card, .directory-person, .source-row, .group-row, .card')];
+        original = [...region.childNodes];
+        region.style.minHeight = `${height}px`;
+        const skeleton = template.content.cloneNode(true);
+        const container = skeleton.firstElementChild;
+        container.style.minHeight = `${height}px`;
+        if (rows.length) {
+          const bone = container.querySelector('.skeleton-row');
+          container.querySelectorAll('.skeleton-row').forEach((row) => row.remove());
+          rows.forEach((row) => {
+            const placeholder = bone.cloneNode(true);
+            placeholder.style.minHeight = `${row.getBoundingClientRect().height}px`;
+            container.append(placeholder);
+          });
+          container.style.gridTemplateColumns = 'minmax(0, 1fr)';
+          container.style.gap = '0';
+        }
+        region.replaceChildren(skeleton);
+      }, 150);
+    }
+    document.addEventListener('submit', (event) => {
+      if (!event.defaultPrevented && event.target.matches('main form[method="get"]')) showLoading();
+    });
+    document.addEventListener('click', (event) => {
+      const link = event.target.closest('main .pagination a, main .filter-row a, main .type-filter a, main .search-suggestions a, main .back-link');
+      if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target === '_blank' || link.hasAttribute('download')) return;
+      if (link.origin === location.origin) showLoading();
+    });
+    window.addEventListener('pagehide', () => clearTimeout(timer));
+    window.addEventListener('pageshow', () => {
+      clearTimeout(timer);
+      if (original) region.replaceChildren(...original);
+      original = undefined;
+      region.style.minHeight = '';
+    });
+  })();
+</script>

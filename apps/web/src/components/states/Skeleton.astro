@@ -1,0 +1,18 @@
+---
+// Skeleton, QuoteListSkeleton and CardGridSkeleton from @saas-maker/ui v0.1.19.
+// Only the outer container announces; every bone is decorative.
+type Props = { shape?: 'quotes' | 'cards'; count?: number };
+const { shape = 'quotes', count = 6 } = Astro.props;
+---
+<div role="status" aria-busy="true" aria-label={shape === 'quotes' ? 'quotes' : 'cards'} data-slot={shape === 'quotes' ? 'quote-list-skeleton' : 'card-grid-skeleton'} class:list={['results-skeleton', { 'skeleton-grid': shape === 'cards' }]}>
+  <span class="visually-hidden">loading</span>
+  {Array.from({ length: Math.max(0, count) }, () => (
+    <div class="skeleton-row" data-slot={shape === 'cards' ? 'card-skeleton' : undefined}>
+      <div class="skeleton-text">
+        <div data-slot="skeleton" aria-hidden="true" class="skeleton-bone"></div>
+        <div data-slot="skeleton" aria-hidden="true" class="skeleton-bone skeleton-short"></div>
+      </div>
+      <div data-slot="skeleton" aria-hidden="true" class="skeleton-bone skeleton-meta"></div>
+    </div>
+  ))}
+</div>

@@ -1,4 +1,5 @@
 ---
+import ErrorState from '../../components/states/ErrorState.astro';
 import Layout from '../../layouts/Base.astro';
 import { apiGet, type Claim } from '../../lib/api';
 import { runtimeEnv } from '../../lib/runtime';
@@ -53,16 +54,11 @@ const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personNam
   ]}
 >
   {missing || !claim ? (
-    <div class="empty-state page-empty">
-      <p class="eyebrow">No trusted public record</p>
-      <h1>This claim is unpublished or unavailable.</h1>
-      <p>The quote may be unavailable, unsupported, or outside the public corpus.</p>
-      <a class="button button-secondary" href="/search">Search published evidence</a>
-    </div>
+    <ErrorState title="This claim is unpublished or unavailable." eyebrow="No trusted public record" description="The quote may be unavailable, unsupported, or outside the public corpus." />
   ) : (
     <article class="claim-page">
       <header class="claim-page-header">
-        <a class="back-link" href={claim.personSlug ? `/people/${claim.personSlug}` : '/search'}>← Back to evidence</a>
+        <a class="back-link" href={claim.personSlug ? `/people/${claim.personSlug}` : '/search'}>← back to evidence</a>
         <div class="claim-page-kicker">
           <p class="eyebrow">Evidence receipt / {claim.claimType}</p>
           <span>Published · transcript-backed</span>
@@ -81,23 +77,23 @@ const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personNam
 
       <section class="receipt-sheet" aria-labelledby="receipt-heading">
         <div class="receipt-title">
-          <p class="eyebrow">Source trail</p>
-          <h2 id="receipt-heading">Everything needed to verify it.</h2>
+          <p class="eyebrow">source trail</p>
+          <h2 id="receipt-heading">everything needed to verify it.</h2>
         </div>
         <dl class="receipt-grid">
-          <div><dt>Speaker</dt><dd>{speakerLabel}</dd></div>
-          <div><dt>Attribution</dt><dd>{speakerUnverified ? 'Not verified from this transcript' : 'Verified speaker'}</dd></div>
-          <div><dt>Claim type</dt><dd>{claim.claimType}</dd></div>
-          <div><dt>Recorded</dt><dd>{whenLabel(claim) || 'Source date unavailable'}</dd></div>
-          <div><dt>Publisher</dt><dd>{claim.showName ?? 'Podcast publisher'}</dd></div>
+          <div><dt>speaker</dt><dd>{speakerLabel}</dd></div>
+          <div><dt>attribution</dt><dd>{speakerUnverified ? 'Not verified from this transcript' : 'Verified speaker'}</dd></div>
+          <div><dt>claim type</dt><dd>{claim.claimType}</dd></div>
+          <div><dt>recorded</dt><dd>{whenLabel(claim) || 'Source date unavailable'}</dd></div>
+          <div><dt>publisher</dt><dd>{claim.showName ?? 'Podcast publisher'}</dd></div>
           <div class="receipt-wide">
-            <dt>Episode</dt>
+            <dt>episode</dt>
             <dd>{claim.episodeId ? <a href={`/sources/${claim.episodeId}`}>{claim.episodeTitle}</a> : claim.episodeTitle ?? 'Source episode'}</dd>
           </div>
         </dl>
         {context && contextQuote && (
           <div class="receipt-context">
-            <p class="eyebrow">Transcript context</p>
+            <p class="eyebrow">transcript context</p>
             <p class="context-passage">
               {contextBefore.trim() && <span class="context-around">…{contextBefore}</span>}
               <mark class="context-quote">{contextQuote}</mark>
@@ -109,7 +105,7 @@ const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personNam
           </div>
         )}
         {contextUnavailable && (
-          <p class="context-note">Transcript context is temporarily unavailable. The published claim and source link remain available.</p>
+          <ErrorState description="Transcript context is temporarily unavailable. The published claim and source link remain available." />
         )}
         <div class="receipt-actions">
           {link && (
@@ -117,7 +113,7 @@ const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personNam
               {claim.transcriptKind === 'youtube_captions' && claim.deepLinkUrl && claim.timestampS != null ? `Open source at ${formatClock(claim.timestampS)}` : 'Open original source'} ↗
             </a>
           )}
-          {claim.episodeId && <a class="button button-secondary" href={`/sources/${claim.episodeId}`}>See episode intelligence</a>}
+          {claim.episodeId && <a class="button button-secondary" href={`/sources/${claim.episodeId}`}>see episode intelligence</a>}
         </div>
       </section>
 
@@ -125,8 +121,8 @@ const speakerLabel = speakerUnverified ? 'Speaker unverified' : claim?.personNam
         <section class="claim-references" aria-labelledby="references-heading">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Named in this claim</p>
-              <h2 id="references-heading">Books, apps, tools, and people.</h2>
+              <p class="eyebrow">named in this claim</p>
+              <h2 id="references-heading">books, apps, tools, and people.</h2>
             </div>
           </div>
           <div class="reference-grid">

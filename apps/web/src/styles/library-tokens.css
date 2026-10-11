@@ -1,0 +1,134 @@
+/* Token blocks copied verbatim from @saas-maker/ui/src/styles/theme.css v0.1.19. */
+:root {
+  --surface-backdrop-gradient: linear-gradient(135deg, color-mix(in oklch, var(--brand-soft) 65%, transparent), transparent 65%);
+  --surface-backdrop-glow: radial-gradient(ellipse at 75% 12%, color-mix(in oklch, var(--brand) 12%, transparent), transparent 65%);
+  --surface-backdrop-grid: linear-gradient(color-mix(in oklch, var(--border) 45%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in oklch, var(--border) 45%, transparent) 1px, transparent 1px);
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+  /* Smooth bold display face shared by every sans preset. */
+  --font-display: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-accent: var(--font-display);
+  /* Fleet voice: headings, buttons and nav in lowercase. Body text keeps
+     normal case. Presets may set either to none. */
+  --display-case: lowercase;
+  --ui-case: lowercase;
+  /* Long-form text (ledes, captions). Gallery sets it to a serif. */
+  --font-text: var(--font-sans);
+  --display-weight: 750;
+  --display-tracking: -0.035em;
+  --display-leading: 1.02;
+  --accent-style: normal;
+  --eyebrow-transform: var(--ui-case);
+  --eyebrow-tracking: 0;
+
+  --radius: 0.75rem;
+
+  --brand: oklch(0.55 0.2 264);
+  --brand-foreground: oklch(0.99 0 0);
+  --brand-soft: oklch(0.95 0.03 264);
+  /* Brand as text on the page background; light brands set a deeper ink. */
+  --brand-ink: var(--brand);
+
+  --background: oklch(0.993 0 0);
+  --foreground: oklch(0.17 0.005 270);
+  --surface: oklch(0.975 0.002 270);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.2 0.005 270);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.002 270);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.965 0.002 270);
+  --muted-foreground: oklch(0.47 0.008 270);
+  --accent: oklch(0.955 0.003 270);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.58 0.22 27);
+  --success: oklch(0.6 0.15 155);
+  --warning: oklch(0.75 0.15 75);
+  --border: oklch(0.91 0.003 270);
+  --hairline: oklch(0.94 0.002 270);
+  --input: oklch(0.89 0.004 270);
+  --ring: var(--brand);
+  --shadow-color: 240 10% 10%;
+
+  --chart-1: var(--brand);
+  --chart-2: oklch(0.7 0.13 190);
+  --chart-3: oklch(0.75 0.14 75);
+  --chart-4: oklch(0.62 0.17 330);
+  --chart-5: oklch(0.55 0.02 270);
+
+  --sidebar: oklch(0.98 0.002 270);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.95 0.003 270);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* Color-block section tones (used by the Band component). */
+  --tone-1: oklch(0.93 0.05 50);
+  --tone-2: oklch(0.92 0.045 300);
+  --tone-3: oklch(0.93 0.045 150);
+  --tone-4: oklch(0.95 0.08 95);
+  --tone-ink: oklch(0.2 0.01 60);
+}
+
+[data-mode="dark"] {
+  --background: oklch(0.145 0.004 270);
+  --foreground: oklch(0.97 0.002 270);
+  --surface: oklch(0.175 0.004 270);
+  --card: oklch(0.18 0.004 270);
+  --popover: oklch(0.2 0.004 270);
+  --primary: oklch(0.97 0.002 270);
+  --primary-foreground: oklch(0.17 0.005 270);
+  --secondary: oklch(0.23 0.004 270);
+  --muted: oklch(0.22 0.004 270);
+  --muted-foreground: oklch(0.7 0.008 270);
+  --accent: oklch(0.24 0.005 270);
+  --border: oklch(1 0 0 / 0.1);
+  --hairline: oklch(1 0 0 / 0.06);
+  --input: oklch(1 0 0 / 0.14);
+  --brand-soft: color-mix(in oklch, var(--brand) 18%, transparent);
+  --shadow-color: 0 0% 0%;
+  --sidebar: oklch(0.165 0.004 270);
+  --sidebar-accent: oklch(0.23 0.004 270);
+}
+
+[data-theme="ink"] {
+  --font-accent: "Instrument Serif", Georgia, serif;
+  --display-weight: 750;
+  --display-tracking: -0.04em;
+  --display-leading: 1;
+  --accent-style: italic;
+  --radius: 0.625rem;
+  --background: oklch(0.13 0.006 265);
+  --foreground: oklch(0.96 0.004 265);
+  --surface: oklch(0.16 0.008 265);
+  --card: oklch(0.17 0.008 265);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.19 0.008 265);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.96 0.004 265);
+  --primary-foreground: oklch(0.15 0.006 265);
+  --secondary: oklch(0.22 0.01 265);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.2 0.008 265);
+  --muted-foreground: oklch(0.68 0.012 265);
+  --accent: oklch(0.23 0.01 265);
+  --accent-foreground: var(--foreground);
+  --border: oklch(1 0 0 / 0.09);
+  --hairline: oklch(1 0 0 / 0.055);
+  --input: oklch(1 0 0 / 0.13);
+  --brand: oklch(0.7 0.16 255);
+  --brand-foreground: oklch(0.14 0.01 265);
+  --brand-soft: oklch(0.7 0.16 255 / 0.14);
+  --shadow-color: 0 0% 0%;
+  --sidebar: oklch(0.15 0.007 265);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: oklch(0.21 0.01 265);
+  --sidebar-accent-foreground: var(--foreground);
+  color-scheme: dark;
+}

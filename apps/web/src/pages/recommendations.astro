@@ -1,4 +1,7 @@
 ---
+import ResultsLoading from '../components/states/ResultsLoading.astro';
+import ErrorState from '../components/states/ErrorState.astro';
+import EmptyState from '../components/states/EmptyState.astro';
 import Layout from '../layouts/Base.astro';
 import {
   apiGet,
@@ -105,8 +108,8 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
   breadcrumb={[{ name: 'Books & tools', path: '/recommendations' }]}
 >
   <header class="collection-header">
-    <p class="eyebrow">Evidence index / named items</p>
-    <h1>Books, apps, and tools people actually name.</h1>
+    <p class="eyebrow">evidence index / named items</p>
+    <h1>books, apps, and tools people actually name.</h1>
     <p class="lede">
       Compare how many distinct people recommended, used, liked, owned, built, or avoided the
       same item—then inspect every transcript excerpt behind the count.
@@ -122,10 +125,10 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
     <form class="named-item-search" method="get">
       {kind && <input type="hidden" name="kind" value={kind} />}
       {role && <input type="hidden" name="role" value={role} />}
-      <label for="named-item-query">Find a named book, app, tool, service, or person</label>
+      <label for="named-item-query">find a named book, app, tool, service, or person</label>
       <div>
         <input id="named-item-query" type="search" name="q" value={q} placeholder="Claude, Anki, The Mom Test…" />
-        <button type="submit">Find item</button>
+        <button type="submit">find item</button>
       </div>
     </form>
   )}
@@ -133,7 +136,7 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
   <section class="filter-stack" aria-label="Recommendation filters">
     <div class="filter-row">
       <span>Kind</span>
-      <a href={searchParams({ item: null, kind: null, page: null })} aria-current={!kind ? 'page' : undefined}>All</a>
+      <a href={searchParams({ item: null, kind: null, page: null })} aria-current={!kind ? 'page' : undefined}>all</a>
       {kinds.map(([value, label]) => (
         <a
           href={searchParams({ item: null, kind: value, page: null })}
@@ -143,7 +146,7 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
     </div>
     <div class="filter-row">
       <span>Action</span>
-      <a href={searchParams({ item: null, role: null, page: null })} aria-current={!role ? 'page' : undefined}>All</a>
+      <a href={searchParams({ item: null, role: null, page: null })} aria-current={!role ? 'page' : undefined}>all</a>
       {roles.map(([value, label]) => (
         <a
           href={searchParams({ item: null, role: value, page: null })}
@@ -153,11 +156,12 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
     </div>
   </section>
 
+  <div data-results>
   {unavailable ? (
-    <p class="empty">The named-item index is temporarily unavailable. No evidence result is inferred from this outage.</p>
+    <ErrorState description="The named-item index is temporarily unavailable. No evidence result is inferred from this outage." />
   ) : item ? (
     <section class="occurrence-section" aria-labelledby="occurrence-heading">
-      <a class="back-link" href={searchParams({ item: null })}>← Back to grouped items</a>
+      <a class="back-link" href={searchParams({ item: null })}>← back to grouped items</a>
       <div class="section-heading">
         <div>
           <p class="eyebrow">{kind || selectedGroup?.kind || 'Named item'} / evidence rows</p>
@@ -171,7 +175,7 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
         )}
       </div>
       {items.length === 0 ? (
-        <p class="empty">Insufficient evidence for this item and filter.</p>
+        <EmptyState description="Insufficient evidence for this item and filter." href="/recommendations" action="Clear filters" />
       ) : (
         <div class="occurrence-list">
           {items.map((recommendation) => (
@@ -193,11 +197,11 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
               <p>
                 {(recommendation.deepLinkUrl || recommendation.sourceUrl) && (
                   <>
-                    <a href={recommendation.transcriptKind === 'youtube_captions' ? recommendation.deepLinkUrl ?? recommendation.sourceUrl : recommendation.sourceUrl} rel="noreferrer" target="_blank">Source</a>
+                    <a href={recommendation.transcriptKind === 'youtube_captions' ? recommendation.deepLinkUrl ?? recommendation.sourceUrl : recommendation.sourceUrl} rel="noreferrer" target="_blank">source</a>
                     {' · '}
                   </>
                 )}
-                <a href={`/claims/${recommendation.claimId}`}>Claim receipt</a>
+                <a href={`/claims/${recommendation.claimId}`}>claim receipt</a>
               </p>
             </article>
           ))}
@@ -205,7 +209,7 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
       )}
     </section>
   ) : empty ? (
-    <p class="empty">Insufficient evidence for this filter.</p>
+    <EmptyState description="Insufficient evidence for this filter." href="/recommendations" action="Clear filters" />
   ) : (
     <>
       <section class="group-list" aria-label="Grouped named items">
@@ -237,11 +241,13 @@ const selectedGroup = item ? groups.find((group) => group.name === item) : undef
       </section>
       {total > pageSize && (
         <nav class="pagination" aria-label="Recommendation pages">
-          {page > 1 && <a href={searchParams({ page: page - 1 })}>← Previous</a>}
+          {page > 1 && <a href={searchParams({ page: page - 1 })}>← previous</a>}
           <span>Page {page} of {Math.ceil(total / pageSize)}</span>
-          {page * pageSize < total && <a href={searchParams({ page: page + 1 })}>Next →</a>}
+          {page * pageSize < total && <a href={searchParams({ page: page + 1 })}>next →</a>}
         </nav>
       )}
     </>
   )}
+  </div>
+  <ResultsLoading shape="cards" />
 </Layout>
