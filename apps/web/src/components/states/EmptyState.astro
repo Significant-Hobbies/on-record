@@ -1,0 +1,13 @@
+---
+// Framework-free equivalent of @saas-maker/ui v0.1.19 EmptyState.
+type Props = { title?: string; description?: string; href: string; action: string; eyebrow?: string };
+const { title = 'nothing here yet', description, href, action, eyebrow } = Astro.props;
+---
+<div data-slot="empty-state" class="state-empty">
+  <div class="state-copy">
+    {eyebrow && <p class="eyebrow">{eyebrow.toLowerCase()}</p>}
+    <h3>{title}</h3>
+    {description && <p>{description}</p>}
+  </div>
+  <a class="button button-secondary" href={href}>{action}</a>
+</div>

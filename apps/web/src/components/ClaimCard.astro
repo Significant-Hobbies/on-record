@@ -19,17 +19,17 @@ const claimType = claim.claimType.replaceAll('_', ' ');
     </p>
     {when && <time datetime={claim.saidOn ?? undefined}>{when}</time>}
   </header>
-  <h3><a href={`/claims/${claim.id}`}>{claim.assertion}</a></h3>
   <blockquote>“{claim.quote}”</blockquote>
+  <h3><a href={`/claims/${claim.id}`}>{claim.assertion}</a></h3>
   <dl class="claim-receipt">
     {claim.attributionStatus === 'speaker_unverified' ? (
       <div>
-        <dt>Speaker</dt>
+        <dt>speaker</dt>
         <dd>Not verified from transcript</dd>
       </div>
     ) : claim.personName && (
       <div>
-        <dt>Speaker</dt>
+        <dt>speaker</dt>
         <dd>
           {claim.personSlug ? <a href={`/people/${claim.personSlug}`}>{claim.personName}</a> : claim.personName}
         </dd>
@@ -37,16 +37,16 @@ const claimType = claim.claimType.replaceAll('_', ' ');
     )}
     {claim.episodeTitle && (
       <div>
-        <dt>Episode</dt>
+        <dt>episode</dt>
         <dd>
           {claim.episodeId ? <a href={`/sources/${claim.episodeId}`}>{claim.episodeTitle}</a> : claim.episodeTitle}
         </dd>
       </div>
     )}
-    {claim.showName && <div><dt>Publisher</dt><dd>{claim.showName}</dd></div>}
+    {claim.showName && <div><dt>publisher</dt><dd>{claim.showName}</dd></div>}
   </dl>
   <footer class="claim-actions">
-    <a href={`/claims/${claim.id}`}>Full receipt</a>
+    <a href={`/claims/${claim.id}`}>full receipt</a>
     {sourceHref && (
       <a href={sourceHref} rel="noreferrer" target="_blank">
         {claim.transcriptKind === 'youtube_captions' && claim.deepLinkUrl && claim.timestampS != null ? `Open at ${formatClock(claim.timestampS)}` : 'Open source'} ↗

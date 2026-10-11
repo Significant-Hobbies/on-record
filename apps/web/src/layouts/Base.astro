@@ -1,6 +1,11 @@
 ---
+import '../styles/library-tokens.css';
+import '../styles/high-signal-theme.css';
+import '../styles/fonts.css';
 import '../styles/global.css';
-import { renderStudioFooterHtml } from '@saas-maker/ui/footer-html';
+import '../styles/library-components.css';
+import SiteHeader from '../components/SiteHeader.astro';
+import { defaultStudio, renderStudioFooterHtml } from '@saas-maker/ui/footer-html';
 
 type BreadcrumbEntry = { name: string; path: string };
 
@@ -25,12 +30,6 @@ const {
 const siteUrl = 'https://podcasts.highsignal.app';
 const canonical = new URL(Astro.url.pathname, siteUrl).toString();
 const currentPath = Astro.url.pathname;
-const nav = [
-  { href: '/search', label: 'Search claims', note: 'Ideas & opinions' },
-  { href: '/people', label: 'People', note: 'Who said what' },
-  { href: '/recommendations', label: 'Books & tools', note: 'Repeated named items' },
-  { href: '/sources', label: 'Episodes', note: 'Source intelligence' },
-];
 
 const footerHtml = renderStudioFooterHtml({
   product: 'High Signal Podcasts',
@@ -39,6 +38,10 @@ const footerHtml = renderStudioFooterHtml({
   capture: 'newsletter',
   privacyUrl: `${siteUrl}/privacy`,
   variant: 'studio',
+  studio: [
+    { id: 'high-signal', label: 'high signal daily brief', href: 'https://highsignal.app' },
+    ...defaultStudio.filter((link) => link.id !== 'high-signal' && link.id !== 'on-record'),
+  ].slice(0, 4),
   summary:
     'A public evidence index for finding what notable people actually said, recommended, and used. Published claims keep the speaker, verbatim excerpt, date, and source trail attached. No account or checkout is needed, and no permanent pricing model is claimed.',
   art: {
@@ -48,24 +51,26 @@ const footerHtml = renderStudioFooterHtml({
   },
   groups: [
     {
-      title: 'Evidence',
+      title: 'evidence',
       links: [
-        { label: 'Search evidence', href: '/search' },
-        { label: 'People index', href: '/people' },
-        { label: 'Books & tools', href: '/recommendations' },
-        { label: 'Evidence policy', href: '/evidence' },
+        { label: 'search evidence', href: '/search' },
+        { label: 'people index', href: '/people' },
+        { label: 'books & tools', href: '/recommendations' },
+        { label: 'evidence policy', href: '/evidence' },
+        { label: 'method', href: '/methodology' },
+        { label: 'episodes', href: '/sources' },
       ],
     },
     {
-      title: 'Project',
+      title: 'project',
       links: [
-        { label: 'Public API', href: '/developers' },
-        { label: 'About', href: '/about' },
-        { label: 'Access state', href: '/pricing' },
-        { label: 'Contact', href: '/contact' },
-        { label: 'Privacy', href: '/privacy' },
-        { label: 'High Signal Daily Brief', href: 'https://highsignal.app' },
-        { label: 'Source on GitHub', href: 'https://github.com/Significant-Hobbies/on-record' },
+        { label: 'public api', href: '/developers' },
+        { label: 'about', href: '/about' },
+        { label: 'access state', href: '/pricing' },
+        { label: 'contact', href: '/contact' },
+        { label: 'privacy', href: '/privacy' },
+        { label: 'high signal daily brief', href: 'https://highsignal.app' },
+        { label: 'source on github', href: 'https://github.com/Significant-Hobbies/on-record' },
       ],
     },
   ],
@@ -154,13 +159,13 @@ const structuredData = JSON.stringify({
 });
 ---
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="ink" data-mode="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#f1eadb" />
+    <meta name="theme-color" content="#0d0d0d" />
     <meta name="robots" content={robots} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -180,8 +185,9 @@ const structuredData = JSON.stringify({
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={`${siteUrl}/og-card.png`} />
     <script is:inline type="application/ld+json" set:html={structuredData}></script>
-    <link rel="stylesheet" href="/footer.css" />
-    <script is:inline type="module" src="/footer.js"></script>
+    <link rel="preload" href="/fonts/saas-maker-ui-v0.1.19/geist-latin-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/footer.css?v=0.1.19" />
+    <script is:inline type="module" src="/footer.js?v=0.1.19"></script>
     <script is:inline src="/app-health-log.js" defer></script>
     <script
       is:inline
@@ -195,55 +201,15 @@ const structuredData = JSON.stringify({
     ></script>
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to the evidence</a>
+    <a class="skip-link" href="#main">skip to the evidence</a>
+    <SiteHeader currentPath={currentPath} />
     <div class="wrap">
-      <header class="masthead" aria-label="High Signal Podcasts">
-        <div class="masthead-brand">
-          <a
-            class="wordmark"
-            href="/"
-            aria-label="High Signal Podcasts home"
-            aria-current={currentPath === '/' ? 'page' : undefined}
-          >
-            <span class="family">High Signal</span>
-            <strong>Podcasts</strong>
-          </a>
-          <span class="masthead-edition"><span class="status-dot"></span> Evidence ledger</span>
-        </div>
-        <nav class="desktop-nav" aria-label="Primary navigation">
-          {nav.map((item) => (
-            <a
-              href={item.href}
-              aria-current={currentPath.startsWith(item.href) ? 'page' : undefined}
-            >{item.label}</a>
-          ))}
-        </nav>
-        <a class="masthead-utility" href="/methodology">Method <span aria-hidden="true">→</span></a>
-        <details class="mobile-nav">
-          <summary>Browse <span class="menu-glyph" aria-hidden="true">+</span></summary>
-          <div class="mobile-nav-panel">
-            <nav class="mobile-nav-links" aria-label="Mobile navigation">
-              {nav.map((item) => (
-                <a
-                  href={item.href}
-                  aria-current={currentPath.startsWith(item.href) ? 'page' : undefined}
-                >
-                  <span>{item.label}</span>
-                  <small>{item.note}</small>
-                </a>
-              ))}
-            </nav>
-            <div class="mobile-nav-meta">
-              <a href="/methodology">How the evidence works</a>
-            </div>
-          </div>
-        </details>
-      </header>
+
       <main id="main">
         <slot />
       </main>
     </div>
-    <studio-footer data-theme="paper" set:html={footerHtml}></studio-footer>
+    <studio-footer data-theme="ink" data-mode="dark" set:html={footerHtml}></studio-footer>
     <script is:inline>
       // Queue Clarity calls immediately; load it on interaction or after 90 seconds.
       (function (c, l, a, r, i) {

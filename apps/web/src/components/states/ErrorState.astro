@@ -1,0 +1,8 @@
+---
+import EmptyState from './EmptyState.astro';
+type Props = { title?: string; description?: string; eyebrow?: string };
+const { title = 'could not load this view', description = 'please try again in a moment.', eyebrow } = Astro.props;
+---
+<div data-slot="error-state" role="alert">
+  <EmptyState title={title} description={description} eyebrow={eyebrow} href={`${Astro.url.pathname}${Astro.url.search}`} action="try again" />
+</div>

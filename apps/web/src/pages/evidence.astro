@@ -33,15 +33,15 @@ const quotation = {
   jsonLd={[quotation]}
 >
   <section class="info-page">
-    <p class="eyebrow">The evidence contract</p>
-    <h1>Podcast claims with the evidence attached.</h1>
+    <p class="eyebrow">the evidence contract</p>
+    <h1>podcast claims with the evidence attached.</h1>
     <p class="lede">High Signal Podcasts indexes what was actually said on a podcast and links every claim back to its source: the episode, the speaker, the date, and a verbatim transcript excerpt. <strong>It is not a summarizer</strong> - no claim here is model-written prose about an episode. A claim is published only if its quote validates verbatim against the stored transcript segment; if it does not match, it is never published, and no confidence score can override that. As of 5 September 2026 the index holds 30,562 published claims across 1,208 episodes from 23 trusted shows.</p>
   </section>
 
   <section class="method-strip" aria-labelledby="example-heading">
     <div class="method-intro">
-      <p class="eyebrow">One real claim, end to end</p>
-      <h2 id="example-heading">What a claim is here.</h2>
+      <p class="eyebrow">one real claim, end to end</p>
+      <h2 id="example-heading">what a claim is here.</h2>
       <p>Verified live on 2026-09-05. Every field is checkable via the public API.</p>
     </div>
     <div>
@@ -50,20 +50,20 @@ const quotation = {
         <footer><p>- <strong>Llion Jones</strong>, on <em>Machine Learning Street Talk</em>, said 23 November 2025. Attribution: <strong>verified speaker</strong>.</p></footer>
       </blockquote>
       <dl class="receipt-grid">
-        <div><dt>Speaker</dt><dd>Llion Jones, <code>verified_speaker</code></dd></div>
-        <div><dt>Show</dt><dd>Machine Learning Street Talk</dd></div>
-        <div><dt>Date said</dt><dd>2025-11-23</dd></div>
-        <div><dt>Quote</dt><dd>byte-identical to the stored evidence row</dd></div>
-        <div><dt>Transcript kind</dt><dd><code>publisher_html</code></dd></div>
-        <div><dt>Episode</dt><dd>resolves to a page on this site with the excerpt</dd></div>
+        <div><dt>speaker</dt><dd>Llion Jones, <code>verified_speaker</code></dd></div>
+        <div><dt>show</dt><dd>Machine Learning Street Talk</dd></div>
+        <div><dt>date said</dt><dd>2025-11-23</dd></div>
+        <div><dt>quote</dt><dd>byte-identical to the stored evidence row</dd></div>
+        <div><dt>transcript kind</dt><dd><code>publisher_html</code></dd></div>
+        <div><dt>episode</dt><dd>resolves to a page on this site with the excerpt</dd></div>
       </dl>
       <p>The claim's own record is public: <code>GET /api/claims/27d6cf86-8403-4185-8c1d-056448739ecd</code> returns the claim, its evidence row, and its references. The <code>quote</code> field on the claim and the <code>quote</code> field on the evidence row are the same string - that identity is what "verbatim" means here.</p>
     </div>
   </section>
 
   <section class="closing-cta" aria-labelledby="gate-heading">
-    <p class="eyebrow">The refusal conditions</p>
-    <h2 id="gate-heading">The gate, exactly.</h2>
+    <p class="eyebrow">the refusal conditions</p>
+    <h2 id="gate-heading">the gate, exactly.</h2>
     <p>Conditions under which the pipeline <strong>refuses</strong> to publish. Enforced in <code>judgeClaim</code> in the API worker.</p>
     <table class="data-table">
       <thead><tr><th>Condition</th><th>Outcome</th></tr></thead>
@@ -84,8 +84,8 @@ const quotation = {
 
   <section class="method-strip" aria-labelledby="negative-heading">
     <div class="method-intro">
-      <p class="eyebrow">The negative space</p>
-      <h2 id="negative-heading">What we do not do.</h2>
+      <p class="eyebrow">the negative space</p>
+      <h2 id="negative-heading">what we do not do.</h2>
       <p>The negative space is load-bearing. It is what makes "evidence" a category rather than a slogan.</p>
     </div>
     <div>
@@ -100,8 +100,8 @@ const quotation = {
   </section>
 
   <section class="closing-cta" aria-labelledby="caveats-heading">
-    <p class="eyebrow">Honest boundaries</p>
-    <h2 id="caveats-heading">What this does not guarantee.</h2>
+    <p class="eyebrow">honest boundaries</p>
+    <h2 id="caveats-heading">what this does not guarantee.</h2>
     <ul>
       <li><strong>Transcript errors survive.</strong> An excerpt can faithfully reproduce a mistake made by a publisher or caption provider. The original episode remains the final authority.</li>
       <li><strong>The date is the episode's publication date.</strong> Not the same as the date the words were spoken.</li>
@@ -111,8 +111,8 @@ const quotation = {
 
   <section class="method-strip" aria-labelledby="corpus-heading">
     <div class="method-intro">
-      <p class="eyebrow">Live figures</p>
-      <h2 id="corpus-heading">What the corpus contains.</h2>
+      <p class="eyebrow">live figures</p>
+      <h2 id="corpus-heading">what the corpus contains.</h2>
       <p>Read live from the public API on 5 September 2026. Each figure names its scope.</p>
     </div>
     <div>
@@ -134,19 +134,19 @@ const quotation = {
   </section>
 
   <section class="closing-cta" aria-labelledby="verify-heading">
-    <p class="eyebrow">Check it yourself</p>
-    <h2 id="verify-heading">How to check any claim.</h2>
+    <p class="eyebrow">check it yourself</p>
+    <h2 id="verify-heading">how to check any claim.</h2>
     <p>The public API is read-only. The website and API <a href="/pricing">currently require no account, API key, subscription or checkout</a> - which describes the product today and is not a promise of a permanent pricing model.</p>
     <pre><code>GET https://api.podcasts.highsignal.app/api/stats
 GET https://api.podcasts.highsignal.app/api/claims/{"{id}"}
 GET https://api.podcasts.highsignal.app/api/search?q=agents</code></pre>
-    <p><a href="/methodology">How episodes are discovered, transcribed and extracted</a></p>
+    <p><a href="/methodology">how episodes are discovered, transcribed and extracted</a></p>
   </section>
 
   <section class="method-strip" aria-labelledby="browse-heading">
     <div class="method-intro">
-      <p class="eyebrow">The index</p>
-      <h2 id="browse-heading">Browse the index.</h2>
+      <p class="eyebrow">the index</p>
+      <h2 id="browse-heading">browse the index.</h2>
     </div>
     <div>
       <ul class="method-list">
