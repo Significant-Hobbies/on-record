@@ -704,7 +704,7 @@ h3 {
   font-size: 0.8rem;
 }
 
-form {
+main form {
   display: flex;
   gap: 0.55rem;
   margin: 1.25rem 0;
@@ -719,16 +719,16 @@ form {
   border-color: var(--ink);
 }
 
-input,
-button,
-select {
+main input,
+main button,
+main select {
   min-height: 2.9rem;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   font: inherit;
 }
 
-input {
+main input {
   min-width: 0;
   flex: 1;
   padding: 0.65rem 0.8rem;
@@ -741,7 +741,7 @@ select {
   color: var(--ink);
 }
 
-button {
+main button {
   padding: 0.65rem 1rem;
   background: var(--brand);
   color: var(--brand-foreground);
@@ -2119,12 +2119,12 @@ h1 {
   }
 
 .hero-actions,
-form {
+main form {
     flex-direction: column;
   }
 
 .button,
-button {
+main button {
     width: 100%;
   }
 
@@ -2233,4 +2233,37 @@ html {
   font-size: 0.9rem;
   color: var(--muted-foreground);
   margin-top: 0.75rem;
+}
+
+/* The footer sets its own ink/dark palette; inherit the High Signal family tokens so page and footer read as one surface. */
+html[data-theme="ink"][data-mode="dark"] studio-footer[data-theme="ink"][data-mode="dark"],
+html[data-theme="ink"][data-mode="dark"] studio-footer footer[data-fleet-footer] {
+  --font-sans: inherit;
+  --font-text: inherit;
+  --font-display: inherit;
+  --font-accent: inherit;
+  --font-mono: inherit;
+  --display-weight: inherit;
+  --display-tracking: inherit;
+  --radius: inherit;
+  --background: inherit;
+  --foreground: inherit;
+  --surface: inherit;
+  --card: inherit;
+  --card-foreground: inherit;
+  --popover: inherit;
+  --primary: inherit;
+  --primary-foreground: inherit;
+  --secondary: inherit;
+  --muted: inherit;
+  --muted-foreground: inherit;
+  --accent: inherit;
+  --border: inherit;
+  --hairline: inherit;
+  --input: inherit;
+  --ring: inherit;
+  --brand: inherit;
+  --brand-foreground: inherit;
+  --brand-soft: inherit;
+  --brand-ink: inherit;
 }
