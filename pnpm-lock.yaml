@@ -30,8 +30,8 @@ importers:
   apps/web:
     dependencies:
       '@saas-maker/ui':
-        specifier: github:sass-maker/ui-library#v0.1.15&path:/packages/ui
-        version: https://codeload.github.com/sass-maker/ui-library/tar.gz/af95cd6b4aa4bb2004343655bb495255e9f51c8b#path:/packages/ui(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
+        specifier: github:sass-maker/ui-library#v0.1.19&path:/packages/ui
+        version: https://codeload.github.com/sass-maker/ui-library/tar.gz/a83f51b118f6eaaf1c102c9ae5f6196cdafe0a9e#path:/packages/ui(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)
       astro:
         specifier: 7.3.5
         version: 7.3.5(@types/node@22.20.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
@@ -2597,9 +2597,9 @@ packages:
       hono:
         optional: true
 
-  '@saas-maker/ui@https://codeload.github.com/sass-maker/ui-library/tar.gz/af95cd6b4aa4bb2004343655bb495255e9f51c8b#path:/packages/ui':
-    resolution: {path: /packages/ui, tarball: https://codeload.github.com/sass-maker/ui-library/tar.gz/af95cd6b4aa4bb2004343655bb495255e9f51c8b}
-    version: 0.1.15
+  '@saas-maker/ui@https://codeload.github.com/sass-maker/ui-library/tar.gz/a83f51b118f6eaaf1c102c9ae5f6196cdafe0a9e#path:/packages/ui':
+    resolution: {path: /packages/ui, tarball: https://codeload.github.com/sass-maker/ui-library/tar.gz/a83f51b118f6eaaf1c102c9ae5f6196cdafe0a9e}
+    version: 0.1.19
     peerDependencies:
       react: '>=19'
       react-dom: '>=19'
@@ -6102,7 +6102,7 @@ snapshots:
     optionalDependencies:
       hono: 4.12.34
 
-  '@saas-maker/ui@https://codeload.github.com/sass-maker/ui-library/tar.gz/af95cd6b4aa4bb2004343655bb495255e9f51c8b#path:/packages/ui(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)':
+  '@saas-maker/ui@https://codeload.github.com/sass-maker/ui-library/tar.gz/a83f51b118f6eaaf1c102c9ae5f6196cdafe0a9e#path:/packages/ui(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwindcss@4.3.3)':
     dependencies:
       '@tanstack/react-table': 9.2.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       class-variance-authority: 0.7.1
