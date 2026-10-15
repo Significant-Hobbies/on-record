@@ -38,6 +38,30 @@ describe('public reference response cache', () => {
     await expect(response.json()).resolves.toEqual({ cached: true });
     expect(open).toHaveBeenCalledWith('on-record-public-references-v2-1');
     expect(match).toHaveBeenCalledWith('https://api.podcasts.highsignal.app/api/stats');
+    expect(response.headers.has('Server-Timing')).toBe(false);
+  });
+
+  it('reports bounded timings only for a diagnostic miss and does not cache it', async () => {
+    const put = vi.fn();
+    vi.stubGlobal('caches', { open: vi.fn(async () => ({ match: async () => null, put })) });
+    const d1 = {
+      prepare: () => ({
+        bind: () => ({ raw: async () => [] }),
+      }),
+    } as unknown as D1Database;
+    const { default: app } = await import('./index');
+    const response = await app.request(
+      'https://api.podcasts.highsignal.app/api/stats?onrecord_probe=one',
+      { headers: { 'x-onrecord-diagnostic': 'onrecord-51' } },
+      { DB: d1 } as import('./env').Env
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Server-Timing')).toMatch(
+      /^cache;desc="MISS", generation;dur=\d+\.\d, handler;dur=\d+\.\d, middleware;dur=\d+\.\d, total;dur=\d+\.\d$/
+    );
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(put).not.toHaveBeenCalled();
   });
 
   it('does not put admin routes behind the public cache', async () => {

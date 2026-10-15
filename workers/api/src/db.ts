@@ -21,9 +21,9 @@ export async function markShowHasPublishedClaims(d1: D1Database, showId: string)
 //
 // The read still sits in front of the cache lookup rather than behind it, so
 // it is on the hot path of every public response, hit or miss. `on-record-db`
-// runs in APAC with read replication disabled, which measured at ~90ms per
-// round trip from a colo in that same region and more from anywhere else
-// (issue #11): a cached /api/stats answered in ~350ms where the binding-free
+// has an APAC primary; replication is currently automatic, so the replica that
+// answers a session may vary. Issue #11 measured ~90ms per round trip from an
+// APAC colo: a cached /api/stats answered in ~350ms where the binding-free
 // /health answered in ~265ms, and the homepage fans out to five of these
 // routes. Holding the generation in the isolate for a few seconds takes that
 // read off almost every request. It does not weaken invalidation in any way
