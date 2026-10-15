@@ -2,6 +2,7 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
+import { groupRecommendationReferences } from '../recommendation-groups';
 import type { Env } from '../env';
 import {
   publishedReferenceCount,
@@ -169,6 +170,30 @@ INSERT INTO segments (id,episode_id,idx,start_s,end_s,text) VALUES
       expect(rows).toHaveLength(6);
       expect(rows.filter((row) => row.personId === null)).toHaveLength(1);
       expect(await publishedReferenceCount(d1)).toBe(rows.length);
+      const groupsResponse = await publicRoute.request('/recommendation-groups?limit=8', {}, {
+        DB: d1,
+        RAW: {},
+      } as unknown as Env);
+      expect(groupsResponse.status).toBe(200);
+      expect(((await groupsResponse.json()) as { groups: unknown[] }).groups).toEqual(
+        groupRecommendationReferences(rows)
+      );
+      const filteredRows = await publishedReferences(
+        d1,
+        {
+          kind: 'book',
+          role: 'recommends',
+        },
+        REFERENCE_SCAN_CEILING
+      );
+      const filteredResponse = await publicRoute.request(
+        '/recommendation-groups?kind=book&role=recommends&limit=8',
+        {},
+        { DB: d1, RAW: {} } as unknown as Env
+      );
+      expect(((await filteredResponse.json()) as { groups: unknown[] }).groups).toEqual(
+        groupRecommendationReferences(filteredRows)
+      );
       const response = await publicRoute.request('/stats', {}, {
         DB: d1,
         RAW: {},
@@ -190,11 +215,23 @@ INSERT INTO segments (id,episode_id,idx,start_s,end_s,text) VALUES
       );
       const rows = await publishedReferences(d1, {}, REFERENCE_SCAN_CEILING);
       const count = await publishedReferenceCount(d1);
+      const groupedResponse = await publicRoute.request('/recommendation-groups?limit=8', {}, {
+        DB: d1,
+        RAW: {},
+      } as unknown as Env);
       expect(count).toBe(rows.length);
+      expect(((await groupedResponse.json()) as { groups: unknown[] }).groups).toEqual(
+        groupRecommendationReferences(rows)
+      );
       // Lexical reference-id order cuts through one duplicate segment at the window edge.
       expect(count).toBe(5001);
-      const [full, narrow] = statements;
+      const [full, narrow, groups] = statements;
       expect(narrow!.bytes).toBeLessThan(full!.bytes * 0.6);
+      expect(groups!.bytes).toBeLessThan(full!.bytes * 0.6);
+      // Grouping adds only speaker status to the stats count projection; the
+      // same indexed joins, bounded window, and total order remain in place.
+      expect(groups!.sql).toContain('"claims"."attribution_status"');
+      expect(groups!.params).toEqual(narrow!.params);
       const project = process.env['REFERENCE_BENCH_OUTPUT'];
       if (project) {
         mkdirSync(project, { recursive: true });
@@ -206,12 +243,12 @@ INSERT INTO segments (id,episode_id,idx,start_s,end_s,text) VALUES
           await publishedReferenceCount(d1);
           samples.push({ full: middle - start, narrow: performance.now() - middle });
         }
-        const plans = [full!, narrow!].map(({ sql, params }) =>
+        const plans = [full!, narrow!, groups!].map(({ sql, params }) =>
           sqlite.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...(params as (string | number)[]))
         );
         const literal = (value: unknown) =>
           typeof value === 'number' ? String(value) : `'${String(value).replaceAll("'", "''")}'`;
-        const explain = [full!, narrow!]
+        const explain = [full!, narrow!, groups!]
           .map(({ sql, params }) => {
             let i = 0;
             return `EXPLAIN QUERY PLAN ${sql.replaceAll('?', () => {
@@ -236,7 +273,7 @@ INSERT INTO segments (id,episode_id,idx,start_s,end_s,text) VALUES
               syntheticClaims: 11_000,
               rawWindow: REFERENCE_SCAN_CEILING,
               count,
-              bytes: { full: full!.bytes, narrow: narrow!.bytes },
+              bytes: { full: full!.bytes, narrow: narrow!.bytes, groups: groups!.bytes },
               samples,
               plans,
             },
