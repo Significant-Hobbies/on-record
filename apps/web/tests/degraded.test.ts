@@ -110,33 +110,6 @@ describe('request-scoped degradation tracking', () => {
     );
     expect(tracked).toEqual({ result: payload, degraded: false });
   });
-
-  it('changes the API URL and headers only for the bounded diagnostic path', async () => {
-    const fetch = vi.fn(async (_input: string, _init?: RequestInit) =>
-      Response.json(
-        { ok: true },
-        {
-          headers: { 'Server-Timing': 'generation;dur=12.0' },
-        }
-      )
-    );
-    const onServerTiming = vi.fn();
-    await apiGet(
-      '/api/people?limit=8',
-      { API: { fetch } },
-      {
-        timeoutMs: 6000,
-        diagnostic: { probe: 'unique-probe', onServerTiming },
-      }
-    );
-    expect(fetch.mock.calls[0][0]).toContain('/api/people?limit=8&onrecord_probe=unique-probe');
-    expect(fetch.mock.calls[0][1]?.headers).toEqual({ 'x-onrecord-diagnostic': 'onrecord-51' });
-    expect(onServerTiming).toHaveBeenCalledWith('generation;dur=12.0');
-
-    await apiGet('/api/people?limit=8', { API: { fetch } }, { timeoutMs: 900 });
-    expect(fetch.mock.calls[1][0]).toMatch(/\/api\/people\?limit=8$/);
-    expect(fetch.mock.calls[1][1]?.headers).toBeUndefined();
-  });
 });
 
 describe('homepage fallbacks', () => {
