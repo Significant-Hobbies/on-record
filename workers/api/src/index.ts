@@ -10,9 +10,20 @@ import { endpointTelemetryMiddleware } from './telemetry';
 
 const app = new Hono<{ Bindings: Env }>();
 const publicCors = cors({ origin: '*', exposeHeaders: [D1_BOOKMARK_HEADER] });
+type PublicCacheTrace = { generationMs?: number; handlerMs?: number };
+const publicCacheTraces = new WeakMap<object, PublicCacheTrace>();
+const DIAGNOSTIC_HEADER = 'x-onrecord-diagnostic';
 const publicReferenceCache = cache({
   cacheControl: 'public, max-age=3600',
-  cacheName: async (c) => `on-record-public-references-v2-${await publicCacheGeneration(c.env.DB)}`,
+  cacheName: async (c) => {
+    const trace = publicCacheTraces.get(c);
+    const startedAt = trace ? performance.now() : 0;
+    const generation = await publicCacheGeneration(c.env.DB);
+    if (trace) {
+      trace.generationMs = performance.now() - startedAt;
+    }
+    return `on-record-public-references-v2-${generation}`;
+  },
   onCacheNotAvailable: false,
 });
 
@@ -62,6 +73,29 @@ app.use('*', async (c, next) => {
   return next();
 });
 
+// A bounded, header-only measurement path for issue #51. The normal public
+// request path has no extra work or headers. This reports durations, never
+// URLs, claims, bookmarks, or response bodies.
+app.use('/api/*', async (c, next) => {
+  if (c.req.header(DIAGNOSTIC_HEADER) !== 'onrecord-51') {
+    return next();
+  }
+  const trace: PublicCacheTrace = {};
+  publicCacheTraces.set(c, trace);
+  const startedAt = performance.now();
+  await next();
+  if (trace.generationMs === undefined) {
+    return;
+  }
+  const totalMs = performance.now() - startedAt;
+  const handlerMs = trace.handlerMs ?? 0;
+  const middlewareMs = Math.max(0, totalMs - trace.generationMs - handlerMs);
+  c.header(
+    'Server-Timing',
+    `cache;desc="${trace.handlerMs === undefined ? 'HIT' : 'MISS'}", generation;dur=${trace.generationMs.toFixed(1)}, handler;dur=${handlerMs.toFixed(1)}, middleware;dur=${middlewareMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`
+  );
+});
+
 // These public routes all fan into the bounded reference listing. The corpus
 // changes in release batches (daily ingest cron, ad hoc review-queue publish),
 // not every 5 minutes, while the same anonymous URLs are requested repeatedly
@@ -78,6 +112,18 @@ app.use('/api/people/*', publicReferenceCache);
 app.use('/api/sources', publicReferenceCache);
 app.use('/api/search', publicReferenceCache);
 app.use('/api/topics/*', publicReferenceCache);
+
+app.use('/api/*', async (c, next) => {
+  const trace = publicCacheTraces.get(c);
+  if (!trace || trace.generationMs === undefined) {
+    return next();
+  }
+  const startedAt = performance.now();
+  await next();
+  trace.handlerMs = performance.now() - startedAt;
+  // Diagnostic URLs use a unique probe key, and must not populate a cache.
+  c.header('Cache-Control', 'no-store');
+});
 
 app.get('/', (c) => c.json({ env: c.env.ENVIRONMENT ?? 'unknown', name: 'on-record-api' }));
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
