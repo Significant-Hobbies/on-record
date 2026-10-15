@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiGet, homepageEvidence } from '../src/lib/api';
 import { markDegraded, runWithDegradedTracking } from '../src/lib/degraded';
+import {
+  entitySnapshotFresh,
+  homepageGroups,
+  homepagePanel,
+  homepagePeople,
+  homepageSources,
+  homepageStats,
+} from '../src/lib/homepage-panels';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -105,6 +113,67 @@ describe('request-scoped degradation tracking', () => {
 });
 
 describe('homepage fallbacks', () => {
+  it('expires entity snapshots before stale people or sources can reappear indefinitely', () => {
+    const now = Date.parse('2026-10-15T12:00:00Z');
+    const oneDay = 24 * 60 * 60 * 1000;
+    expect(entitySnapshotFresh(new Date(now - oneDay).toISOString(), now)).toBe(true);
+    expect(entitySnapshotFresh(new Date(now - oneDay - 1).toISOString(), now)).toBe(false);
+    expect(entitySnapshotFresh(new Date(now + 1).toISOString(), now)).toBe(false);
+    expect(entitySnapshotFresh('invalid', now)).toBe(false);
+  });
+
+  it('uses a dated snapshot and bypasses edge caching for malformed HTTP 200 panels', async () => {
+    const snapshot = [{ id: 'speaker-1', slug: 'speaker', name: 'Speaker', claimCount: 2 }];
+    const tracked = await runWithDegradedTracking(async () => {
+      const response = await apiGet('/api/people?limit=8', {
+        API: { fetch: async () => Response.json({ people: null }) },
+      });
+      return homepagePanel({ status: 'fulfilled', value: response }, homepagePeople, snapshot);
+    });
+    expect(tracked.result).toEqual({ value: snapshot, snapshot: true });
+    expect(tracked.degraded).toBe(true);
+  });
+
+  it('preserves a valid empty panel without marking the render degraded', async () => {
+    const tracked = await runWithDegradedTracking(() =>
+      homepagePanel({ status: 'fulfilled', value: { groups: [] } }, homepageGroups, [])
+    );
+    expect(tracked).toEqual({ result: { value: [], snapshot: false }, degraded: false });
+  });
+
+  it('rejects malformed numeric counts and source rows instead of rendering them', async () => {
+    const tracked = await runWithDegradedTracking(() => ({
+      stats: homepagePanel(
+        { status: 'fulfilled', value: { people: 5, episodes: 3, publishedClaims: 'many' } },
+        homepageStats,
+        { people: 4, episodes: 2, publishedClaims: 10 }
+      ),
+      sources: homepagePanel(
+        { status: 'fulfilled', value: { sources: [{ id: 'x', title: 'Title', status: 'draft' }] } },
+        homepageSources,
+        []
+      ),
+    }));
+    expect(tracked.result.stats.snapshot).toBe(true);
+    expect(tracked.result.sources.snapshot).toBe(true);
+    expect(tracked.degraded).toBe(true);
+  });
+
+  it('keeps the recent and topical claim attempts inside one deadline', async () => {
+    let now = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetch = vi.fn(async () => {
+      now = 1901;
+      throw new Error('slow recent stream');
+    });
+    const tracked = await runWithDegradedTracking(() =>
+      homepageEvidence({ API: { fetch } }, { timeoutMs: 900 })
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(tracked.result.status).toBe('unavailable');
+    expect(tracked.degraded).toBe(true);
+  });
+
   it('marks a 200 response with an invalid claim payload as degraded', async () => {
     const payload = { claims: [{ id: 'bad' }] };
     const env = {

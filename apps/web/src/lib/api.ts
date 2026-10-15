@@ -144,10 +144,20 @@ export async function homepageEvidence(
   runtimeEnv?: RuntimeEnv,
   options: { timeoutMs?: number } = {}
 ): Promise<HomepageEvidence> {
+  // The topical fallback shares one page budget with the recent stream. A
+  // cold first request must not turn one bounded homepage read into two waits.
+  const deadline = options.timeoutMs ? Date.now() + options.timeoutMs : undefined;
+  const fetchClaims = (path: string) => {
+    const timeoutMs = deadline === undefined ? undefined : deadline - Date.now();
+    if (timeoutMs !== undefined && timeoutMs <= 0) {
+      throw new Error('Homepage evidence deadline exceeded');
+    }
+    return apiGet<unknown>(path, runtimeEnv, { timeoutMs });
+  };
   let claims: Claim[];
   let origin: HomepageEvidence['origin'] = 'recent';
   try {
-    claims = homepageClaims(await apiGet<unknown>('/api/search', runtimeEnv, options));
+    claims = homepageClaims(await fetchClaims('/api/search'));
   } catch {
     // Reuse the existing FTS route's bounded public corpus. This is a topical
     // sample, not a cached or necessarily recent stream; the page labels it.
@@ -155,7 +165,7 @@ export async function homepageEvidence(
     markDegraded();
     origin = 'search';
     try {
-      claims = homepageClaims(await apiGet<unknown>('/api/search?q=AI', runtimeEnv, options));
+      claims = homepageClaims(await fetchClaims('/api/search?q=AI'));
     } catch {
       return { status: 'unavailable', origin, latestClaims: [] };
     }

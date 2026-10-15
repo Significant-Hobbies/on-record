@@ -19,6 +19,7 @@
     "ingest": "uv run --project python/ingest python -m on_record_ingest",
     "audit:recommendations": "node scripts/audit-recommendation-coverage.mjs",
     "audit:claims": "node scripts/audit-claim-coverage.mjs",
+    "snapshot:homepage": "node scripts/update-homepage-snapshot.mjs",
     "review:report": "node scripts/review-report.mjs",
     "release:build-reviewed": "node scripts/build-reviewed-release.mjs",
     "release:build-trusted": "node scripts/build-trusted-release.mjs",
