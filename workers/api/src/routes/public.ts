@@ -163,35 +163,37 @@ publicRoute.get('/people', async (c) => {
       filters.push(personMatch);
     }
   }
-  const rows = await database
-    .select({
-      bio: schema.people.bio,
-      claimCount: sql<number>`count(distinct ${schema.claims.id})`,
-      id: schema.people.id,
-      links: schema.people.links,
-      name: schema.people.name,
-      org: schema.people.org,
-      slug: schema.people.slug,
-      sourceCount: sql<number>`count(distinct ${schema.claims.episodeId})`,
-      status: schema.people.status,
-      title: schema.people.title,
-    })
-    .from(schema.people)
-    .innerJoin(schema.claims, eq(schema.people.id, schema.claims.personId))
-    .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
-    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-    .where(and(...filters))
-    .groupBy(schema.people.id)
-    .orderBy(desc(sql`count(distinct ${schema.claims.id})`), schema.people.name)
-    .limit(limit)
-    .offset(offset);
-  const [count] = await database
-    .select({ total: sql<number>`count(distinct ${schema.people.id})` })
-    .from(schema.people)
-    .innerJoin(schema.claims, eq(schema.people.id, schema.claims.personId))
-    .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
-    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-    .where(and(...filters));
+  const [rows, [count]] = await Promise.all([
+    database
+      .select({
+        bio: schema.people.bio,
+        claimCount: sql<number>`count(distinct ${schema.claims.id})`,
+        id: schema.people.id,
+        links: schema.people.links,
+        name: schema.people.name,
+        org: schema.people.org,
+        slug: schema.people.slug,
+        sourceCount: sql<number>`count(distinct ${schema.claims.episodeId})`,
+        status: schema.people.status,
+        title: schema.people.title,
+      })
+      .from(schema.people)
+      .innerJoin(schema.claims, eq(schema.people.id, schema.claims.personId))
+      .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .where(and(...filters))
+      .groupBy(schema.people.id)
+      .orderBy(desc(sql`count(distinct ${schema.claims.id})`), schema.people.name)
+      .limit(limit)
+      .offset(offset),
+    database
+      .select({ total: sql<number>`count(distinct ${schema.people.id})` })
+      .from(schema.people)
+      .innerJoin(schema.claims, eq(schema.people.id, schema.claims.personId))
+      .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .where(and(...filters)),
+  ]);
   return c.json({ people: rows, total: count?.total ?? rows.length });
 });
 
@@ -323,31 +325,33 @@ publicRoute.get('/sources', async (c) => {
   if (show) {
     filters.push(eq(schema.shows.slug, show));
   }
-  const rows = await database
-    .select({
-      claimCount: sql<number>`count(distinct ${schema.claims.id})`,
-      peopleCount: sql<number>`count(distinct case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.claims.personId} end)`,
-      ...publicSourceFields,
-    })
-    .from(schema.episodes)
-    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-    .innerJoin(schema.claims, eq(schema.episodes.id, schema.claims.episodeId))
-    .where(and(...filters))
-    .groupBy(schema.episodes.id)
-    .orderBy(desc(schema.episodes.publishedAt))
-    .limit(limit)
-    .offset(offset);
-  const [count] = await database
-    .select({ total: sql<number>`count(distinct ${schema.claims.episodeId})` })
-    .from(schema.claims)
-    .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
-    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-    .where(and(...filters));
-  const publishers = await database
-    .select({ name: schema.shows.name, slug: schema.shows.slug })
-    .from(schema.shows)
-    .where(and(eq(schema.shows.hasPublishedClaims, true), trustedShowFilter()))
-    .orderBy(schema.shows.name);
+  const [rows, [count], publishers] = await Promise.all([
+    database
+      .select({
+        claimCount: sql<number>`count(distinct ${schema.claims.id})`,
+        peopleCount: sql<number>`count(distinct case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.claims.personId} end)`,
+        ...publicSourceFields,
+      })
+      .from(schema.episodes)
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .innerJoin(schema.claims, eq(schema.episodes.id, schema.claims.episodeId))
+      .where(and(...filters))
+      .groupBy(schema.episodes.id)
+      .orderBy(desc(schema.episodes.publishedAt))
+      .limit(limit)
+      .offset(offset),
+    database
+      .select({ total: sql<number>`count(distinct ${schema.claims.episodeId})` })
+      .from(schema.claims)
+      .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .where(and(...filters)),
+    database
+      .select({ name: schema.shows.name, slug: schema.shows.slug })
+      .from(schema.shows)
+      .where(and(eq(schema.shows.hasPublishedClaims, true), trustedShowFilter()))
+      .orderBy(schema.shows.name),
+  ]);
   return c.json({ publishers, sources: rows, total: count?.total ?? rows.length });
 });
 
@@ -515,6 +519,11 @@ const referenceCountFields = {
   segmentId: recommendationFields.segmentId,
 };
 
+const referenceGroupFields = {
+  ...referenceCountFields,
+  attributionStatus: recommendationFields.attributionStatus,
+};
+
 function publishedReferenceRows<T extends SQLiteSelect>(query: T, personId?: string) {
   const clauses: SQL[] = [
     eq(schema.claims.reviewStatus, 'published'),
@@ -625,6 +634,35 @@ export async function publishedReferenceCount(d1: D1Database): Promise<number> {
   return count;
 }
 
+// Grouping needs the same quote, trust, role and dedupe gates as the display
+// listing, but not its assertion, episode, source and deep-link columns.
+async function publishedGroupReferences(d1: D1Database, filters: ReferenceFilters) {
+  if (
+    (filters.kind && !isReferenceKind(filters.kind)) ||
+    (filters.role && !isActionableReferenceRole(filters.role))
+  ) {
+    return [];
+  }
+  const rows = await publishedReferenceRows(
+    db(d1).select(referenceGroupFields).from(schema.claimReferences).$dynamic()
+  );
+  const seen = new Set<string>();
+  return rows.flatMap((row) => {
+    const reference = publicReference(row, filters, seen);
+    return reference
+      ? [
+          {
+            attributionStatus: row.attributionStatus,
+            kind: reference.kind,
+            name: reference.name,
+            personId: row.personId,
+            role: reference.role,
+          },
+        ]
+      : [];
+  });
+}
+
 async function personIdForSlug(d1: D1Database, slug?: string): Promise<string | undefined | null> {
   if (!slug) {
     return;
@@ -656,11 +694,10 @@ publicRoute.get('/recommendations', async (c) => {
 });
 
 publicRoute.get('/recommendation-groups', async (c) => {
-  const recommendations = await publishedReferences(
-    c.env.DB,
-    { kind: c.req.query('kind'), role: c.req.query('role') },
-    REFERENCE_SCAN_CEILING
-  );
+  const recommendations = await publishedGroupReferences(c.env.DB, {
+    kind: c.req.query('kind'),
+    role: c.req.query('role'),
+  });
   const q = c.req.query('q')?.trim().toLocaleLowerCase('en-US');
   const groups = groupRecommendationReferences(recommendations).filter(
     (group) => !q || group.name.toLocaleLowerCase('en-US').includes(q)

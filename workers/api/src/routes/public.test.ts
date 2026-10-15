@@ -342,13 +342,18 @@ describe('published reference listing keeps its public gates', () => {
   });
 
   it('nulls person identity unless the speaker is verified', async () => {
-    const [statement] = await referenceStatements('/recommendation-groups');
+    const [statement] = await referenceStatements('/recommendations');
 
     for (const column of ['"claims"."person_id"', '"people"."name"']) {
       expect(statement?.sql).toContain(
         `case when "claims"."attribution_status" = 'verified_speaker' then ${column} else null end`
       );
     }
+    const [groups] = await referenceStatements('/recommendation-groups');
+    expect(groups?.sql).toContain(
+      `case when "claims"."attribution_status" = 'verified_speaker' then "claims"."person_id" else null end`
+    );
+    expect(groups?.sql).toContain('"claims"."attribution_status"');
   });
 
   it('keeps the indexed person-filtered variant on its own narrow path', async () => {
@@ -406,5 +411,20 @@ describe('stats issues its independent reads together', () => {
 
     expect(response.status).toBe(200);
     expect(seen.peak).toBe(4);
+  });
+});
+
+describe('public entity lists overlap independent reads', () => {
+  it.each([
+    ['/people?limit=8', 2],
+    ['/sources?limit=5', 3],
+  ])('%s overlaps its %i D1 statements', async (path, expectedPeak) => {
+    const seen = { peak: 0 };
+    const env = { DB: concurrencyD1(seen), RAW: {} } as unknown as Env;
+
+    const response = await publicRoute.request(path, {}, env);
+
+    expect(response.status).toBe(200);
+    expect(seen.peak).toBe(expectedPeak);
   });
 });
