@@ -1,4 +1,17 @@
-import { and, asc, desc, eq, gte, inArray, like, lte, notInArray, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gte,
+  inArray,
+  like,
+  lte,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import type { SQLiteSelect } from 'drizzle-orm/sqlite-core';
 import { Hono } from 'hono';
@@ -152,6 +165,7 @@ publicRoute.get('/people', async (c) => {
     eq(schema.claims.attributionStatus, 'verified_speaker'),
     trustedShowFilter(),
   ];
+  const countFilters: SQL[] = [eq(schema.people.status, 'active')];
   if (q) {
     const match = `%${q}%`;
     const personMatch = or(
@@ -161,13 +175,28 @@ publicRoute.get('/people', async (c) => {
     );
     if (personMatch) {
       filters.push(personMatch);
+      countFilters.push(personMatch);
     }
   }
+  const publishedPerson = database
+    .select({ id: schema.claims.id })
+    .from(schema.claims)
+    .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+    .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+    .where(
+      and(
+        eq(schema.claims.personId, schema.people.id),
+        eq(schema.claims.reviewStatus, 'published'),
+        eq(schema.claims.attributionStatus, 'verified_speaker'),
+        trustedShowFilter()
+      )
+    )
+    .limit(1);
   const [rows, [count]] = await Promise.all([
     database
       .select({
         bio: schema.people.bio,
-        claimCount: sql<number>`count(distinct ${schema.claims.id})`,
+        claimCount: sql<number>`count(*)`,
         id: schema.people.id,
         links: schema.people.links,
         name: schema.people.name,
@@ -187,12 +216,9 @@ publicRoute.get('/people', async (c) => {
       .limit(limit)
       .offset(offset),
     database
-      .select({ total: sql<number>`count(distinct ${schema.people.id})` })
+      .select({ total: sql<number>`count(*)` })
       .from(schema.people)
-      .innerJoin(schema.claims, eq(schema.people.id, schema.claims.personId))
-      .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
-      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-      .where(and(...filters)),
+      .where(and(...countFilters, exists(publishedPerson))),
   ]);
   return c.json({ people: rows, total: count?.total ?? rows.length });
 });
@@ -314,38 +340,58 @@ publicRoute.get('/sources', async (c) => {
   const offset = Math.max(Number(c.req.query('offset') ?? 0) || 0, 0);
   const q = c.req.query('q')?.trim();
   const show = c.req.query('show');
-  const filters: SQL[] = [eq(schema.claims.reviewStatus, 'published'), trustedShowFilter()];
+  const candidateFilters: SQL[] = [
+    trustedShowFilter(),
+    sql`exists (
+      select 1 from ${schema.claims}
+      where ${schema.claims.episodeId} = ${schema.episodes.id}
+        and ${schema.claims.reviewStatus} = 'published'
+    )`,
+  ];
   if (q) {
     const match = `%${q}%`;
     const sourceMatch = or(like(schema.episodes.title, match), like(schema.shows.name, match));
     if (sourceMatch) {
-      filters.push(sourceMatch);
+      candidateFilters.push(sourceMatch);
     }
   }
   if (show) {
-    filters.push(eq(schema.shows.slug, show));
+    candidateFilters.push(eq(schema.shows.slug, show));
   }
+  // The list is ordered by episode date, so choose its bounded page before
+  // counting claims. Otherwise SQLite aggregates every published claim merely
+  // to return the first few source rows. Keep the full count separately.
+  const candidateSources = database.$with('candidate_sources').as(
+    database
+      .select({ id: schema.episodes.id })
+      .from(schema.episodes)
+      .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
+      .where(and(...candidateFilters))
+      .orderBy(desc(schema.episodes.publishedAt), asc(schema.episodes.id))
+      .limit(limit)
+      .offset(offset)
+  );
   const [rows, [count], publishers] = await Promise.all([
     database
+      .with(candidateSources)
       .select({
-        claimCount: sql<number>`count(distinct ${schema.claims.id})`,
+        claimCount: sql<number>`count(*)`,
         peopleCount: sql<number>`count(distinct case when ${schema.claims.attributionStatus} = 'verified_speaker' then ${schema.claims.personId} end)`,
         ...publicSourceFields,
       })
-      .from(schema.episodes)
+      .from(candidateSources)
+      .innerJoin(schema.episodes, eq(candidateSources.id, schema.episodes.id))
       .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
       .innerJoin(schema.claims, eq(schema.episodes.id, schema.claims.episodeId))
-      .where(and(...filters))
+      .where(eq(schema.claims.reviewStatus, 'published'))
       .groupBy(schema.episodes.id)
-      .orderBy(desc(schema.episodes.publishedAt))
-      .limit(limit)
-      .offset(offset),
+      .orderBy(desc(schema.episodes.publishedAt), asc(schema.episodes.id))
+      .limit(limit),
     database
-      .select({ total: sql<number>`count(distinct ${schema.claims.episodeId})` })
-      .from(schema.claims)
-      .innerJoin(schema.episodes, eq(schema.claims.episodeId, schema.episodes.id))
+      .select({ total: sql<number>`count(*)` })
+      .from(schema.episodes)
       .innerJoin(schema.shows, eq(schema.episodes.showId, schema.shows.id))
-      .where(and(...filters)),
+      .where(and(...candidateFilters)),
     database
       .select({ name: schema.shows.name, slug: schema.shows.slug })
       .from(schema.shows)
