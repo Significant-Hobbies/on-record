@@ -7,7 +7,6 @@ import homepageSnapshot from '../data/homepage-snapshot.json';
 import {
   apiGet,
   homepageEvidence,
-  type ApiGetOptions,
   type Person,
   type RecommendationGroup,
   type Source,
@@ -25,41 +24,26 @@ import { runtimeEnv } from '../lib/runtime';
 import { formatClock, formatSaidOn } from '../lib/time';
 
 const env = runtimeEnv();
-const diagnostic = Astro.request.headers.get('x-onrecord-diagnostic') === 'onrecord-51';
-const diagnosticProbe = diagnostic ? crypto.randomUUID() : null;
+const landingApiOptions = { timeoutMs: 900 };
 const snapshotDate = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
 }).format(new Date(homepageSnapshot.capturedAt));
 const entitySnapshotAvailable = entitySnapshotFresh(homepageSnapshot.capturedAt);
 const apiTimings: string[] = [];
-async function timeApi<T>(name: string, request: (options: ApiGetOptions) => Promise<T>): Promise<T> {
+async function timeApi<T>(name: string, request: () => Promise<T>): Promise<T> {
   const startedAt = Date.now();
   try {
-    return await request({
-      timeoutMs: diagnostic ? 6000 : 900,
-      ...(diagnosticProbe ? {
-        diagnostic: {
-          probe: diagnosticProbe,
-          onServerTiming: (timing: string) => {
-            for (const metric of timing.split(',').map((part) => part.trim())) {
-              if (/^(cache;desc="(?:HIT|MISS)"|(?:generation|handler|middleware|total);dur=\d+(?:\.\d+)?)$/.test(metric)) {
-                apiTimings.push(`${name}_${metric}`);
-              }
-            }
-          },
-        },
-      } : {}),
-    });
+    return await request();
   } finally {
     apiTimings.push(`${name};dur=${Math.max(0, Date.now() - startedAt)}`);
   }
 }
 const results = await Promise.allSettled([
-  timeApi('api_stats', (options) => apiGet<Stats>('/api/stats', env, options)),
-  timeApi('api_people', (options) => apiGet<{ people: Person[] }>('/api/people?limit=8', env, options)),
-  timeApi('api_evidence', (options) => homepageEvidence(env, options)),
-  timeApi('api_groups', (options) => apiGet<{ groups: RecommendationGroup[] }>('/api/recommendation-groups?limit=8', env, options)),
-  timeApi('api_sources', (options) => apiGet<{ sources: Source[] }>('/api/sources?limit=5', env, options)),
+  timeApi('api_stats', () => apiGet<Stats>('/api/stats', env, landingApiOptions)),
+  timeApi('api_people', () => apiGet<{ people: Person[] }>('/api/people?limit=8', env, landingApiOptions)),
+  timeApi('api_evidence', () => homepageEvidence(env, landingApiOptions)),
+  timeApi('api_groups', () => apiGet<{ groups: RecommendationGroup[] }>('/api/recommendation-groups?limit=8', env, landingApiOptions)),
+  timeApi('api_sources', () => apiGet<{ sources: Source[] }>('/api/sources?limit=5', env, landingApiOptions)),
 ]);
 Astro.response.headers.set('Server-Timing', apiTimings.join(', '));
 

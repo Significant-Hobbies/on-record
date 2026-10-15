@@ -27,11 +27,6 @@ export type RuntimeEnv = {
   APP_HEALTH_INGEST_KEY?: string;
 };
 
-export type ApiGetOptions = {
-  timeoutMs?: number;
-  diagnostic?: { probe: string; onServerTiming: (timing: string) => void };
-};
-
 export function apiBase(runtimeEnv?: RuntimeEnv): string {
   return (import.meta.env.PUBLIC_API_BASE || runtimeEnv?.PUBLIC_API_BASE || fallback).replace(
     /\/$/,
@@ -42,20 +37,17 @@ export function apiBase(runtimeEnv?: RuntimeEnv): string {
 export async function apiGet<T>(
   path: string,
   runtimeEnv?: RuntimeEnv,
-  options: ApiGetOptions = {}
+  options: { timeoutMs?: number } = {}
 ): Promise<T> {
-  const diagnostic = options.diagnostic;
-  const url = `${apiBase(runtimeEnv)}${path}${diagnostic ? `${path.includes('?') ? '&' : '?'}onrecord_probe=${encodeURIComponent(diagnostic.probe)}` : ''}`;
+  const url = `${apiBase(runtimeEnv)}${path}`;
   const init = {
     signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
-    ...(diagnostic ? { headers: { 'x-onrecord-diagnostic': 'onrecord-51' } } : {}),
   };
   try {
     // Without an API binding, fall through to a normal fetch against the same URL.
     const response = runtimeEnv?.API
       ? await runtimeEnv.API.fetch(url, init)
       : await fetch(url, init);
-    diagnostic?.onServerTiming(response.headers.get('Server-Timing') ?? '');
     if (!response.ok) {
       throw new Error(`${path} failed: ${response.status}`);
     }
@@ -150,7 +142,7 @@ function homepageClaims(payload: unknown): Claim[] {
 
 export async function homepageEvidence(
   runtimeEnv?: RuntimeEnv,
-  options: ApiGetOptions = {}
+  options: { timeoutMs?: number } = {}
 ): Promise<HomepageEvidence> {
   // The topical fallback shares one page budget with the recent stream. A
   // cold first request must not turn one bounded homepage read into two waits.
@@ -160,7 +152,7 @@ export async function homepageEvidence(
     if (timeoutMs !== undefined && timeoutMs <= 0) {
       throw new Error('Homepage evidence deadline exceeded');
     }
-    return apiGet<unknown>(path, runtimeEnv, { ...options, timeoutMs });
+    return apiGet<unknown>(path, runtimeEnv, { timeoutMs });
   };
   let claims: Claim[];
   let origin: HomepageEvidence['origin'] = 'recent';
