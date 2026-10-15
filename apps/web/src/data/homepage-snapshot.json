@@ -1,0 +1,247 @@
+{
+  "capturedAt": "2026-10-15T06:34:37.756Z",
+  "provenance": {
+    "apiOrigin": "https://api.podcasts.highsignal.app",
+    "endpoints": {
+      "stats": "/api/stats",
+      "people": "/api/people?limit=8",
+      "groups": "/api/recommendation-groups?limit=8",
+      "sources": "/api/sources?limit=5"
+    }
+  },
+  "stats": {
+    "catalogEpisodes": 8919,
+    "episodes": 1231,
+    "people": 959,
+    "publishedClaims": 32667,
+    "publishedReferences": 1152,
+    "transcriptEpisodes": 1238,
+    "trustedShows": 23,
+    "trustPolicy": {
+      "withheldShows": 2,
+      "wording": "Two shows with unsafe diarization are withheld; unverified speakers inside trusted shows are labeled and excluded from people counts."
+    }
+  },
+  "people": [
+    {
+      "id": "f0f89a84-21af-47b4-afec-c8e8093110b3",
+      "slug": "david-rosenthal",
+      "name": "David Rosenthal",
+      "title": "Host",
+      "org": "Acquired",
+      "claimCount": 2718
+    },
+    {
+      "id": "9d5cb268-4a88-40f6-9486-3df95e74ca4c",
+      "slug": "ben-gilbert",
+      "name": "Ben Gilbert",
+      "title": "Host",
+      "org": "Acquired",
+      "claimCount": 2433
+    },
+    {
+      "id": "9ce316ec-977e-45d7-bebd-5d31272892ff",
+      "slug": "lenny-rachitsky",
+      "name": "Lenny Rachitsky",
+      "title": "Host",
+      "org": "Lenny's Newsletter",
+      "claimCount": 1686
+    },
+    {
+      "id": "ee13e196-a7af-4e0c-b449-3f6fbb24fb50",
+      "slug": "tyler-cowen",
+      "name": "Tyler Cowen",
+      "title": "",
+      "org": "",
+      "claimCount": 1292
+    },
+    {
+      "id": "09451822-1c06-4d92-9171-79722e13c2db",
+      "slug": "lex-fridman",
+      "name": "Lex Fridman",
+      "title": "Host",
+      "org": "Lex Fridman Podcast",
+      "claimCount": 955
+    },
+    {
+      "id": "02464ce5-932c-413f-ad05-8cab49c0fb7b",
+      "slug": "shawn-wang",
+      "name": "Shawn Wang",
+      "title": "Host",
+      "org": "Latent Space",
+      "claimCount": 697
+    },
+    {
+      "id": "ddd45f47-e188-4565-ad33-c33050840481",
+      "slug": "dwarkesh-patel",
+      "name": "Dwarkesh Patel",
+      "title": "Host",
+      "org": "Dwarkesh Podcast",
+      "claimCount": 507
+    },
+    {
+      "id": "e08c10e0-ac14-442a-9a1f-5297971bb5ba",
+      "slug": "nathan-labenz",
+      "name": "Nathan Labenz",
+      "title": "Host",
+      "org": "The Cognitive Revolution",
+      "claimCount": 262
+    }
+  ],
+  "groups": [
+    {
+      "kind": "app",
+      "name": "Claude",
+      "occurrenceCount": 12,
+      "peopleCount": 9,
+      "roleCounts": {
+        "recommends": 0,
+        "uses": 9,
+        "likes": 1,
+        "owns": 0,
+        "built": 0,
+        "avoids": 0
+      }
+    },
+    {
+      "kind": "app",
+      "name": "ChatGPT",
+      "occurrenceCount": 10,
+      "peopleCount": 8,
+      "roleCounts": {
+        "recommends": 0,
+        "uses": 3,
+        "likes": 4,
+        "owns": 0,
+        "built": 0,
+        "avoids": 1
+      }
+    },
+    {
+      "kind": "book",
+      "name": "High Output Management",
+      "occurrenceCount": 7,
+      "peopleCount": 7,
+      "roleCounts": {
+        "recommends": 6,
+        "uses": 1,
+        "likes": 0,
+        "owns": 0,
+        "built": 0,
+        "avoids": 0
+      }
+    },
+    {
+      "kind": "book",
+      "name": "The Design of Everyday Things",
+      "occurrenceCount": 7,
+      "peopleCount": 7,
+      "roleCounts": {
+        "recommends": 6,
+        "uses": 0,
+        "likes": 1,
+        "owns": 0,
+        "built": 0,
+        "avoids": 0
+      }
+    },
+    {
+      "kind": "book",
+      "name": "Never Split the Difference",
+      "occurrenceCount": 6,
+      "peopleCount": 5,
+      "roleCounts": {
+        "recommends": 5,
+        "uses": 0,
+        "likes": 1,
+        "owns": 0,
+        "built": 0,
+        "avoids": 0
+      }
+    },
+    {
+      "kind": "app",
+      "name": "Twitter",
+      "occurrenceCount": 6,
+      "peopleCount": 5,
+      "roleCounts": {
+        "recommends": 0,
+        "uses": 2,
+        "likes": 4,
+        "owns": 0,
+        "built": 0,
+        "avoids": 0
+      }
+    },
+    {
+      "kind": "book",
+      "name": "Build",
+      "occurrenceCount": 5,
+      "peopleCount": 5,
+      "roleCounts": {
+        "recommends": 4,
+        "uses": 0,
+        "likes": 1,
+        "owns": 0,
+        "built": 0,
+        "avoids": 0
+      }
+    },
+    {
+      "kind": "app",
+      "name": "Slack",
+      "occurrenceCount": 5,
+      "peopleCount": 5,
+      "roleCounts": {
+        "recommends": 0,
+        "uses": 2,
+        "likes": 3,
+        "owns": 0,
+        "built": 0,
+        "avoids": 0
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "4d9e3b3a-f5c4-42e8-8781-b8dc7e610471",
+      "title": "Gita Gopinath on Trade, Currencies, and Economic Transformation",
+      "publishedAt": "2026-09-23T11:13:00.000Z",
+      "showName": "Conversations with Tyler",
+      "claimCount": 11,
+      "status": "published"
+    },
+    {
+      "id": "62de2445-a9b7-4c65-a5e0-da7ff3879ce9",
+      "title": "#502 – Psychiatry, Insane Asylums, Mental Illness, ECT, Lobotomies, Freud & Jung",
+      "publishedAt": "2026-09-17T00:40:49.000Z",
+      "showName": "Lex Fridman Podcast",
+      "claimCount": 5,
+      "status": "published"
+    },
+    {
+      "id": "9d7f69e5-6a5f-4683-a185-253506f22799",
+      "title": "Annie Lowrey on the Time Tax, Fraud, and Rationing by Paperwork",
+      "publishedAt": "2026-09-16T11:06:00.000Z",
+      "showName": "Conversations with Tyler",
+      "claimCount": 5,
+      "status": "published"
+    },
+    {
+      "id": "f5b932b3-472e-45f9-b8f2-aa8ab651c339",
+      "title": "The Home Depot",
+      "publishedAt": "2026-09-14T03:35:03.000Z",
+      "showName": "Acquired",
+      "claimCount": 4,
+      "status": "published"
+    },
+    {
+      "id": "ed67cd78-f2a8-46f5-818b-2d5ced5966bd",
+      "title": "Jared Diamond on Leaders, Luck, and Irreplaceability",
+      "publishedAt": "2026-09-09T11:17:00.000Z",
+      "showName": "Conversations with Tyler",
+      "claimCount": 7,
+      "status": "published"
+    }
+  ]
+}

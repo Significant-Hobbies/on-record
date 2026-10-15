@@ -85,6 +85,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (result.edgeCache === 'MISS') {
       timings.push(`render;dur=${result.renderMs}`);
     }
+    const pageTimings = response.headers.get('Server-Timing');
+    if (pageTimings) {
+      timings.push(pageTimings);
+    }
     timings.push(`cache;desc="${result.edgeCache}"`);
     response.headers.set('Server-Timing', timings.join(', '));
     observeStageTiming(context, result, totalMs);
