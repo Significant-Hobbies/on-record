@@ -3,7 +3,7 @@ import { cache } from 'hono/cache';
 import { cors } from 'hono/cors';
 import { publicCacheGeneration } from './db';
 import type { Env } from './env';
-import { probeFor, startProbe } from './onrecord51-probe';
+import { logProbe, probeFor, startProbe } from './onrecord51-probe';
 import { adminRoute } from './routes/admin';
 import { publicRoute } from './routes/public';
 import { sharedHomepageCache } from './shared-homepage-cache';
@@ -73,33 +73,7 @@ app.use('/api/*', async (c, next) => {
     await next();
     status = c.res.status;
   } finally {
-    const colo = (c.req.raw as Request & { cf?: { colo?: string } }).cf?.colo ?? 'unknown';
-    const totalMs = performance.now() - startedAt;
-    console.log(
-      JSON.stringify({
-        event: 'onrecord51_api',
-        id: probe.id,
-        route: c.req.path,
-        colo,
-        status,
-        totalMs: Math.round(totalMs),
-        generationMs: Math.round(probe.generationMs ?? 0),
-        sharedGenerationMs: Math.round(probe.sharedGenerationMs ?? 0),
-        r2Ms: Math.round(probe.r2Ms ?? 0),
-        handlerMs: Math.round(probe.handlerMs ?? 0),
-        residualMs: Math.round(
-          Math.max(
-            0,
-            totalMs -
-              (probe.generationMs ?? 0) -
-              (probe.sharedGenerationMs ?? 0) -
-              (probe.r2Ms ?? 0) -
-              (probe.handlerMs ?? 0)
-          )
-        ),
-        sharedResult: probe.sharedResult ?? 'OUTER_CACHE_OR_NONE',
-      })
-    );
+    logProbe(c, probe, startedAt, status);
   }
 });
 

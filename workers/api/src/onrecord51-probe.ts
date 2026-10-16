@@ -41,3 +41,42 @@ export function startProbe(c: Context<{ Bindings: Env }>): Probe | undefined {
   probes.set(c, probe);
   return probe;
 }
+
+export function recordProbeDuration(
+  probe: Probe | undefined,
+  field: 'sharedGenerationMs' | 'r2Ms',
+  startedAt: number
+): void {
+  if (probe) {
+    probe[field] = performance.now() - startedAt;
+  }
+}
+
+export function logProbe(
+  c: Context<{ Bindings: Env }>,
+  probe: Probe,
+  startedAt: number,
+  status: number | null
+): void {
+  const colo = (c.req.raw as Request & { cf?: { colo?: string } }).cf?.colo ?? 'unknown';
+  const totalMs = performance.now() - startedAt;
+  const { generationMs = 0, sharedGenerationMs = 0, r2Ms = 0, handlerMs = 0 } = probe;
+  console.log(
+    JSON.stringify({
+      event: 'onrecord51_api',
+      id: probe.id,
+      route: c.req.path,
+      colo,
+      status,
+      totalMs: Math.round(totalMs),
+      generationMs: Math.round(generationMs),
+      sharedGenerationMs: Math.round(sharedGenerationMs),
+      r2Ms: Math.round(r2Ms),
+      handlerMs: Math.round(handlerMs),
+      residualMs: Math.round(
+        Math.max(0, totalMs - generationMs - sharedGenerationMs - r2Ms - handlerMs)
+      ),
+      sharedResult: probe.sharedResult ?? 'OUTER_CACHE_OR_NONE',
+    })
+  );
+}

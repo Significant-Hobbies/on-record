@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { publicCacheGeneration } from './db';
 import type { Env } from './env';
-import { probeFor } from './onrecord51-probe';
+import { probeFor, recordProbeDuration } from './onrecord51-probe';
 import { publicRoute } from './routes/public';
 
 // These are the five fixed, anonymous reads used by the homepage. Other API
@@ -83,15 +83,11 @@ export const sharedHomepageCache: MiddlewareHandler<{ Bindings: Env }> = async (
   const probe = probeFor(c);
   const generationStartedAt = probe ? performance.now() : 0;
   const generation = await publicCacheGeneration(c.env.DB);
-  if (probe) {
-    probe.sharedGenerationMs = performance.now() - generationStartedAt;
-  }
+  recordProbeDuration(probe, 'sharedGenerationMs', generationStartedAt);
   const key = objectKey(generation, name);
   const r2StartedAt = probe ? performance.now() : 0;
   const snapshot = await readSnapshot(c.env.RAW, key);
-  if (probe) {
-    probe.r2Ms = performance.now() - r2StartedAt;
-  }
+  recordProbeDuration(probe, 'r2Ms', r2StartedAt);
   if (snapshot) {
     if (probe) {
       probe.sharedResult = snapshot.refresh ? 'STALE' : 'HIT';
