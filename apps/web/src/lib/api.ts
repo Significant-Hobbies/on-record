@@ -27,6 +27,8 @@ export type RuntimeEnv = {
   APP_HEALTH_INGEST_KEY?: string;
 };
 
+export type ApiGetOptions = { timeoutMs?: number; onrecord51ProbeId?: string };
+
 export function apiBase(runtimeEnv?: RuntimeEnv): string {
   return (import.meta.env.PUBLIC_API_BASE || runtimeEnv?.PUBLIC_API_BASE || fallback).replace(
     /\/$/,
@@ -37,24 +39,50 @@ export function apiBase(runtimeEnv?: RuntimeEnv): string {
 export async function apiGet<T>(
   path: string,
   runtimeEnv?: RuntimeEnv,
-  options: { timeoutMs?: number } = {}
+  options: ApiGetOptions = {}
 ): Promise<T> {
   const url = `${apiBase(runtimeEnv)}${path}`;
   const init = {
     signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
+    headers: options.onrecord51ProbeId
+      ? { 'x-onrecord51-probe': options.onrecord51ProbeId }
+      : undefined,
   };
+  const startedAt = options.onrecord51ProbeId ? performance.now() : 0;
+  let headersMs: number | undefined;
+  let stage = 'headers';
+  let outcome = 'ok';
   try {
     // Without an API binding, fall through to a normal fetch against the same URL.
     const response = runtimeEnv?.API
       ? await runtimeEnv.API.fetch(url, init)
       : await fetch(url, init);
+    headersMs = performance.now() - startedAt;
+    stage = 'body';
     if (!response.ok) {
       throw new Error(`${path} failed: ${response.status}`);
     }
     return (await response.json()) as T;
   } catch (error) {
+    outcome = error instanceof Error ? error.name : 'unknown_error';
     markDegraded();
     throw error;
+  } finally {
+    if (options.onrecord51ProbeId) {
+      console.log(
+        JSON.stringify({
+          event: 'onrecord51_web',
+          id: options.onrecord51ProbeId,
+          route: new URL(url).pathname,
+          stage,
+          outcome,
+          headersMs: headersMs === undefined ? null : Math.round(headersMs),
+          bodyMs:
+            headersMs === undefined ? null : Math.round(performance.now() - startedAt - headersMs),
+          totalMs: Math.round(performance.now() - startedAt),
+        })
+      );
+    }
   }
 }
 
@@ -142,7 +170,7 @@ function homepageClaims(payload: unknown): Claim[] {
 
 export async function homepageEvidence(
   runtimeEnv?: RuntimeEnv,
-  options: { timeoutMs?: number } = {}
+  options: ApiGetOptions = {}
 ): Promise<HomepageEvidence> {
   // The topical fallback shares one page budget with the recent stream. A
   // cold first request must not turn one bounded homepage read into two waits.
@@ -152,7 +180,7 @@ export async function homepageEvidence(
     if (timeoutMs !== undefined && timeoutMs <= 0) {
       throw new Error('Homepage evidence deadline exceeded');
     }
-    return apiGet<unknown>(path, runtimeEnv, { timeoutMs });
+    return apiGet<unknown>(path, runtimeEnv, { ...options, timeoutMs });
   };
   let claims: Claim[];
   let origin: HomepageEvidence['origin'] = 'recent';

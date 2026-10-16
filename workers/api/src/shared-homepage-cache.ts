@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { publicCacheGeneration } from './db';
 import type { Env } from './env';
+import { probeFor } from './onrecord51-probe';
 import { publicRoute } from './routes/public';
 
 // These are the five fixed, anonymous reads used by the homepage. Other API
@@ -79,10 +80,22 @@ export const sharedHomepageCache: MiddlewareHandler<{ Bindings: Env }> = async (
 
   // The same generation is used by the existing per-colo cache. A publish or
   // withdrawal changes it, making all older R2 snapshots unreachable.
+  const probe = probeFor(c);
+  const generationStartedAt = probe ? performance.now() : 0;
   const generation = await publicCacheGeneration(c.env.DB);
+  if (probe) {
+    probe.sharedGenerationMs = performance.now() - generationStartedAt;
+  }
   const key = objectKey(generation, name);
+  const r2StartedAt = probe ? performance.now() : 0;
   const snapshot = await readSnapshot(c.env.RAW, key);
+  if (probe) {
+    probe.r2Ms = performance.now() - r2StartedAt;
+  }
   if (snapshot) {
+    if (probe) {
+      probe.sharedResult = snapshot.refresh ? 'STALE' : 'HIT';
+    }
     if (snapshot.refresh) {
       try {
         const executionCtx = c.executionCtx;
@@ -101,7 +114,12 @@ export const sharedHomepageCache: MiddlewareHandler<{ Bindings: Env }> = async (
     });
   }
 
+  const handlerStartedAt = probe ? performance.now() : 0;
   await next();
+  if (probe) {
+    probe.handlerMs = performance.now() - handlerStartedAt;
+    probe.sharedResult = 'MISS';
+  }
   if (c.res.ok) {
     c.res.headers.set('cache-control', homepageCacheControl);
     try {

@@ -3,6 +3,7 @@ import { cache } from 'hono/cache';
 import { cors } from 'hono/cors';
 import { publicCacheGeneration } from './db';
 import type { Env } from './env';
+import { probeFor, startProbe } from './onrecord51-probe';
 import { adminRoute } from './routes/admin';
 import { publicRoute } from './routes/public';
 import { sharedHomepageCache } from './shared-homepage-cache';
@@ -13,7 +14,15 @@ const app = new Hono<{ Bindings: Env }>();
 const publicCors = cors({ origin: '*', exposeHeaders: [D1_BOOKMARK_HEADER] });
 const publicReferenceCache = cache({
   cacheControl: 'public, max-age=3600',
-  cacheName: async (c) => `on-record-public-references-v2-${await publicCacheGeneration(c.env.DB)}`,
+  cacheName: async (c) => {
+    const probe = probeFor(c);
+    const startedAt = probe ? performance.now() : 0;
+    const generation = await publicCacheGeneration(c.env.DB);
+    if (probe) {
+      probe.generationMs = performance.now() - startedAt;
+    }
+    return `on-record-public-references-v2-${generation}`;
+  },
   onCacheNotAvailable: false,
 });
 
@@ -50,6 +59,45 @@ app.use('*', async (c, next) => {
     } catch {
       // immutable response headers - nothing to do
     }
+  }
+});
+
+app.use('/api/*', async (c, next) => {
+  const probe = startProbe(c);
+  if (!probe) {
+    return next();
+  }
+  const startedAt = performance.now();
+  try {
+    await next();
+  } finally {
+    const colo = (c.req.raw as Request & { cf?: { colo?: string } }).cf?.colo ?? 'unknown';
+    const totalMs = performance.now() - startedAt;
+    console.log(
+      JSON.stringify({
+        event: 'onrecord51_api',
+        id: probe.id,
+        route: c.req.path,
+        colo,
+        status: c.res.status,
+        totalMs: Math.round(totalMs),
+        generationMs: Math.round(probe.generationMs ?? 0),
+        sharedGenerationMs: Math.round(probe.sharedGenerationMs ?? 0),
+        r2Ms: Math.round(probe.r2Ms ?? 0),
+        handlerMs: Math.round(probe.handlerMs ?? 0),
+        otherMs: Math.round(
+          Math.max(
+            0,
+            totalMs -
+              (probe.generationMs ?? 0) -
+              (probe.sharedGenerationMs ?? 0) -
+              (probe.r2Ms ?? 0) -
+              (probe.handlerMs ?? 0)
+          )
+        ),
+        sharedResult: probe.sharedResult ?? 'OUTER_CACHE_OR_NONE',
+      })
+    );
   }
 });
 
