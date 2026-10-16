@@ -3,6 +3,7 @@ import { cache } from 'hono/cache';
 import { cors } from 'hono/cors';
 import { publicCacheGeneration } from './db';
 import type { Env } from './env';
+import { logProbe, probeFor, startProbe } from './onrecord51-probe';
 import { adminRoute } from './routes/admin';
 import { publicRoute } from './routes/public';
 import { sharedHomepageCache } from './shared-homepage-cache';
@@ -13,7 +14,15 @@ const app = new Hono<{ Bindings: Env }>();
 const publicCors = cors({ origin: '*', exposeHeaders: [D1_BOOKMARK_HEADER] });
 const publicReferenceCache = cache({
   cacheControl: 'public, max-age=3600',
-  cacheName: async (c) => `on-record-public-references-v2-${await publicCacheGeneration(c.env.DB)}`,
+  cacheName: async (c) => {
+    const probe = probeFor(c);
+    const startedAt = probe ? performance.now() : 0;
+    const generation = await publicCacheGeneration(c.env.DB);
+    if (probe) {
+      probe.generationMs = performance.now() - startedAt;
+    }
+    return `on-record-public-references-v2-${generation}`;
+  },
   onCacheNotAvailable: false,
 });
 
@@ -50,6 +59,21 @@ app.use('*', async (c, next) => {
     } catch {
       // immutable response headers - nothing to do
     }
+  }
+});
+
+app.use('/api/*', async (c, next) => {
+  const probe = startProbe(c);
+  if (!probe) {
+    return next();
+  }
+  const startedAt = performance.now();
+  let status: number | null = null;
+  try {
+    await next();
+    status = c.res.status;
+  } finally {
+    logProbe(c, probe, startedAt, status);
   }
 });
 

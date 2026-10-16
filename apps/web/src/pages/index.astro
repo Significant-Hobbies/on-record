@@ -24,7 +24,11 @@ import { runtimeEnv } from '../lib/runtime';
 import { formatClock, formatSaidOn } from '../lib/time';
 
 const env = runtimeEnv();
-const landingApiOptions = { timeoutMs: 900 };
+// Temporary opt-in timing probe for issue #51. No diagnostic data enters HTML.
+const onrecord51ProbeId = Astro.url.searchParams.get('onrecord51_probe') === '20261016'
+  ? crypto.randomUUID()
+  : undefined;
+const landingApiOptions = { timeoutMs: 900, onrecord51ProbeId };
 const snapshotDate = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
 }).format(new Date(homepageSnapshot.capturedAt));
