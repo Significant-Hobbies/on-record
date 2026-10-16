@@ -100,6 +100,16 @@ type HomepageEvidence = {
   latestClaims: Claim[];
 };
 
+export type HomepageBundle = {
+  generation: number;
+  capturedAt: string;
+  stats: unknown;
+  people: unknown;
+  evidence: unknown;
+  groups: unknown;
+  sources: unknown;
+};
+
 // Validate the public response, rather than treating a malformed success as an
 // empty corpus. Quote/transcript validation remains the API's publication gate.
 function homepageClaims(payload: unknown): Claim[] {
@@ -173,6 +183,17 @@ export async function homepageEvidence(
       return { status: 'unavailable', origin, latestClaims: [] };
     }
   }
+  return formatHomepageEvidence(claims, origin);
+}
+
+export function homepageEvidenceFromPayload(payload: unknown): HomepageEvidence {
+  return formatHomepageEvidence(homepageClaims(payload), 'recent');
+}
+
+function formatHomepageEvidence(
+  claims: Claim[],
+  origin: HomepageEvidence['origin']
+): HomepageEvidence {
   const readsCleanly = (claim: Claim) => {
     const quote = claim.quote.trim();
     return (

@@ -6,7 +6,9 @@ import Layout from '../layouts/Base.astro';
 import homepageSnapshot from '../data/homepage-snapshot.json';
 import {
   apiGet,
+  homepageEvidenceFromPayload,
   homepageEvidence,
+  type HomepageBundle,
   type Person,
   type RecommendationGroup,
   type Source,
@@ -38,13 +40,37 @@ async function timeApi<T>(name: string, request: () => Promise<T>): Promise<T> {
     apiTimings.push(`${name};dur=${Math.max(0, Date.now() - startedAt)}`);
   }
 }
-const results = await Promise.allSettled([
-  timeApi('api_stats', () => apiGet<Stats>('/api/stats', env, landingApiOptions)),
-  timeApi('api_people', () => apiGet<{ people: Person[] }>('/api/people?limit=8', env, landingApiOptions)),
-  timeApi('api_evidence', () => homepageEvidence(env, landingApiOptions)),
-  timeApi('api_groups', () => apiGet<{ groups: RecommendationGroup[] }>('/api/recommendation-groups?limit=8', env, landingApiOptions)),
-  timeApi('api_sources', () => apiGet<{ sources: Source[] }>('/api/sources?limit=5', env, landingApiOptions)),
-]);
+const startedAt = Date.now();
+let results: PromiseSettledResult<unknown>[];
+try {
+  const bundle = await timeApi('api_homepage_bundle', () =>
+    apiGet<HomepageBundle>('/api/homepage-bundle', env, landingApiOptions)
+  );
+  results = await Promise.allSettled([
+    Promise.resolve(bundle.stats),
+    Promise.resolve(bundle.people),
+    Promise.resolve().then(() => homepageEvidenceFromPayload(bundle.evidence)).catch(() => {
+      const remainingMs = landingApiOptions.timeoutMs - (Date.now() - startedAt);
+      return remainingMs > 0
+        ? homepageEvidence(env, { timeoutMs: remainingMs })
+        : { status: 'unavailable' as const, origin: 'recent' as const, latestClaims: [] };
+    }),
+    Promise.resolve(bundle.groups),
+    Promise.resolve(bundle.sources),
+  ]);
+} catch {
+  // An absent or invalid bundle falls back to the original gated endpoints
+  // within the same page budget, never to an older R2 generation.
+  const remainingMs = landingApiOptions.timeoutMs - (Date.now() - startedAt);
+  const unavailable = () => Promise.reject(new Error('Homepage API deadline exceeded'));
+  results = await Promise.allSettled(remainingMs > 0 ? [
+    timeApi('api_stats', () => apiGet<Stats>('/api/stats', env, { timeoutMs: remainingMs })),
+    timeApi('api_people', () => apiGet<{ people: Person[] }>('/api/people?limit=8', env, { timeoutMs: remainingMs })),
+    timeApi('api_evidence', () => homepageEvidence(env, { timeoutMs: remainingMs })),
+    timeApi('api_groups', () => apiGet<{ groups: RecommendationGroup[] }>('/api/recommendation-groups?limit=8', env, { timeoutMs: remainingMs })),
+    timeApi('api_sources', () => apiGet<{ sources: Source[] }>('/api/sources?limit=5', env, { timeoutMs: remainingMs })),
+  ] : [unavailable(), unavailable(), unavailable(), unavailable(), unavailable()]);
+}
 Astro.response.headers.set('Server-Timing', apiTimings.join(', '));
 
 const { value: stats, snapshot: statsUnavailable } = homepagePanel(results[0], homepageStats, homepageSnapshot.stats);
@@ -53,7 +79,7 @@ const { value: groups, snapshot: groupsUnavailable } = homepagePanel(results[3],
 const { value: sources, snapshot: sourcesUnavailable } = homepagePanel(results[4], homepageSources, entitySnapshotAvailable ? homepageSnapshot.sources : []);
 
 const evidence = results[2].status === 'fulfilled'
-  ? results[2].value
+  ? results[2].value as Awaited<ReturnType<typeof homepageEvidence>>
   : { status: 'unavailable', origin: 'recent', latestClaims: [], heroClaim: undefined };
 const { heroClaim, latestClaims } = evidence;
 const heroWhen = heroClaim

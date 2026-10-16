@@ -10,7 +10,11 @@ declare global {
 }
 
 import { describe, expect, it, vi } from 'vitest';
-import { type Claim, homepageEvidence } from '../../../../apps/web/src/lib/api';
+import {
+  type Claim,
+  homepageEvidence,
+  homepageEvidenceFromPayload,
+} from '../../../../apps/web/src/lib/api';
 
 const claim: Claim = {
   id: 'claim-1',
@@ -38,6 +42,16 @@ function api(...responses: (Response | Error)[]) {
 }
 
 describe('homepage public evidence', () => {
+  it('formats validated bundled evidence without another API request', () => {
+    const evidence = homepageEvidenceFromPayload({ claims: [claim] });
+    expect(evidence.status).toBe('ready');
+    expect(evidence.origin).toBe('recent');
+    expect(evidence.heroClaim?.id).toBe(claim.id);
+    expect(() =>
+      homepageEvidenceFromPayload({ claims: [{ ...claim, reviewStatus: 'pending' }] })
+    ).toThrow();
+  });
+
   it('fills existing slots even when no quotes meet the editorial length preference', async () => {
     const claims = Array.from({ length: 8 }, (_, index) => ({ ...claim, id: `claim-${index}` }));
     const { env, fetch } = api(Response.json({ claims }));
