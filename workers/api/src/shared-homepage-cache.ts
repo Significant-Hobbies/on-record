@@ -15,6 +15,9 @@ const homeRequests = new Map([
 const maximumBytes = 256 * 1024;
 const refreshAfterMs = 5 * 60 * 1000;
 const maximumAgeMs = 24 * 60 * 60 * 1000;
+// The outer per-colo Cache API must recheck R2 when its copy is due for
+// refresh. Other public API variants keep their one-hour cache policy.
+const homepageCacheControl = 'public, max-age=300';
 
 function requestName(url: string): string | undefined {
   const parsed = new URL(url);
@@ -91,6 +94,7 @@ export const sharedHomepageCache: MiddlewareHandler<{ Bindings: Env }> = async (
     return new Response(snapshot.text, {
       headers: {
         'content-type': 'application/json; charset=UTF-8',
+        'cache-control': homepageCacheControl,
         'x-shared-homepage-cache': snapshot.refresh ? 'STALE' : 'HIT',
         'x-shared-homepage-as-of': snapshot.capturedAt.toISOString(),
       },
@@ -99,6 +103,7 @@ export const sharedHomepageCache: MiddlewareHandler<{ Bindings: Env }> = async (
 
   await next();
   if (c.res.ok) {
+    c.res.headers.set('cache-control', homepageCacheControl);
     try {
       const executionCtx = c.executionCtx;
       executionCtx.waitUntil(writeSnapshot(c.env.RAW, key, c.res.clone()).catch(() => undefined));

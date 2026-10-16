@@ -51,12 +51,14 @@ describe('shared homepage cache', () => {
     const { objects, put, waits, handler, request } = fixture();
     const first = await request('/api/stats');
     expect(first.headers.get('x-shared-homepage-cache')).toBe('MISS');
+    expect(first.headers.get('cache-control')).toBe('public, max-age=300');
     await Promise.all(waits);
     expect(objects.get('public/homepage/v1/1/stats.json')).toBe('{"count":7}');
     expect(put).toHaveBeenCalledTimes(1);
 
     const second = await request('/api/stats');
     expect(second.headers.get('x-shared-homepage-cache')).toBe('HIT');
+    expect(second.headers.get('cache-control')).toBe('public, max-age=300');
     await expect(second.json()).resolves.toEqual({ count: 7 });
     expect(handler).toHaveBeenCalledTimes(1);
   });
@@ -96,6 +98,7 @@ describe('shared homepage cache', () => {
 
     const stale = await request('/api/stats');
     expect(stale.headers.get('x-shared-homepage-cache')).toBe('STALE');
+    expect(stale.headers.get('cache-control')).toBe('public, max-age=300');
     expect(stale.headers.get('x-shared-homepage-as-of')).toBe(uploaded.get(key)?.toISOString());
     await expect(stale.json()).resolves.toEqual({ count: 6 });
     await Promise.all(waits);
