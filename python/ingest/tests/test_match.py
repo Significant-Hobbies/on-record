@@ -118,6 +118,68 @@ def test_hosts_are_added_and_outrank_metadata_guesses():
     assert roles == {"dwarkesh-patel": "host", "dario-amodei": "guest"}
 
 
+def test_lightcone_first_episode_hosts_have_publisher_backed_scope():
+    from on_record_ingest.pipeline import host_people
+    from on_record_ingest.seed.shows import SHOWS
+
+    lightcone = next(show for show in SHOWS if show["slug"] == "lightcone")
+    first_episode = "bfc58f68-78d6-4b67-9172-903e48d7a30a"
+    assert {row["personId"] for row in host_people(lightcone, first_episode)} == {
+        "garry-tan",
+        "diana-hu",
+        "harj-taggar",
+        "jared-friedman",
+    }
+    assert {row["personId"] for row in host_people(lightcone, "another-episode")} == {"garry-tan"}
+    assert {row["personId"] for row in host_people(lightcone)} == {"garry-tan"}
+
+
+def test_episode_host_config_does_not_duplicate_show_host():
+    from on_record_ingest.pipeline import host_people
+
+    rows = host_people(
+        {
+            "hostPersonIds": ["garry-tan"],
+            "episodeHostPersonIdsByGuid": {"episode": ["garry-tan", "diana-hu"]},
+        },
+        "episode",
+    )
+    assert [row["personId"] for row in rows] == ["garry-tan", "diana-hu"]
+
+
+def test_discovery_credits_only_the_publisher_identified_lightcone_episode(monkeypatch):
+    from on_record_ingest import pipeline
+    from on_record_ingest.seed.shows import SHOWS
+
+    lightcone = next(show for show in SHOWS if show["slug"] == "lightcone")
+    first_guid = "bfc58f68-78d6-4b67-9172-903e48d7a30a"
+    items = [
+        {"guid": first_guid, "title": "The Truth About Building AI Startups Today"},
+        {"guid": "another-guid", "title": "A different Lightcone episode"},
+    ]
+    monkeypatch.setattr(pipeline.rss_feed, "fetch_feed", lambda *_: items)
+    monkeypatch.setattr(pipeline.youtube_rss, "fetch_channel", lambda *_: [])
+
+    class RecordingApi:
+        def __init__(self):
+            self.episodes = []
+
+        def upsert_episode(self, payload):
+            self.episodes.append(payload)
+            return str(len(self.episodes))
+
+        def put_raw(self, *_):
+            pass
+
+    api = RecordingApi()
+    people_map = {slug: slug for slug in ["garry-tan", "diana-hu", "harj-taggar", "jared-friedman"]}
+    pipeline.discover_show(
+        lightcone, "show-id", people_map, datetime.now(timezone.utc), api, None, False
+    )
+    assert {row["personId"] for row in api.episodes[0]["people"]} == set(people_map)
+    assert {row["personId"] for row in api.episodes[1]["people"]} == {"garry-tan"}
+
+
 def test_finds_a_video_id_only_when_the_source_itself_is_youtube():
     from on_record_ingest.match import video_id_from_source_url
 
