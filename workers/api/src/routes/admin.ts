@@ -5,6 +5,7 @@ import { isClaimType } from '../claim-types';
 import { bumpPublicCacheGeneration, db, markShowHasPublishedClaims, schema } from '../db';
 import type { Env } from '../env';
 import { newId } from '../ids';
+import { scheduleSharedHomepageWarm } from '../shared-homepage-cache';
 import { adminClaimsRoute } from './admin-claims';
 import { adminEpisodesRoute } from './admin-episodes';
 
@@ -267,6 +268,7 @@ adminRoute.post('/claims/:id/status', async (c) => {
     }
   }
   await bumpPublicCacheGeneration(c.env.DB);
+  scheduleSharedHomepageWarm(c);
   return c.json({ ok: true });
 });
 

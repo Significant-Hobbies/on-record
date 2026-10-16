@@ -186,7 +186,7 @@ const heroSearchAgentAttributes = {
       {stats.trustPolicy?.wording ?? 'Unresolved speakers are withheld from every public count.'}
       {statsUnavailable
         ? ` Live counts were unavailable for this page load; the figures above are a recorded snapshot from ${snapshotDate}.`
-        : ' Live counts, read from the API on every page load.'}
+        : ' Public counts come from the API and may lag the latest source updates; linked records remain authoritative.'}
     </p>
   </section>
 
@@ -267,7 +267,7 @@ const heroSearchAgentAttributes = {
   <section class="corpus" aria-labelledby="corpus-heading">
     <div class="section-heading compact-heading">
       <div>
-        <p class="eyebrow">{statsUnavailable ? `Trusted corpus snapshot · ${snapshotDate}` : 'Trusted corpus · live counts'}</p>
+        <p class="eyebrow">{statsUnavailable ? `Trusted corpus snapshot · ${snapshotDate}` : 'Trusted corpus · public API counts'}</p>
         <h2 id="corpus-heading">useful volume, visible provenance.</h2>
       </div>
       <p>The counts below exclude shows whose speaker attribution is not yet safe.</p>

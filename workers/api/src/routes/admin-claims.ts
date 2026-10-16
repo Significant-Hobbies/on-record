@@ -12,6 +12,7 @@ import { getSegmentBodies, type SegmentBody } from '../segment-store';
 import { speakerHintMatchesPerson } from '../speaker-hint';
 import { timestampForOffset } from '../timestamp';
 import { referenceAssertion, sanitizeReferences, type ClaimReference } from '../references';
+import { scheduleSharedHomepageWarm } from '../shared-homepage-cache';
 
 export const adminClaimsRoute = new Hono<{ Bindings: Env }>();
 
@@ -351,6 +352,7 @@ adminClaimsRoute.post('/episodes/:id/claims', async (c) => {
   if (published > 0) {
     await markShowHasPublishedClaims(c.env.DB, episode.showId);
     await bumpPublicCacheGeneration(c.env.DB);
+    scheduleSharedHomepageWarm(c);
   }
   return c.json({ published, rejectedQuote, rejectedSpeaker, results });
 });
@@ -483,6 +485,7 @@ adminClaimsRoute.post('/episodes/:id/reverify', async (c) => {
     }
     kept += 1;
     if (quoteGone + speakerChanged >= limit) {
+      scheduleSharedHomepageWarm(c);
       return c.json({
         done: false,
         kept,
@@ -491,6 +494,9 @@ adminClaimsRoute.post('/episodes/:id/reverify', async (c) => {
         total: claims.length,
       });
     }
+  }
+  if (quoteGone + speakerChanged > 0) {
+    scheduleSharedHomepageWarm(c);
   }
   return c.json({ done: true, kept, quoteGone, speakerChanged, total: claims.length });
 });

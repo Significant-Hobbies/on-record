@@ -5,6 +5,7 @@ import { publicCacheGeneration } from './db';
 import type { Env } from './env';
 import { adminRoute } from './routes/admin';
 import { publicRoute } from './routes/public';
+import { sharedHomepageCache } from './shared-homepage-cache';
 import { anchorFor, D1_BOOKMARK_HEADER, envWithSession, openSession } from './session';
 import { endpointTelemetryMiddleware } from './telemetry';
 
@@ -78,6 +79,9 @@ app.use('/api/people/*', publicReferenceCache);
 app.use('/api/sources', publicReferenceCache);
 app.use('/api/search', publicReferenceCache);
 app.use('/api/topics/*', publicReferenceCache);
+// Fixed homepage reads can fall back to a generation-scoped R2 copy when a
+// colo's Cache API is cold. The ordinary public route remains the source.
+app.use('/api/*', sharedHomepageCache);
 
 app.get('/', (c) => c.json({ env: c.env.ENVIRONMENT ?? 'unknown', name: 'on-record-api' }));
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
