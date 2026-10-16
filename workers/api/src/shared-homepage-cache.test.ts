@@ -6,7 +6,7 @@ import { publicRoute } from './routes/public';
 const { generation } = vi.hoisted(() => ({ generation: vi.fn(async () => 1) }));
 vi.mock('./db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./db')>();
-  return { ...actual, publicCacheGeneration: generation };
+  return { ...actual, publicCacheGeneration: generation, publicCacheGenerationFresh: generation };
 });
 
 const { sharedHomepageCache, warmSharedHomepage } = await import('./shared-homepage-cache');
@@ -130,16 +130,34 @@ describe('shared homepage cache', () => {
     expect(objects.size).toBe(0);
   });
 
-  it('prewarms the exact five public routes in the current generation', async () => {
+  it('prewarms the fixed routes and homepage bundle in the current generation', async () => {
     const { env, objects } = fixture();
-    const route = vi
-      .spyOn(publicRoute, 'request')
-      .mockImplementation(async () => Response.json({ count: 7 }));
+    const route = vi.spyOn(publicRoute, 'request').mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.includes('/people?')) {
+        return Response.json({ people: [] });
+      }
+      if (path.includes('/search')) {
+        return Response.json({ claims: [] });
+      }
+      if (path.includes('/recommendation-groups?')) {
+        return Response.json({ groups: [] });
+      }
+      if (path.includes('/sources?')) {
+        return Response.json({ sources: [] });
+      }
+      return Response.json({ people: 0, episodes: 0, publishedClaims: 0 });
+    });
     generation.mockResolvedValue(9);
     await warmSharedHomepage(env);
-    expect(objects.size).toBe(5);
-    expect(objects.get('public/homepage/v1/9/stats.json')).toBe('{"count":7}');
-    expect(objects.get('public/homepage/v1/9/evidence.json')).toBe('{"count":7}');
+    expect(objects.size).toBe(6);
+    expect(objects.get('public/homepage/v1/9/stats.json')).toBe(
+      '{"people":0,"episodes":0,"publishedClaims":0}'
+    );
+    expect(objects.get('public/homepage/v1/9/evidence.json')).toBe('{"claims":[]}');
+    expect(
+      JSON.parse(objects.get('public/homepage/v1/current-bundle.json') ?? '{}').generation
+    ).toBe(9);
     expect(route.mock.calls.map(([url]) => url)).toEqual([
       'https://api.podcasts.highsignal.app/stats',
       'https://api.podcasts.highsignal.app/people?limit=8',

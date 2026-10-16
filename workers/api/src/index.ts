@@ -3,6 +3,7 @@ import { cache } from 'hono/cache';
 import { cors } from 'hono/cors';
 import { publicCacheGeneration } from './db';
 import type { Env } from './env';
+import { homepageBundle } from './homepage-bundle';
 import { adminRoute } from './routes/admin';
 import { publicRoute } from './routes/public';
 import { sharedHomepageCache } from './shared-homepage-cache';
@@ -85,6 +86,7 @@ app.use('/api/*', sharedHomepageCache);
 
 app.get('/', (c) => c.json({ env: c.env.ENVIRONMENT ?? 'unknown', name: 'on-record-api' }));
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
+app.get('/api/homepage-bundle', homepageBundle);
 app.route('/api', publicRoute);
 app.route('/admin', adminRoute);
 

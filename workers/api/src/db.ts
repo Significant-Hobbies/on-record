@@ -38,6 +38,12 @@ export async function publicCacheGeneration(d1: D1Database): Promise<number> {
   if (generationMemo && now - generationMemo.readAt < GENERATION_MEMO_MS) {
     return generationMemo.generation;
   }
+  return publicCacheGenerationFresh(d1);
+}
+
+// Bundle creation can cross a publication boundary. Re-read D1 after the
+// gated routes complete so a mixed-generation bundle is never persisted.
+export async function publicCacheGenerationFresh(d1: D1Database): Promise<number> {
   const [row] = await db(d1)
     .select({ generation: schema.publicCacheState.generation })
     .from(schema.publicCacheState)

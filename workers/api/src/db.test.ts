@@ -54,6 +54,16 @@ describe('public cache generation memo', () => {
     expect(reads.count).toBe(2);
   });
 
+  it('bypasses the memo for a publication-boundary bundle check', async () => {
+    const reads = { count: 0 };
+    const d1 = generationD1(reads);
+    const { publicCacheGeneration, publicCacheGenerationFresh } = await import('./db');
+
+    await publicCacheGeneration(d1);
+    await publicCacheGenerationFresh(d1);
+    expect(reads.count).toBe(2);
+  });
+
   // A publish is exactly when a stale generation would matter, so the bump
   // has to drop the memo rather than wait the window out.
   it('drops the memo when a publish bumps the generation', async () => {

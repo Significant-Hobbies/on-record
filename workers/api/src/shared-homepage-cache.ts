@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { publicCacheGeneration } from './db';
 import type { Env } from './env';
+import { warmHomepageBundle } from './homepage-bundle';
 import { publicRoute } from './routes/public';
 
 // These are the five fixed, anonymous reads used by the homepage. Other API
@@ -117,6 +118,20 @@ export const sharedHomepageCache: MiddlewareHandler<{ Bindings: Env }> = async (
 
 /** Refresh the new generation after an admin publication change. */
 export async function warmSharedHomepage(env: Env): Promise<void> {
+  const bundle = await warmHomepageBundle(env).catch(() => undefined);
+  if (bundle) {
+    await Promise.all(
+      [...homeRequests.values()].map((name) =>
+        writeSnapshot(
+          env.RAW,
+          objectKey(bundle.generation, name),
+          Response.json(bundle[name as 'stats' | 'people' | 'evidence' | 'groups' | 'sources'])
+        ).catch(() => undefined)
+      )
+    );
+    return;
+  }
+  // If one bundle member fails, keep the older independent cache warm path.
   const generation = await publicCacheGeneration(env.DB);
   await Promise.all(
     [...homeRequests.values()].map((name) =>
