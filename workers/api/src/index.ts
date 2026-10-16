@@ -68,8 +68,10 @@ app.use('/api/*', async (c, next) => {
     return next();
   }
   const startedAt = performance.now();
+  let status: number | null = null;
   try {
     await next();
+    status = c.res.status;
   } finally {
     const colo = (c.req.raw as Request & { cf?: { colo?: string } }).cf?.colo ?? 'unknown';
     const totalMs = performance.now() - startedAt;
@@ -79,13 +81,13 @@ app.use('/api/*', async (c, next) => {
         id: probe.id,
         route: c.req.path,
         colo,
-        status: c.res.status,
+        status,
         totalMs: Math.round(totalMs),
         generationMs: Math.round(probe.generationMs ?? 0),
         sharedGenerationMs: Math.round(probe.sharedGenerationMs ?? 0),
         r2Ms: Math.round(probe.r2Ms ?? 0),
         handlerMs: Math.round(probe.handlerMs ?? 0),
-        otherMs: Math.round(
+        residualMs: Math.round(
           Math.max(
             0,
             totalMs -
