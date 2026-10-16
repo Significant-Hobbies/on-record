@@ -22,6 +22,8 @@ pipeline can produce.
 `hostPersonIds` are slugs from `seed/people.py`. Hosts are attached to every
 episode of their show, which is what makes host statements attributable at all;
 without them a roster is only whoever the episode title happens to name.
+`episodeHostPersonIdsByGuid` adds hosts only to episodes whose feed GUID has
+publisher-backed credits; do not promote one episode's credits to a whole show.
 
 `includeUnmatchedYoutube` is deliberately rare. When an RSS feed returned
 episodes, channel uploads normally enrich matching rows but do not create new
@@ -128,6 +130,18 @@ SHOWS: list[dict] = [
         "youtubeChannelId": "UCcefcZRL2oaA_uBNeo5UOWg",
         "includeUnmatchedYoutube": True,
         "hostPersonIds": ["garry-tan"],
+        # YC credits the four partners on the first Lightcone episode:
+        # https://www.linkedin.com/posts/y-combinator_in-the-first-episode-of-the-lightcone-podcast-activity-7161467001268371456-lgk5
+        # https://www.youtube.com/watch?v=TwDJhUJL-5o
+        # The publisher feed identifies that exact episode by this GUID.
+        # https://anchor.fm/s/f58d3330/podcast/rss
+        "episodeHostPersonIdsByGuid": {
+            "bfc58f68-78d6-4b67-9172-903e48d7a30a": [
+                "diana-hu",
+                "harj-taggar",
+                "jared-friedman",
+            ],
+        },
     },
     {
         "slug": "lennys",

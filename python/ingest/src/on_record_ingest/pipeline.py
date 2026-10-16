@@ -151,7 +151,8 @@ def remap_people(guests: list[dict[str, Any]], people_map: dict[str, str]) -> li
     return out
 
 
-def host_people(show: dict[str, Any]) -> list[dict[str, Any]]:
+def host_people(show: dict[str, Any], guid: str | None = None) -> list[dict[str, Any]]:
+    episode_hosts = (show.get("episodeHostPersonIdsByGuid") or {}).get(guid, [])
     return [
         {
             "personId": str(slug),
@@ -159,7 +160,7 @@ def host_people(show: dict[str, Any]) -> list[dict[str, Any]]:
             "attributionSource": "show_config",
             "confidence": 1.0,
         }
-        for slug in show.get("hostPersonIds") or []
+        for slug in dict.fromkeys([*(show.get("hostPersonIds") or []), *episode_hosts])
     ]
 
 
@@ -198,7 +199,6 @@ def discover_show(
         videos: list[dict[str, Any]] = []
         if show.get("youtubeChannelId"):
             videos = youtube_rss.fetch_channel(str(show["youtubeChannelId"]), since, client)
-    hosts = host_people(show)
     include_unmatched_videos = not rss_items or bool(show.get("includeUnmatchedYoutube"))
     for item in merge_discovery_items(
         rss_items,
@@ -206,6 +206,7 @@ def discover_show(
         include_unmatched_videos=include_unmatched_videos,
     ):
         blob = json.dumps(item)
+        hosts = host_people(show, str(item["guid"]))
         people = remap_people(
             with_hosts(
                 guests_from_text(f"{item.get('title', '')} {item.get('description', '')}"), hosts
