@@ -129,11 +129,20 @@ describe('shared homepage cache', () => {
 
   it('prewarms the exact five public routes in the current generation', async () => {
     const { env, objects } = fixture();
-    vi.spyOn(publicRoute, 'request').mockImplementation(async () => Response.json({ count: 7 }));
+    const route = vi
+      .spyOn(publicRoute, 'request')
+      .mockImplementation(async () => Response.json({ count: 7 }));
     generation.mockResolvedValue(9);
     await warmSharedHomepage(env);
     expect(objects.size).toBe(5);
     expect(objects.get('public/homepage/v1/9/stats.json')).toBe('{"count":7}');
     expect(objects.get('public/homepage/v1/9/evidence.json')).toBe('{"count":7}');
+    expect(route.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.podcasts.highsignal.app/stats',
+      'https://api.podcasts.highsignal.app/people?limit=8',
+      'https://api.podcasts.highsignal.app/search',
+      'https://api.podcasts.highsignal.app/recommendation-groups?limit=8',
+      'https://api.podcasts.highsignal.app/sources?limit=5',
+    ]);
   });
 });
